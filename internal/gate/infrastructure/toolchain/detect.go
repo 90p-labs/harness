@@ -19,14 +19,14 @@ const (
 	fileGoMod       = "go.mod"
 	filePackageJSON = "package.json"
 	filePnpmLock    = "pnpm-lock.yaml"
-	fileNpmLock     = "package-lock.json"
 	fileBiomeJSON   = "biome.json"
 	fileBiomeJSONC  = "biome.jsonc"
 
-	idGoFmt  = "go-fmt"
-	idGoVet  = "go-vet"
-	idGoTest = "go-test"
-	idBiome  = "biome"
+	idGoFmt      = "go-fmt"
+	idGoVet      = "go-vet"
+	idGoTest     = "go-test"
+	idBiome      = "biome"
+	nodeIDPrefix = "node-"
 
 	runGoFmt  = `test -z "$(gofmt -l .)"`
 	runGoVet  = "go vet ./..."
@@ -106,13 +106,11 @@ func Detect(dir string, lint Lint) ([]domain.Gate, error) {
 	}
 
 	pnpm := exists(dir, filePnpmLock)
-	if pnpm || exists(dir, fileNpmLock) {
-		nodeGates, err := scriptGates(dir, pnpm)
-		if err != nil {
-			return nil, err
-		}
-		gates = append(gates, nodeGates...)
+	nodeGates, err := scriptGates(dir, pnpm)
+	if err != nil {
+		return nil, err
 	}
+	gates = append(gates, nodeGates...)
 
 	if exists(dir, fileBiomeJSON) || exists(dir, fileBiomeJSONC) {
 		run := runNpxBiome
@@ -129,7 +127,11 @@ func Detect(dir string, lint Lint) ([]domain.Gate, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(gates, lintGates...), nil
+	gates = append(gates, lintGates...)
+	if err := domain.ValidateGates(gates); err != nil {
+		return nil, err
+	}
+	return gates, nil
 }
 
 type gateSpec struct {
@@ -171,7 +173,7 @@ func scriptGates(dir string, pnpm bool) ([]domain.Gate, error) {
 	var specs []gateSpec
 	for _, name := range nodeScripts {
 		if _, ok := manifest.Scripts[name]; ok {
-			specs = append(specs, gateSpec{name, runner + name, nil})
+			specs = append(specs, gateSpec{nodeIDPrefix + name, runner + name, nil})
 		}
 	}
 	return newGates(specs...)

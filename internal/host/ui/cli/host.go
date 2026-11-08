@@ -41,12 +41,15 @@ func NewHostCommand(connect HostConnect) *cobra.Command {
 func installCommand(connect HostConnect) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandInstall,
-		Short: "Write the harness hooks into the host config of this worktree",
+		Short: "Write the harness hooks into the host config of this worktree; with no --host, detect the host",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			host, err := hostFlag(cmd)
-			if err != nil {
-				return err
+			var host shareddomain.Host
+			if cmd.Flags().Changed(flagHost) {
+				var err error
+				if host, err = hostFlag(cmd); err != nil {
+					return err
+				}
 			}
 			handlers, err := connect(cmd.Context())
 			if err != nil {
@@ -94,12 +97,12 @@ func capabilitiesCommand(connect HostConnect) *cobra.Command {
 		},
 	}
 	addHostFlag(cmd)
+	_ = cmd.MarkFlagRequired(flagHost)
 	return cmd
 }
 
 func addHostFlag(cmd *cobra.Command) {
 	cmd.Flags().String(flagHost, "", "the host: claude or codex")
-	_ = cmd.MarkFlagRequired(flagHost)
 }
 
 func hostFlag(cmd *cobra.Command) (shareddomain.Host, error) {

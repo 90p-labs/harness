@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"os"
 
 	"go.opentelemetry.io/otel"
 
@@ -30,6 +31,11 @@ func NewHostConnect(worktree func(ctx context.Context) (string, error)) cli.Host
 				root, err := worktree(ctx)
 				if err != nil {
 					return "", err
+				}
+				if host == "" {
+					if host, err = hostdomain.OneHost(install.DetectHosts(root, os.Getenv)); err != nil {
+						return "", err
+					}
 				}
 				return install.Install(root, host)
 			},

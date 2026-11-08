@@ -18,7 +18,7 @@ const (
 	errorLine     = "error ddd/src-roots contexts/a.ts:3 move the file\n"
 	warnLine      = "warn next/img src/app/page.tsx:12 use next/image\n"
 	missingEngine = "biome is missing"
-	noPacksLine   = "no lint pack is set\n"
+	noPacksLine   = "no lint pack is set: set lint.packs in .harness.yaml\n"
 )
 
 var errEngine = errors.New(missingEngine)
@@ -96,6 +96,21 @@ func TestLintCommandReport(t *testing.T) {
 			t.Fatalf("out = %q, err = %v", out, err)
 		}
 	})
+
+	noPacks := cli.Handlers{
+		Init:     func(context.Context) error { return nil },
+		Baseline: func(context.Context) error { return nil },
+		NoPacks:  true,
+	}
+	for _, tc := range []struct{ sub, want string }{{subInit, noPacksLine}, {subBaseline, ""}} {
+		t.Run("with no pack, "+tc.sub+" prints its line", func(t *testing.T) {
+			out, err := run(t, noPacks, tc.sub)
+
+			if err != nil || out != tc.want {
+				t.Fatalf("out = %q, err = %v, want %q", out, err, tc.want)
+			}
+		})
+	}
 
 	t.Run("an engine error is returned with and without json", func(t *testing.T) {
 		failing := cli.Handlers{Lint: func(context.Context) (shareddomain.Report, error) {
