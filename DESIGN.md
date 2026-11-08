@@ -33,6 +33,7 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 | gate | `internal/gate` | Verification gates from YAML, baseline ratchet, evidence |
 | lint | `internal/lint` | Rule packs |
 | live | `internal/live` | Merge and deploy records, signal checks, regression findings |
+| deploy | `internal/deploy` | Default deploy tool plugins (`helm`, `promtool`) on `gates.detect` and `chart.render`, and the chart render query |
 
 `ROADMAP.md` gives the pull request that builds each module.
 
@@ -235,8 +236,32 @@ Event kinds:
 | `gate.before` | veto | gate module |
 | `gate.after` | observe | gate module |
 | `signals.check` | collect | live module |
+| `gates.detect` | collect | gate module |
+| `chart.render` | collect | lint module |
 
 A `signals.check` plugin reads one signal source, such as Prometheus or an OpenTelemetry backend. It denies on a breached threshold. The joined deny reasons become the regression findings.
+
+A deploy tool plugin works on `gates.detect`, and optionally on `chart.render`. The data goes back in `Verdict.Context`:
+
+| Event | Payload | Answer in `context` |
+|---|---|---|
+| `gates.detect` | `{"files": [...]}`, the tracked and untracked files of the repo | one JSON gate on each line: `{"id":"...","run":"...","paths":[...]}`, `paths` optional |
+| `chart.render` | `{"chart": "deploy/chart"}`, with `cwd` the folder to render in | the rendered manifest in the `helm template` format: each document starts with a `# Source: <chart name>/<file>` comment, and the lint puts the chart folder in place of the chart name |
+
+The deploy module builds the default plugins `helm` and `promtool`, except the names in `deploy.disabled`. They propose nothing without their files:
+
+| Plugin | Files | Gate | Renders |
+|---|---|---|---|
+| `helm` | each `Chart.yaml` that is not below the folder of another chart | `helm-render`: `helm template <chart> > /dev/null`, joined with `&&` | `helm template <chart>` |
+| `promtool` | each `*.rules.test.yaml` | `promtool-test`: `find <top folders> -name '*.rules.test.yaml' -exec promtool test rules {} +` | no |
+
+An exec plugin writes a verdict on stdout, so the gate line is a JSON string inside `context`:
+
+```json
+{"verdict":"allow","context":"{\"id\":\"kubeconform\",\"run\":\"kubeconform -summary deploy\"}"}
+```
+
+Only one plugin renders a chart. An exec plugin on `chart.render` while `helm` is on is a config error. With no renderer, the chart rules stop with `no plugin rendered the chart`. A document with no `# Source:` comment also stops them, so a render in another format cannot pass as clean.
 
 The envelope goes to the plugin on stdin. Its version is 1.
 
@@ -455,6 +480,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
 | `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
+| `deploy.disabled` | empty list | A list of default deploy plugin names (`helm`, `promtool`); an unknown name is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |
 | `lint.packs` | empty list | A list of built-in pack names and custom pack folder paths (an entry with a `/`); a pack that needs another pack is an error when that pack is missing |
 | `lint.ddd.root` | `contexts` | The business root folder in `src/` |
@@ -599,7 +625,7 @@ Commands:
 
 - `harness verify` runs the gates in file order. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate. It exits 1 when one gate fails.
 - `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
-- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set, and the `helm-render` and `promtool-test` gates when `lint.packs` has `observability`.
+- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A plugin failure, a deny, a bad line or a duplicate id stops it before it writes.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
@@ -738,8 +764,8 @@ Pack `observability`:
 | `obs/runbook` | an alert without `annotations.runbook_url` | harness | error |
 | `obs/dashboard-series` | a dashboard query that uses a series that no rule file records | harness | warn |
 
-- The rendered rules run `helm template` on `lint.observability.chart`. Without `helm` on the path, these rules stop with a clear error.
-- The `helm-render` gate proves that the chart renders. The `promtool-test` gate runs `promtool test rules` on each test file.
+- The rendered rules dispatch `chart.render` on `lint.observability.chart`, and the `helm` deploy plugin runs `helm template`. Without `helm` on the path, or with `helm` in `deploy.disabled` and no other renderer, these rules stop with a clear error.
+- The `helm-render` gate proves that the chart renders. The `promtool-test` gate runs `promtool test rules` on each test file. The deploy plugins propose both.
 
 Pack `nextjs`:
 
