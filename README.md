@@ -60,6 +60,7 @@ go install ./cmd/harness   # into $(go env GOPATH)/bin
 make build                 # or: go build -o dist/harness ./cmd/harness
 make check                 # gofmt, go vet and go test
 ./dist/harness version
+make install-claude        # install this checkout as the Claude Code plugin, and again after each change
 ```
 
 Without the plugin, `harness init` below writes the hooks into the repository.

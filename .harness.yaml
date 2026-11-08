@@ -1,5 +1,8 @@
 git:
   default_branch: main
+# The owner lets the agent mark a PR ready and merge it in this repository.
+guard:
+  disabled: [pr-no-merge, pr-draft-only]
 verify:
   parallel: 3
 gates:
