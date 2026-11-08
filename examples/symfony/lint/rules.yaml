@@ -5,8 +5,8 @@ rules:
   - id: ddd/layer-direction
     canary: lint/canaries/ddd-layer-direction
   - id: ddd/cross-context
-    waived: deptrac needs one layer for each bounded context, and the project has one context. Add the layers and a canary with the second context.
+    canary: lint/canaries/ddd-cross-context
   - id: ddd/file-suffix
     waived: deptrac checks the dependencies, not the file names.
   - id: ddd/src-roots
-    waived: the example run adds the src-roots canary next.
+    canary: lint/canaries/ddd-src-roots

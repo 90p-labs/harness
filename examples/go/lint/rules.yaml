@@ -9,4 +9,4 @@ rules:
   - id: ddd/file-suffix
     waived: go-arch-lint checks the imports, not the file names.
   - id: ddd/src-roots
-    waived: the example run adds the src-roots canary next.
+    canary: lint/canaries/ddd-src-roots

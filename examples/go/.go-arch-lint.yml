@@ -14,11 +14,13 @@ excludeFiles:
 deps:
   order-application:
     mayDependOn: [order-domain]
+    anyVendorDeps: true
   order-infrastructure:
     mayDependOn: [order-domain, order-application]
     anyVendorDeps: true
   billing-application:
     mayDependOn: [billing-domain]
+    anyVendorDeps: true
   billing-infrastructure:
     mayDependOn: [billing-domain, billing-application]
     anyVendorDeps: true

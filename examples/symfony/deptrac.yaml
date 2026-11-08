@@ -2,27 +2,93 @@ deptrac:
   paths:
     - ./src
   layers:
-    - name: Domain
+    - name: Kernel
       collectors:
         - type: classLike
-          value: ^App\\[^\\]+\\Domain\\.*
-    - name: Application
+          value: ^App\\Kernel$
+    - name: SharedDomain
       collectors:
         - type: classLike
-          value: ^App\\[^\\]+\\Application\\.*
-    - name: Infrastructure
+          value: ^App\\Shared\\Domain\\.*
+    - name: OrderDomain
       collectors:
         - type: classLike
-          value: ^App\\[^\\]+\\Infrastructure\\.*
+          value: ^App\\Order\\Domain\\.*
+    - name: OrderApplication
+      collectors:
+        - type: classLike
+          value: ^App\\Order\\Application\\.*
+    - name: OrderInfrastructure
+      collectors:
+        - type: classLike
+          value: ^App\\Order\\Infrastructure\\.*
+    - name: BillingDomain
+      collectors:
+        - type: classLike
+          value: ^App\\Billing\\Domain\\.*
+    - name: BillingApplication
+      collectors:
+        - type: classLike
+          value: ^App\\Billing\\Application\\.*
+    - name: BillingInfrastructure
+      collectors:
+        - type: classLike
+          value: ^App\\Billing\\Infrastructure\\.*
+    - name: DomainLibraries
+      collectors:
+        - type: classLike
+          value: ^Ramsey\\Uuid\\.*
     - name: Framework
       collectors:
         - type: classLike
           value: ^(Symfony|Doctrine)\\.*
+    - name: Vendor
+      collectors:
+        - type: bool
+          must:
+            - type: classLike
+              value: ^(?!App\\).*
+          must_not:
+            - type: layer
+              value: Framework
+            - type: layer
+              value: DomainLibraries
+            - type: php_internal
+              value: .*
+            - type: directory
+              value: src/.*
   ruleset:
-    Domain: ~
-    Application:
-      - Domain
-    Infrastructure:
-      - Domain
-      - Application
+    Kernel:
+      - Framework
+    SharedDomain:
+      - DomainLibraries
+    OrderDomain:
+      - SharedDomain
+      - DomainLibraries
+    OrderApplication:
+      - OrderDomain
+      - SharedDomain
+      - DomainLibraries
+      - Vendor
+    OrderInfrastructure:
+      - OrderDomain
+      - OrderApplication
+      - SharedDomain
+      - DomainLibraries
+      - Vendor
+      - Framework
+    BillingDomain:
+      - SharedDomain
+      - DomainLibraries
+    BillingApplication:
+      - BillingDomain
+      - SharedDomain
+      - DomainLibraries
+      - Vendor
+    BillingInfrastructure:
+      - BillingDomain
+      - BillingApplication
+      - SharedDomain
+      - DomainLibraries
+      - Vendor
       - Framework

@@ -2,11 +2,11 @@
 
 namespace App\Order\Domain;
 
-use Symfony\Component\Uid\Uuid;
+use Psr\Log\LoggerInterface;
 
 final class Order
 {
-    public function __construct(public readonly Uuid $id)
+    public function __construct(private readonly LoggerInterface $logger)
     {
     }
 }
