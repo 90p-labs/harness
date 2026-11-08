@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
-import sqlalchemy
+import requests
 
 
 @dataclass(frozen=True)
 class Order:
     id: str
-    table: sqlalchemy.Table
+    session: requests.Session

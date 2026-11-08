@@ -1,10 +1,15 @@
 name: architecture
 rules:
+  - id: ddd/src-roots
+    engine: import-linter
+    severity: error
+    scope: "src/**/*.py"
+    message: Each source file sits in a context and a layer that .importlinter lists.
   - id: ddd/domain-purity
     engine: import-linter
     severity: error
     scope: "src/**/*.py"
-    message: The domain uses only itself, never the application layer, the infrastructure layer or a framework.
+    message: The domain uses only itself, the shared domain, the standard library and the allowed modules.
   - id: ddd/layer-direction
     engine: import-linter
     severity: error
@@ -14,4 +19,4 @@ rules:
     engine: import-linter
     severity: error
     scope: "src/**/*.py"
-    message: A bounded context uses another context only through its public entry point or its published events.
+    message: A bounded context uses another context only through its public entry point, and the shared kernel uses no context.

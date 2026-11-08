@@ -1,19 +1,34 @@
 [importlinter]
 root_package = shop
 include_external_packages = True
+contract_types =
+    domain_purity: domain_purity.DomainPurityContract
+
+[importlinter:contract:src-roots]
+name = ddd/src-roots
+type = layers
+containers =
+    shop
+layers =
+    (order) : (billing) : (shared)
+exhaustive = true
+
+[importlinter:contract:context-layers]
+name = ddd/src-roots
+type = layers
+containers =
+    shop.*
+layers =
+    (infrastructure) : (application) : (domain)
+exhaustive = true
 
 [importlinter:contract:domain-purity]
 name = ddd/domain-purity
-type = forbidden
+type = domain_purity
 source_modules =
     shop.*.domain
-forbidden_modules =
-    shop.*.application
-    shop.*.infrastructure
-    sqlalchemy
-    django
-    flask
-    fastapi
+allowed_modules =
+    shop.shared.domain
 
 [importlinter:contract:layer-direction]
 name = ddd/layer-direction
@@ -32,3 +47,13 @@ modules =
 unmatched_ignore_imports_alerting = none
 ignore_imports =
     shop.** -> shop.*
+    shop.** -> shop.shared.**
+
+[importlinter:contract:shared-kernel]
+name = ddd/cross-context
+type = layers
+containers =
+    shop
+layers =
+    (order) : (billing)
+    (shared)
