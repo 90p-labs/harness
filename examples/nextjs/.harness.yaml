@@ -1,5 +1,5 @@
 lint:
-  packs: [nextjs, shadcn]
+  packs: [nextjs, shadcn, ddd]
 
 verify:
   parallel: 3
