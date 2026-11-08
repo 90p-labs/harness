@@ -3,12 +3,15 @@ package domain
 import (
 	"fmt"
 	"slices"
+
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 type Run struct {
 	ID          string
 	Key         RunKey
 	Prompt      string
+	Track       shareddomain.Track
 	Phase       Phase
 	ReviewRound int
 	LiveRound   int
@@ -46,6 +49,8 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 	case cmd.Event == EventResume:
 		next.BlockedFrom = PhaseNone
 		next.Reason = ""
+	case cmd.Event == EventSubmitPlan || cmd.Event == EventAmend:
+		next.Track = shareddomain.Stricter(r.Track, cmd.Track)
 	case cmd.Event == EventApprovePlan:
 		next.ReviewRound = 0
 	case cmd.Event == EventRequestRework:

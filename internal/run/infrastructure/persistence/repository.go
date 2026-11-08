@@ -17,12 +17,12 @@ const (
 	Module        = "run"
 	migrationsDir = "migrations"
 
-	runColumns       = "id, repo, worktree, prompt, phase, review_round, live_round, stop_blocks, blocked_from, reason, version"
+	runColumns       = "id, repo, worktree, prompt, track, phase, review_round, live_round, stop_blocks, blocked_from, reason, version"
 	selectRun        = "SELECT " + runColumns + " FROM runs"
 	selectRunByID    = selectRun + " WHERE id = ?"
 	selectActiveRun  = selectRun + " WHERE repo = ? AND worktree = ? AND phase NOT IN (?, ?)"
-	insertRun        = "INSERT INTO runs (" + runColumns + ", created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	updateRun        = "UPDATE runs SET phase = ?, review_round = ?, live_round = ?, stop_blocks = ?, blocked_from = ?, reason = ?, version = ?, updated_at = ? WHERE id = ? AND version = ?"
+	insertRun        = "INSERT INTO runs (" + runColumns + ", created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	updateRun        = "UPDATE runs SET track = ?, phase = ?, review_round = ?, live_round = ?, stop_blocks = ?, blocked_from = ?, reason = ?, version = ?, updated_at = ? WHERE id = ? AND version = ?"
 	insertTransition = "INSERT INTO run_transitions (run_id, at, from_phase, event, to_phase, reason) VALUES (?, ?, ?, ?, ?, ?)"
 )
 
@@ -76,14 +76,14 @@ func (r SQLRunRepository) Save(ctx context.Context, run domain.Run) (domain.Run,
 func (r SQLRunRepository) writeRun(ctx context.Context, tx *sql.Tx, run domain.Run, now time.Time) error {
 	next := run.Version + 1
 	if run.Version == 0 {
-		_, err := tx.ExecContext(ctx, insertRun, run.ID, run.Key.Repo, run.Key.Worktree, run.Prompt, run.Phase,
+		_, err := tx.ExecContext(ctx, insertRun, run.ID, run.Key.Repo, run.Key.Worktree, run.Prompt, run.Track, run.Phase,
 			run.ReviewRound, run.LiveRound, run.StopBlocks, run.BlockedFrom, run.Reason, next, now, now)
 		if r.db.Dialect().IsUniqueViolation(err) {
 			return fmt.Errorf("%w: %s", domain.ErrActiveRunExists, run.ID)
 		}
 		return err
 	}
-	result, err := tx.ExecContext(ctx, updateRun, run.Phase, run.ReviewRound, run.LiveRound, run.StopBlocks,
+	result, err := tx.ExecContext(ctx, updateRun, run.Track, run.Phase, run.ReviewRound, run.LiveRound, run.StopBlocks,
 		run.BlockedFrom, run.Reason, next, now, run.ID, run.Version)
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func (r SQLRunRepository) writeRun(ctx context.Context, tx *sql.Tx, run domain.R
 
 func (r SQLRunRepository) one(ctx context.Context, query string, args ...any) (domain.Run, error) {
 	var run domain.Run
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(&run.ID, &run.Key.Repo, &run.Key.Worktree, &run.Prompt, &run.Phase,
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&run.ID, &run.Key.Repo, &run.Key.Worktree, &run.Prompt, &run.Track, &run.Phase,
 		&run.ReviewRound, &run.LiveRound, &run.StopBlocks, &run.BlockedFrom, &run.Reason, &run.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Run{}, domain.ErrRunNotFound

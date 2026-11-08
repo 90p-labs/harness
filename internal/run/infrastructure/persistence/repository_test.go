@@ -10,6 +10,7 @@ import (
 
 	"github.com/jorge07/harness/internal/run/domain"
 	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
 )
 
@@ -48,7 +49,7 @@ func openStore(t *testing.T, c dialectCase) store {
 
 func newRun(t *testing.T, id string, events ...domain.Event) domain.Run {
 	t.Helper()
-	run := domain.Run{ID: id, Key: key, Prompt: "add the run command\nwith a second line"}
+	run := domain.Run{ID: id, Key: key, Prompt: "add the run command\nwith a second line", Track: shareddomain.TrackFull}
 	for _, event := range events {
 		next, err := run.Apply(domain.Command{Event: event, Reason: string(event), At: clock}, domain.Policy{})
 		if err != nil {
@@ -114,6 +115,23 @@ func TestRunRepositoryContract(t *testing.T) {
 				}
 				if _, err := s.repo.Get(ctx, "missing"); !errors.Is(err, domain.ErrRunNotFound) {
 					t.Fatalf("get missing: %v", err)
+				}
+			})
+
+			t.Run("UpdateRaisesTrack", func(t *testing.T) {
+				s := openStore(t, c)
+				started := newRun(t, "r1", domain.EventStart)
+				started.Track = ""
+				saved := save(t, s, started)
+				next, err := saved.Apply(domain.Command{Event: domain.EventSubmitPlan, Track: shareddomain.TrackFull, At: clock}, domain.Policy{})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				save(t, s, next)
+
+				if got := get(t, s, "r1").Track; got != shareddomain.TrackFull {
+					t.Fatalf("track = %q, want %q", got, shareddomain.TrackFull)
 				}
 			})
 

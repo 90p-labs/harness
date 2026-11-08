@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jorge07/harness/internal/run/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const spanTransition = "run.transition"
@@ -24,6 +25,7 @@ type Command struct {
 	Key    domain.RunKey
 	Event  domain.Event
 	Reason string
+	Track  shareddomain.Track
 }
 
 type Flow struct {
@@ -82,5 +84,5 @@ func (h Handler) Handle(ctx context.Context, cmd Command) error {
 	if err != nil {
 		return err
 	}
-	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason})
+	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, Track: cmd.Track})
 }
