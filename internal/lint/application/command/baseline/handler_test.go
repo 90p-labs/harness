@@ -12,7 +12,7 @@ import (
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
-const baselinePath = ".harness-baseline/lint.json"
+const baselinePath = ".harness-lint/baseline.json"
 
 var errLint = errors.New("lint failed")
 

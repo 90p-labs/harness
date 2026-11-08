@@ -211,7 +211,7 @@ func TestLoadGates(t *testing.T) {
     run: go test ./...
     paths: ["**/*.go", go.mod]
     timeout: 90s
-    baseline: .harness-baseline/lint.json
+    baseline: .harness-lint/baseline.json
   - id: plain
     run: "true"
 `)
@@ -219,7 +219,7 @@ func TestLoadGates(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	want := []config.Gate{
-		{ID: "go-test", Run: "go test ./...", Paths: []string{"**/*.go", "go.mod"}, Timeout: 90 * time.Second, Baseline: ".harness-baseline/lint.json"},
+		{ID: "go-test", Run: "go test ./...", Paths: []string{"**/*.go", "go.mod"}, Timeout: 90 * time.Second, Baseline: ".harness-lint/baseline.json"},
 		{ID: "plain", Run: "true"},
 	}
 	if !reflect.DeepEqual(got.Gates, want) {

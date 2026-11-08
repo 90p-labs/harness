@@ -7,8 +7,12 @@ import (
 )
 
 const (
-	LintDir     = ".harness-lint"
-	VersionFile = "VERSION"
+	LintDir      = ".harness-lint"
+	VersionFile  = "VERSION"
+	BaselineFile = "baseline.json"
+	BaselinePath = LintDir + "/" + BaselineFile
+
+	OldBaselinePath = ".harness-baseline/lint.json"
 )
 
 type Engine interface {

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	gateconfig "github.com/jorge07/harness/internal/gate/infrastructure/config"
-	lintmodule "github.com/jorge07/harness/internal/lint"
 	lintdomain "github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
@@ -78,8 +77,8 @@ func TestInitSetsUpARepository(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, lintmodule.BaselinePath)); !os.IsNotExist(err) {
-		t.Errorf("%s exists with no lint pack", lintmodule.BaselinePath)
+	if _, err := os.Stat(filepath.Join(dir, lintdomain.BaselinePath)); !os.IsNotExist(err) {
+		t.Errorf("%s exists with no lint pack", lintdomain.BaselinePath)
 	}
 }
 
@@ -126,7 +125,7 @@ func TestInitTwiceKeepsTheSetup(t *testing.T) {
 	if code != exitOK || stderr != "" {
 		t.Fatalf("second run: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
 	}
-	for _, line := range []string{"lint packs: kept observability\n", "gates: kept\n", "lint baseline: wrote .harness-baseline/lint.json (0 findings, run harness lint to see them)\n"} {
+	for _, line := range []string{"lint packs: kept observability\n", "gates: kept\n", "lint baseline: wrote " + lintdomain.BaselinePath + " (0 findings, run harness lint to see them)\n"} {
 		if !strings.Contains(stdout, line) {
 			t.Errorf("second run stdout = %q, want %q", stdout, line)
 		}
@@ -189,7 +188,7 @@ func TestInitRefusesAnUnknownHost(t *testing.T) {
 	if code != exitUsage || !strings.Contains(stderr, "unknown host") {
 		t.Fatalf("code = %d, stderr = %q, want %d and the unknown host error", code, stderr, exitUsage)
 	}
-	for _, name := range append([]string{configFile, lintmodule.BaselinePath}, setupFiles...) {
+	for _, name := range append([]string{configFile, lintdomain.BaselinePath}, setupFiles...) {
 		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
 			t.Errorf("%s exists after a refused init", name)
 		}
@@ -230,9 +229,18 @@ func TestInitPrintsBaselineCount(t *testing.T) {
 
 	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
 
-	want := "lint baseline: wrote .harness-baseline/lint.json (2 findings, run harness lint to see them)\n"
+	want := "lint baseline: wrote " + lintdomain.BaselinePath + " (2 findings, run harness lint to see them)\n"
 	if code != exitOK || !strings.Contains(stdout, want) {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, want)
+	}
+
+	commitFiles(t, dir, "chore: a third finding", map[string]string{
+		todoSourceFile: "// TODO: add the tax\n// TODO: round the total\n// TODO: log the order\n",
+	})
+	code, stdout, stderr = execute(t, commandInit, initHostFlag, hostClaude)
+
+	if code != exitOK || !strings.Contains(stdout, want) {
+		t.Fatalf("second init: code = %d, stdout = %q, stderr = %q, want %q: the baseline accepts no new finding", code, stdout, stderr, want)
 	}
 }
 

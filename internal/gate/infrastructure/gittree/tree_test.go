@@ -14,7 +14,7 @@ import (
 
 const (
 	goTest       = "go test ./..."
-	baselineFile = ".harness-baseline/lint.json"
+	baselineFile = ".harness-lint/baseline.json"
 )
 
 var (

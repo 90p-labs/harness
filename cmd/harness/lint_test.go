@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -22,7 +23,6 @@ const (
 	canaryLintScript = "testdata/canary-lint.sh"
 	todoRuleID       = "team/no-todo"
 	todoSourceFile   = "src/orders/order.ts"
-	lintBaselineFile = ".harness-baseline/lint.json"
 )
 
 func TestLintCatalogue(t *testing.T) {
@@ -205,12 +205,32 @@ rules:
 	if code, _, stderr := execute(t, commandLint, commandBaseline); code != exitOK {
 		t.Fatalf("lint baseline: code = %d, stderr = %q", code, stderr)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, lintBaselineFile))
+	baselineFile := filepath.Join(dir, lintdomain.BaselinePath)
+	raw, err := os.ReadFile(baselineFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var baseline shareddomain.Report
 	if err := json.Unmarshal(raw, &baseline); err != nil || !slices.Contains(baseline.Findings, want) {
 		t.Fatalf("baseline = %s, %v, want the %s finding", raw, err, todoRuleID)
+	}
+
+	if code, _, stderr := execute(t, commandLint, commandInit); code != exitOK {
+		t.Fatalf("second lint init: code = %d, stderr = %q", code, stderr)
+	}
+	if kept, err := os.ReadFile(baselineFile); err != nil || !bytes.Equal(kept, raw) {
+		t.Fatalf("baseline after lint init = %q, err = %v, want %q", kept, err, raw)
+	}
+
+	oldBaseline := filepath.Join(dir, lintdomain.OldBaselinePath)
+	if err := os.MkdirAll(filepath.Dir(oldBaseline), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldBaseline, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, stderr = execute(t, commandLint, commandInit)
+	if code != exitRuntime || !strings.Contains(stderr, lintdomain.OldBaselinePath) || !strings.Contains(stderr, lintdomain.BaselinePath) {
+		t.Fatalf("lint init with the old baseline: code = %d, stderr = %q, want exit %d naming both paths", code, stderr, exitRuntime)
 	}
 }

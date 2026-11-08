@@ -30,7 +30,7 @@ const (
 	inputHash     = "tree-1"
 	testGate      = "go-test"
 	lintGate      = "lint"
-	baselinePath  = ".harness-baseline/lint.json"
+	baselinePath  = ".harness-lint/baseline.json"
 	spanName      = "gate.run"
 	metricName    = "harness.gate.duration"
 	attrGate      = "harness.gate"
