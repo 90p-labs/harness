@@ -605,6 +605,7 @@ Commands:
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
 - A veto stops at the first deny, and `guard.commits-checked` sorts first. A test of another rule disables `commits-checked`.
 - The `GateSource` port adds one gate for each criterion of the active plan, with the id `criterion-N`. Each criterion gets its own evidence record.
+- `harness init --host H` sets up a repository in one step and prints one line for each step. First it keeps `lint.packs`, or it writes the packs that the repository files show: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it runs `gates init` with these packs, `lint init`, `lint baseline` and `host install`. With no pack, it skips the baseline, so a later pack gets a full first baseline. When it chooses packs but the `gates` key exists, it stops before the first write, because the kept gates have no `lint` gate. A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. When a lint engine is missing, it stops at the baseline step, and the steps before it stay.
 
 Before the review, an in-process plugin on `run.transition.before` verifies the trace of the plan against the branch. The pure function `VerifyTrace` checks these rules:
 

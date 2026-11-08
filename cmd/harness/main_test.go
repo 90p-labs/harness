@@ -247,7 +247,6 @@ const (
 	commandCheck     = "check"
 	commandVerify    = "verify"
 	commandGates     = "gates"
-	commandInit      = "init"
 
 	pingBranch      = "feat/ping-query"
 	strayFile       = "stray.txt"
