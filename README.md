@@ -6,7 +6,7 @@ The harness is an open source Go tool that drives an AI coding agent through a f
 - **Gates.** A gate is one shell command that proves one property of the repo, such as the tests. `harness verify` runs the gates and the acceptance criteria of the plan, and keeps the evidence.
 - **Lint packs.** Rule packs for DDD, event sourcing, observability, Next.js and shadcn, on Biome, oxlint and a built-in engine, with a baseline ratchet.
 - **Guard.** Built-in rules on the host hooks. They deny a PR merge, a PR that is not a draft, a forced push, a read of a secret, a push before a commit check, and a stop while the run holds the turn.
-- **Exec plugins.** Any command that reads a JSON event on stdin and prints a verdict. A plugin can veto a transition, a plan or a gate, or add context for the agent.
+- **Exec plugins.** Any command that reads a JSON event on stdin and prints a verdict. A plugin can veto a transition, a plan or a gate, propose gates, add lint findings, report a signal breach, or add context for the agent.
 
 Status: pre-alpha.
 
@@ -62,7 +62,7 @@ make check                 # gofmt, go vet and go test
 ./dist/harness version
 ```
 
-Without the plugin, step 4 of the setup below writes the hooks into the repository.
+Without the plugin, `harness init` below writes the hooks into the repository.
 
 ## Set up a repository
 
@@ -80,49 +80,30 @@ npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0
 
 The config is `.harness.yaml` at the git top level. Run the commands below from the repository root.
 
-1. Set the lint packs first, if you use them, because `gates init` adds the lint gate only when `lint.packs` is set:
+### With harness init (no plugin)
 
-   ```yaml
-   lint:
-     packs: [ddd]
-   ```
+`harness init` always installs the hooks of the host. With the plugin, each hook then runs twice: use the step by step setup below.
 
-2. Write the engine files of the packs into `.harness-lint/`, see the findings, and record the current findings as the baseline:
+`harness init --host claude` (or `--host codex`) sets up the repository in one step. It keeps `lint.packs`, or it chooses the packs from the repository files: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it writes the gates, the lint files and the lint baseline, and installs the hooks. On a NestJS repository with the scripts `typecheck` and `test`:
 
-   ```console
-   $ harness lint init
-   $ harness lint
-   error ddd/context-layers src/contexts/billing:1 A context has only one of domain, application and infrastructure.
-   error ddd/module-per-context src/contexts/billing:1 A context needs exactly one module file at its root.
-   error ddd/aggregate-encapsulation src/contexts/billing/domain/invoice.aggregate.ts:2 a public aggregate property must be readonly
-   error: lint found error findings
-   $ harness lint baseline
-   ```
+```console
+$ harness init --host claude
+lint packs: wrote ddd
+gates: wrote node-typecheck, node-test, lint
+lint init: wrote .harness-lint
+lint baseline: wrote .harness-baseline/lint.json
+host: wrote /home/dev/shop/.claude/settings.json
+```
 
-   The lint gate fails only on a new `error` finding. The first `harness lint baseline` writes every finding. A later run only removes the keys that no longer match, so the baseline only shrinks.
+A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. With no pack, it skips the baseline. When it chooses packs but the `gates` key exists, it stops before it writes: set `lint.packs` and the `lint` gate by hand, or remove the `gates` key. Without a lint engine on the `PATH`, it stops at the baseline step: install the engine and run it again. After a full run, do step 5 below.
 
-3. Detect the gates. The command reads the toolchain (Go, pnpm, npm, Biome) and writes the `gates` key. It refuses to change an existing key.
+### Step by step
 
-   ```console
-   $ harness gates init
-   go-fmt: test -z "$(gofmt -l .)"
-   go-vet: go vet ./...
-   go-test: go test ./...
-   ```
-
-4. Skip this step when you use the plugin: the plugin installs the hooks. Without the plugin, install the hooks of the host. The command merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key.
-
-   ```console
-   $ harness host install --host claude
-   /home/dev/shop/.claude/settings.json
-   $ harness host capabilities --host codex
-   session.started yes
-   prompt.submitted yes
-   tool.before yes
-   ...
-   ```
-
-5. Commit `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and the host config of step 4, if you wrote one. Add `.harness/` to `.gitignore`: it holds the run folders.
+1. Set the lint packs first, if you use them, for example `lint: {packs: [ddd]}`. `gates init` adds the lint gate only when `lint.packs` is set.
+2. Run `harness lint init` to write the engine files of the packs into `.harness-lint/`. Run `harness lint` to see the findings, and `harness lint baseline` to record them as the baseline. The lint gate fails only on a new `error` finding. A later `harness lint baseline` only removes the keys that no longer match, so the baseline only shrinks.
+3. Run `harness gates init` to detect the gates. It reads the toolchain (Go, pnpm, npm, Biome) and the deploy plugins, and writes the `gates` key. It refuses to change an existing key.
+4. Skip this step when you use the plugin: the plugin installs the hooks. Else run `harness host install --host claude` (or `--host codex`). It merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key. `harness host capabilities --host codex` prints each host event and whether the host supports it.
+5. Commit `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and the host config, if you wrote one. Add `.harness/` to `.gitignore`: it holds the run folders.
 
 An example `.harness.yaml`. `harness config` prints the effective config, and an unknown key is an error:
 
@@ -144,31 +125,107 @@ gates:
   - id: lint
     run: harness lint --json
     baseline: .harness-baseline/lint.json
-plugins:
-  - name: plan-has-risks
-    command: [sh, scripts/plan-has-risks.sh]
-    events: [plan.submitted]
-    timeout: 2s
 ```
 
-The plugin reads the event envelope on stdin and prints a verdict:
+`DESIGN.md` lists every config key, every event and every guard rule.
+
+## Plugins
+
+A plugin is a command in the `plugins` key. The harness writes the event envelope as JSON on stdin and reads one verdict from stdout: `{"verdict":"allow|deny|context","reason":"...","context":"...","findings":[]}`. An empty stdout is an allow, and a non-zero exit is a plugin failure. The default `timeout` is 5 seconds. [`DESIGN.md`](DESIGN.md#plugin-events) gives the full contract: each event, its kind and its payload. The output below is real, from scratch repositories. Two scripts need `jq`.
+
+### Deploy tool plugin
+
+A deploy tool plugin answers `gates.detect` with the gates that it proposes, one JSON gate on each line of `context`. `harness gates init` and `harness init` append them. `scripts/kubeconform-detect.sh` proposes a kubeconform gate when the repository has files in `deploy/manifests/`:
+
+```sh
+#!/bin/sh
+if grep -q '"deploy/manifests/'; then
+  echo '{"verdict":"allow","context":"{\"id\":\"kubeconform\",\"run\":\"kubeconform -summary deploy/manifests\",\"paths\":[\"deploy/manifests/**\"]}"}'
+fi
+```
+
+```console
+$ cat .harness.yaml
+plugins:
+  - {name: kubeconform, command: [sh, scripts/kubeconform-detect.sh], events: [gates.detect]}
+$ harness gates init
+helm-render: helm template deploy/chart > /dev/null
+kubeconform: kubeconform -summary deploy/manifests
+```
+
+The default plugin `helm` proposed `helm-render` for `deploy/chart/Chart.yaml`. `deploy.disabled` turns off a default plugin, `helm` or `promtool`. With `deploy: {disabled: [helm]}`, the same command proposes only the kubeconform gate.
+
+### Custom lint pack and lint engine plugin
+
+An entry of `lint.packs` with a `/` is a custom pack: a folder with a `pack.yaml`. A rule names its engine: `biome-grit`, `biome-rule`, `oxlint` or a lint plugin. [`DESIGN.md`](DESIGN.md#custom-packs) gives the GritQL rules and the other keys. A lint engine plugin answers `lint.check`. The payload holds the rules of its engine and the files that match their scopes. The findings of the verdict go through the same report, baseline ratchet and lint gate as the built-in rules. `scripts/console-lint.sh`:
+
+```sh
+#!/bin/sh
+jq -j '.payload.files[] + "\u0000"' | xargs -0 grep -IHn 'console\.log' /dev/null |
+  jq -Rn '{verdict: "allow", findings: [inputs | split(":") | {rule: "team/no-console", file: .[0], line: (.[1] | tonumber), message: "console.log in source"}]}'
+```
+
+```console
+$ cat lint/team/pack.yaml
+name: team
+rules:
+  - id: team/no-console
+    engine: console-lint
+    severity: error
+    scope: "src/**/*.ts"
+    message: A source file calls console.log. Use the logger.
+$ cat .harness.yaml
+lint: {packs: [./lint/team]}
+plugins:
+  - {name: console-lint, command: [sh, scripts/console-lint.sh], events: [lint.check], timeout: 30s}
+$ harness lint init
+$ harness lint
+error team/no-console src/checkout.ts:2 console.log in source
+error: lint found error findings
+```
+
+Run `harness lint init` after each edit of a custom pack. A finding takes the severity of its rule. `lint.disabled` turns off a default engine, `harness`, `biome-grit` or `oxlint`, and the rules of that engine then do not run: for example, `lint: {disabled: [biome-grit]}`.
+
+### Signals plugin
+
+In `observing`, `harness live check` sends one `signals.check` event for each row of the `## Signals` table of the plan. A plugin answers only the rows of its own `source`, and a breach is a deny. [`docs/go-live.md`](docs/go-live.md) gives the table, the payload and the verdict. `scripts/prom-check.sh` reads the value of the query at the check time from `$PROMETHEUS_URL`, which must be set where `harness live check` runs. A failed read is a plugin failure:
+
+```sh
+#!/bin/sh
+row=$(jq -c .payload)
+[ "$(echo "$row" | jq -r .source)" = prometheus ] || exit 0
+value=$(curl -sfG "$PROMETHEUS_URL/api/v1/query" --data-urlencode "query=$(echo "$row" | jq -r .query)" | jq -er '.data.result[0].value[1]') || exit 1
+echo "$row" | jq --argjson v "$value" '.breach as $b | select({">": ($v > $b.value), ">=": ($v >= $b.value), "<": ($v < $b.value), "<=": ($v <= $b.value)}[$b.op]) | {verdict: "deny", reason: "\(.signal) \($v) \($b.op) \($b.value)"}'
+```
+
+The `plugins` entry is `{name: prom, command: [sh, scripts/prom-check.sh], events: [signals.check]}`. In this scratch run, a stub `gh` gave the merge and the deploy, and the first check moved the run to `observing`. On the next check, the breach sends the run back to `planning` with the findings:
+
+```console
+$ harness live check
+20261108-161558-let-a-customer-cancel-an-order observing regression
+$ harness run status
+run 20261108-161558-let-a-customer-cancel-an-order phase=planning review_round=0 live_round=1
+reason: Regression in live round 1 of run 20261108-161558-let-a-customer-cancel-an-order: PR https://github.com/acme/orders/pull/7, sha 4f2a9c1, production.
+- prom: error rate 0.034 > 0.01, window 30m, panel https://grafana.example/d/orders
+...
+```
+
+### Hook plugin
+
+A hook plugin works on a host hook event, such as `tool.before`, or on a loop event, such as `plan.submitted` or `run.transition.before`. `scripts/plan-has-risks.sh` refuses a plan with no `## Risks` section:
 
 ```sh
 #!/bin/sh
 plan=$(sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
-if grep -q '^## Risks' "$plan"; then
-  echo '{"verdict":"allow"}'
-else
-  echo '{"verdict":"deny","reason":"the plan has no ## Risks section"}'
-fi
+grep -q '^## Risks' "$plan" || echo '{"verdict":"deny","reason":"the plan has no ## Risks section"}'
 ```
+
+The `plugins` entry is `{name: plan-has-risks, command: [sh, scripts/plan-has-risks.sh], events: [plan.submitted]}`:
 
 ```console
 $ harness run plan
 error: plan rejected: plan-has-risks: the plan has no ## Risks section
 ```
-
-`DESIGN.md` lists every config key, every event and every guard rule.
 
 ## A full run
 
@@ -314,7 +371,7 @@ With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes 
 | Trace check | `submit-for-review`: the trees, the commits and the owned files against the branch |
 | Reviewers | `reviewing`: the agents of the `reviewer` role, then `ship` or `rework` |
 | Guard | each tool call (`tool.before`) and each stop (`turn.stopping`) of the agent, in every phase |
-| Plugins | every transition (`run.transition.before`, `run.transition.after`), each gate, each plan and each host hook |
+| Plugins | every transition (`run.transition.before`, `run.transition.after`), each gate, each plan, each host hook, gate detection, lint and live signals |
 | Live check | `releasing` and `observing`: `harness live check` reads the deploy and the signals |
 
 ## Report a harness bug
