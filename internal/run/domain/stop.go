@@ -1,0 +1,16 @@
+package domain
+
+import "fmt"
+
+type StopVerdict struct {
+	Block  bool
+	Reason string
+}
+
+func DecideStop(run Run, policy Policy, agentRunning bool) (StopVerdict, Run) {
+	if !run.Phase.HoldsTheTurn() || agentRunning || run.StopBlocks >= policy.MaxStopBlocks {
+		return StopVerdict{}, run
+	}
+	run.StopBlocks++
+	return StopVerdict{Block: true, Reason: fmt.Sprintf("the run is in phase %s and is not finished", run.Phase)}, run
+}

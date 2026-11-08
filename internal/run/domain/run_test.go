@@ -1,0 +1,136 @@
+package domain_test
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/jorge07/harness/internal/run/domain"
+)
+
+func apply(t *testing.T, run domain.Run, policy domain.Policy, event domain.Event, reason string) domain.Run {
+	t.Helper()
+	next, err := run.Apply(domain.Command{Event: event, Reason: reason}, policy)
+	if err != nil {
+		t.Fatalf("%s from %s: %v", event, run.Phase, err)
+	}
+	return next
+}
+
+func TestRunApply(t *testing.T) {
+	old := domain.Run{ID: "r1"}
+	next, err := old.Apply(domain.Command{Event: domain.EventStart}, domain.Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Phase != domain.PhasePlanning || next.ID != "r1" {
+		t.Fatalf("got %+v", next)
+	}
+	if old.Phase != domain.PhaseNone {
+		t.Fatalf("old run changed: %+v", old)
+	}
+
+	_, err = next.Apply(domain.Command{Event: domain.EventResume}, domain.Policy{})
+	if !errors.Is(err, domain.ErrIllegalTransition) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestApprovalGuard(t *testing.T) {
+	cases := []struct {
+		name   string
+		policy domain.Policy
+		live   int
+		want   domain.Phase
+	}{
+		{"policy needs approval", domain.Policy{ApprovalNeeded: true}, 0, domain.PhaseAwaitingApproval},
+		{"replan after regression", domain.Policy{}, 1, domain.PhaseAwaitingApproval},
+		{"no approval", domain.Policy{}, 0, domain.PhaseWorking},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			run := domain.Run{Phase: domain.PhasePlanning, LiveRound: c.live}
+			if got := apply(t, run, c.policy, domain.EventSubmitPlan, "").Phase; got != c.want {
+				t.Fatalf("got %s want %s", got, c.want)
+			}
+		})
+	}
+}
+
+func TestReworkRounds(t *testing.T) {
+	policy := domain.Policy{MaxReviewRounds: 3}
+	run := domain.Run{Phase: domain.PhaseReviewing, ReviewRound: 1}
+
+	again := apply(t, run, policy, domain.EventRequestRework, "fix a")
+	if again.Phase != domain.PhaseWorking || again.ReviewRound != 2 || again.Reason != "fix a" {
+		t.Fatalf("got %+v", again)
+	}
+
+	last := apply(t, domain.Run{Phase: domain.PhaseReviewing, ReviewRound: 2}, policy, domain.EventRequestRework, "fix b")
+	if last.Phase != domain.PhaseBlocked || last.BlockedFrom != domain.PhaseReviewing || last.Reason != "fix b" {
+		t.Fatalf("got %+v", last)
+	}
+}
+
+func TestBlockResume(t *testing.T) {
+	active := []domain.Phase{
+		domain.PhasePlanning, domain.PhaseAwaitingApproval, domain.PhaseWorking, domain.PhaseReviewing,
+		domain.PhaseShipping, domain.PhaseReleasing, domain.PhaseObserving,
+	}
+	for _, phase := range active {
+		t.Run(string(phase), func(t *testing.T) {
+			blocked := apply(t, domain.Run{Phase: phase}, domain.Policy{}, domain.EventBlock, "stuck")
+			if blocked.Phase != domain.PhaseBlocked || blocked.BlockedFrom != phase || blocked.Reason != "stuck" {
+				t.Fatalf("got %+v", blocked)
+			}
+			resumed := apply(t, blocked, domain.Policy{}, domain.EventResume, "")
+			if resumed.Phase != phase || resumed.BlockedFrom != domain.PhaseNone || resumed.Reason != "" {
+				t.Fatalf("got %+v", resumed)
+			}
+		})
+	}
+}
+
+func TestGoLivePhases(t *testing.T) {
+	on := domain.Policy{GoLive: true}
+	shipping := domain.Run{Phase: domain.PhaseShipping}
+
+	releasing := apply(t, shipping, on, domain.EventComplete, "")
+	observing := apply(t, releasing, on, domain.EventDeploy, "")
+	done := apply(t, observing, on, domain.EventClose, "")
+	got := []domain.Phase{releasing.Phase, observing.Phase, done.Phase}
+	want := []domain.Phase{domain.PhaseReleasing, domain.PhaseObserving, domain.PhaseDone}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("step %d: got %s want %s", i, got[i], want[i])
+		}
+	}
+
+	if off := apply(t, shipping, domain.Policy{}, domain.EventComplete, ""); off.Phase != domain.PhaseDone {
+		t.Fatalf("got %s", off.Phase)
+	}
+}
+
+func TestGoLiveRounds(t *testing.T) {
+	policy := domain.Policy{GoLive: true, MaxLiveRounds: 2}
+	for _, phase := range []domain.Phase{domain.PhaseReleasing, domain.PhaseObserving} {
+		t.Run(string(phase), func(t *testing.T) {
+			run := domain.Run{Phase: phase, ReviewRound: 2, LiveRound: 0}
+			replan := apply(t, run, policy, domain.EventRegress, "p99 breach")
+			if replan.Phase != domain.PhasePlanning || replan.LiveRound != 1 || replan.ReviewRound != 0 || replan.Reason != "p99 breach" {
+				t.Fatalf("got %+v", replan)
+			}
+
+			last := apply(t, domain.Run{Phase: phase, LiveRound: 1}, policy, domain.EventRegress, "again")
+			if last.Phase != domain.PhaseBlocked || last.BlockedFrom != phase || last.Reason != "again" {
+				t.Fatalf("got %+v", last)
+			}
+		})
+	}
+}
+
+func TestTransitionResetsStopBlocks(t *testing.T) {
+	run := domain.Run{Phase: domain.PhasePlanning, StopBlocks: 2}
+	if got := apply(t, run, domain.Policy{}, domain.EventAbandon, "").StopBlocks; got != 0 {
+		t.Fatalf("got %d", got)
+	}
+}
