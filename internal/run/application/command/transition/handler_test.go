@@ -24,6 +24,8 @@ const (
 	callSave   = "save"
 	callAfter  = "after"
 	callGate   = "gate"
+	callHash   = "hash"
+	callHas    = "has"
 
 	spanName      = "run.transition"
 	attrRunID     = "harness.run.id"
@@ -33,6 +35,9 @@ const (
 
 	runID     = "20261108-011805-add-login"
 	vetoText  = "tests are red"
+	planHash  = "0fcc61abbe1c"
+	byModel   = "fable"
+	byReason  = "the user approved all plans"
 	startedAt = 4
 )
 
@@ -93,40 +98,70 @@ func (f *fakeHooks) After(_ context.Context, from domain.Run, to domain.Run) {
 }
 
 type fakeGate struct {
-	journal *journal
-	track   shareddomain.Track
-	err     error
-	runs    []domain.Run
+	journal    *journal
+	submission domain.Submission
+	err        error
+	runs       []domain.Run
 }
 
-func (f *fakeGate) Submit(_ context.Context, run domain.Run) (shareddomain.Track, error) {
+func (f *fakeGate) Submit(_ context.Context, run domain.Run) (domain.Submission, error) {
 	f.journal.calls = append(f.journal.calls, callGate)
 	f.runs = append(f.runs, run)
-	return f.track, f.err
+	return f.submission, f.err
+}
+
+func (f *fakeGate) Hash(domain.Run) (string, error) {
+	f.journal.calls = append(f.journal.calls, callHash)
+	return planHash, nil
+}
+
+type fakeApprovals struct {
+	journal  *journal
+	recorded map[string]bool
+}
+
+func (f *fakeApprovals) Has(_ context.Context, id, hash string) (bool, error) {
+	f.journal.calls = append(f.journal.calls, callHas)
+	return f.recorded[id+hash], nil
+}
+
+func (f *fakeApprovals) Save(_ context.Context, id, hash string, _ time.Time) error {
+	f.recorded[id+hash] = true
+	return nil
 }
 
 type fixture struct {
-	journal *journal
-	repo    *fakeRepository
-	hooks   *fakeHooks
-	gate    *fakeGate
-	spans   *tracetest.SpanRecorder
-	handler transition.Handler
+	journal   *journal
+	repo      *fakeRepository
+	hooks     *fakeHooks
+	gate      *fakeGate
+	approvals *fakeApprovals
+	spans     *tracetest.SpanRecorder
+	handler   transition.Handler
 }
 
 func newFixture(stored domain.Run) fixture {
+	return newFixtureWith(stored, domain.Policy{MaxReviewRounds: 3})
+}
+
+func newFixtureWith(stored domain.Run, policy domain.Policy) fixture {
 	j := &journal{}
 	repo := &fakeRepository{journal: j, stored: stored}
 	hooks := &fakeHooks{journal: j}
 	spans := tracetest.NewSpanRecorder()
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)).Tracer("test")
-	gate := &fakeGate{journal: j, track: shareddomain.TrackFull}
-	flow := transition.NewFlow(repo, hooks, gate, domain.Policy{MaxReviewRounds: 3}, func() time.Time { return now }, tracer)
-	return fixture{journal: j, repo: repo, hooks: hooks, gate: gate, spans: spans, handler: transition.NewHandler(repo, flow)}
+	gate := &fakeGate{journal: j, submission: domain.Submission{Track: shareddomain.TrackFull}}
+	approvals := &fakeApprovals{journal: j, recorded: map[string]bool{}}
+	flow := transition.NewFlow(repo, hooks, gate, approvals, policy, func() time.Time { return now }, tracer)
+	return fixture{journal: j, repo: repo, hooks: hooks, gate: gate, approvals: approvals, spans: spans, handler: transition.NewHandler(repo, flow)}
 }
 
 func planningRun() domain.Run {
 	return domain.Run{ID: runID, Key: key, Phase: domain.PhasePlanning, Version: startedAt}
+}
+
+func awaitingRun() domain.Run {
+	return domain.Run{ID: runID, Key: key, Phase: domain.PhaseAwaitingApproval, Version: startedAt}
 }
 
 func workingRun() domain.Run {
@@ -246,6 +281,117 @@ func TestFlowPlanGate(t *testing.T) {
 				if len(f.gate.runs) != 1 || f.gate.runs[0].ID != runID {
 					t.Errorf("gate runs = %+v, want the current run", f.gate.runs)
 				}
+			}
+		})
+	}
+}
+
+func TestApproveCommandNeedsTheRecord(t *testing.T) {
+	approve := transition.Command{Key: key, Event: domain.EventApprovePlan}
+
+	t.Run("no record refuses the approval", func(t *testing.T) {
+		f := newFixture(awaitingRun())
+
+		err := f.handler.Handle(context.Background(), approve)
+
+		if !errors.Is(err, domain.ErrApprovalNotRecorded) {
+			t.Fatalf("err = %v, want %v", err, domain.ErrApprovalNotRecorded)
+		}
+		assertCalls(t, f, callActive, callGate, callHash, callHas)
+	})
+
+	t.Run("a record for the plan hash approves the checked plan", func(t *testing.T) {
+		f := newFixture(awaitingRun())
+		f.approvals.recorded[runID+planHash] = true
+
+		if err := f.handler.Handle(context.Background(), approve); err != nil {
+			t.Fatal(err)
+		}
+
+		assertCalls(t, f, callActive, callGate, callHash, callHas, callBefore, callSave, callAfter)
+		if got := f.repo.saved[0]; got.Phase != domain.PhaseWorking || got.Track != shareddomain.TrackFull {
+			t.Fatalf("phase = %s, track = %q, want %s and %q", got.Phase, got.Track, domain.PhaseWorking, shareddomain.TrackFull)
+		}
+	})
+
+	t.Run("a plan that fails the check is not approved", func(t *testing.T) {
+		errGate := errors.New("plan has problems")
+		f := newFixture(awaitingRun())
+		f.approvals.recorded[runID+planHash] = true
+		f.gate.err = errGate
+
+		err := f.handler.Handle(context.Background(), approve)
+
+		if !errors.Is(err, errGate) {
+			t.Fatalf("err = %v, want %v", err, errGate)
+		}
+		assertCalls(t, f, callActive, callGate)
+	})
+
+	t.Run("a plan with open questions is not approved", func(t *testing.T) {
+		f := newFixture(awaitingRun())
+		f.approvals.recorded[runID+planHash] = true
+		f.gate.submission.QuestionsOpen = true
+
+		err := f.handler.Handle(context.Background(), approve)
+
+		if !errors.Is(err, domain.ErrOpenQuestions) {
+			t.Fatalf("err = %v, want %v", err, domain.ErrOpenQuestions)
+		}
+		assertCalls(t, f, callActive, callGate)
+	})
+
+	t.Run("approve in the wrong phase skips the record", func(t *testing.T) {
+		f := newFixture(planningRun())
+
+		err := f.handler.Handle(context.Background(), approve)
+
+		if !errors.Is(err, domain.ErrIllegalTransition) {
+			t.Fatalf("err = %v, want %v", err, domain.ErrIllegalTransition)
+		}
+		assertCalls(t, f, callActive)
+	})
+}
+
+func TestApproveCommandByModel(t *testing.T) {
+	f := newFixture(awaitingRun())
+
+	err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: domain.EventApprovePlan, By: byModel, Reason: byReason})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCalls(t, f, callActive, callGate, callBefore, callSave, callAfter)
+	want := "approved by " + byModel + ": " + byReason
+	if got := f.repo.saved[0].Events()[0].Reason; got != want {
+		t.Fatalf("reason = %q, want %q", got, want)
+	}
+}
+
+func TestWaiverSubmitPlan(t *testing.T) {
+	approval := domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3}
+	cases := []struct {
+		name      string
+		run       domain.Run
+		event     domain.Event
+		waived    bool
+		wantPhase domain.Phase
+	}{
+		{"a waived plan skips the approval", planningRun(), domain.EventSubmitPlan, true, domain.PhaseWorking},
+		{"a plan with no waiver waits for the approval", planningRun(), domain.EventSubmitPlan, false, domain.PhaseAwaitingApproval},
+		{"an amend never takes the waiver", workingRun(), domain.EventAmend, true, domain.PhaseAwaitingApproval},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixtureWith(tc.run, approval)
+			f.gate.submission.ApprovalWaived = tc.waived
+
+			if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: tc.event}); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := f.repo.saved[0].Phase; got != tc.wantPhase {
+				t.Fatalf("phase = %s, want %s", got, tc.wantPhase)
 			}
 		})
 	}

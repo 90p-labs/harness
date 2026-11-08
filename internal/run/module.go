@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jorge07/harness/internal/run/application/command/decidestop"
+	"github.com/jorge07/harness/internal/run/application/command/recordapproval"
 	"github.com/jorge07/harness/internal/run/application/command/start"
 	"github.com/jorge07/harness/internal/run/application/command/transition"
 	"github.com/jorge07/harness/internal/run/application/query/status"
@@ -34,10 +35,14 @@ func NewStopDecider(db *dbal.DB, cfg config.Run, now func() time.Time) decidesto
 	return decidestop.NewHandler(persistence.NewSQLRunRepository(db, now), policyOf(cfg), otel.Tracer(tracerName))
 }
 
+func NewApprovalRecorder(db *dbal.DB, gate domain.PlanGate, now func() time.Time) recordapproval.Handler {
+	return recordapproval.NewHandler(persistence.NewSQLRunRepository(db, now), gate, persistence.NewSQLApprovalRepository(db), now)
+}
+
 func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, gate domain.PlanGate, cfg config.Run, key domain.RunKey, now func() time.Time) cli.Handlers {
 	repo := persistence.NewSQLRunRepository(db, now)
 	policy := policyOf(cfg)
-	flow := transition.NewFlow(repo, pluginhooks.NewHooks(bus, key.Worktree), gate, policy, now, otel.Tracer(tracerName))
+	flow := transition.NewFlow(repo, pluginhooks.NewHooks(bus, key.Worktree), gate, persistence.NewSQLApprovalRepository(db), policy, now, otel.Tracer(tracerName))
 	return cli.Handlers{
 		Key:        key,
 		Start:      start.NewHandler(repo, flow, now),

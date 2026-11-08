@@ -15,6 +15,8 @@ import (
 const (
 	validPlan   = "plan.md"
 	brokenPlan  = "broken.md"
+	docsPlan    = "docs.md"
+	openPlan    = "open.md"
 	problemLine = "plan.md:1: heading-missing: no ## Goal"
 	testCwd     = "/work/tree"
 	testRunID   = "20261108-011805-add-the-login-page"
@@ -38,7 +40,17 @@ func fakeCheck(_ context.Context, path string, _ int) (domain.Report, error) {
 	if path == brokenPlan {
 		return domain.Report{Problems: []domain.Problem{{Line: 1, Rule: domain.RuleHeadingMissing, Message: "no ## Goal"}}}, nil
 	}
-	return domain.Report{Track: shareddomain.TrackFull}, nil
+	if path == docsPlan {
+		doc := domain.Document{
+			Commits:       []domain.Commit{{Subject: "docs: add the grill step to the harness skill"}},
+			OpenQuestions: []string{domain.OpenQuestionsNone},
+		}
+		return domain.Report{Track: shareddomain.TrackLight, Doc: doc}, nil
+	}
+	if path == openPlan {
+		return domain.Report{Track: shareddomain.TrackFull, Doc: domain.Document{OpenQuestions: []string{"Who owns the migration?"}}}, nil
+	}
+	return domain.Report{Track: shareddomain.TrackFull, Doc: domain.Document{OpenQuestions: []string{domain.OpenQuestionsNone}}}, nil
 }
 
 func newHandler(bus *fakeBus) submitplan.Handler {
@@ -53,13 +65,13 @@ func TestSubmitPlanCollect(t *testing.T) {
 	t.Run("allow returns the track and sends the envelope", func(t *testing.T) {
 		bus := &fakeBus{result: shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}}
 
-		track, err := newHandler(bus).Handle(t.Context(), command(validPlan))
+		result, err := newHandler(bus).Handle(t.Context(), command(validPlan))
 
 		if err != nil {
 			t.Fatalf("Handle: %v", err)
 		}
-		if track != shareddomain.TrackFull {
-			t.Errorf("track = %q, want %q", track, shareddomain.TrackFull)
+		if result != (submitplan.Result{Track: shareddomain.TrackFull}) {
+			t.Errorf("result = %+v, want the track %q and no waiver", result, shareddomain.TrackFull)
 		}
 		if len(bus.envelopes) != 1 {
 			t.Fatalf("dispatches = %d, want 1", len(bus.envelopes))
@@ -84,13 +96,39 @@ func TestSubmitPlanCollect(t *testing.T) {
 	t.Run("deny stops the submit with the reason", func(t *testing.T) {
 		bus := &fakeBus{result: shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictDeny, Reason: denyReason}}}
 
-		track, err := newHandler(bus).Handle(t.Context(), command(validPlan))
+		result, err := newHandler(bus).Handle(t.Context(), command(validPlan))
 
 		if !errors.Is(err, submitplan.ErrPlanRejected) || !strings.Contains(err.Error(), denyReason) {
 			t.Fatalf("err = %v, want ErrPlanRejected with %q", err, denyReason)
 		}
-		if track != "" {
-			t.Errorf("track = %q, want empty", track)
+		if result != (submitplan.Result{}) {
+			t.Errorf("result = %+v, want empty", result)
+		}
+	})
+
+	t.Run("a docs-only plan with no open question waives the approval", func(t *testing.T) {
+		bus := &fakeBus{result: shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}}
+
+		result, err := newHandler(bus).Handle(t.Context(), command(docsPlan))
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if result != (submitplan.Result{Track: shareddomain.TrackLight, ApprovalWaived: true}) {
+			t.Errorf("result = %+v, want the light track and the waiver", result)
+		}
+	})
+
+	t.Run("a plan with an open question reports it", func(t *testing.T) {
+		bus := &fakeBus{result: shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}}
+
+		result, err := newHandler(bus).Handle(t.Context(), command(openPlan))
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if result != (submitplan.Result{Track: shareddomain.TrackFull, QuestionsOpen: true}) {
+			t.Errorf("result = %+v, want the full track and the open questions", result)
 		}
 	})
 

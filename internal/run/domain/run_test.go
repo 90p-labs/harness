@@ -92,6 +92,7 @@ func TestRunTrackNeverLowers(t *testing.T) {
 		{"submit raises light to full", domain.EventSubmitPlan, domain.PhasePlanning, shareddomain.TrackLight, shareddomain.TrackFull, shareddomain.TrackFull},
 		{"amend keeps full against light", domain.EventAmend, domain.PhaseWorking, shareddomain.TrackFull, shareddomain.TrackLight, shareddomain.TrackFull},
 		{"amend keeps full against empty", domain.EventAmend, domain.PhaseWorking, shareddomain.TrackFull, "", shareddomain.TrackFull},
+		{"approve raises light to full", domain.EventApprovePlan, domain.PhaseAwaitingApproval, shareddomain.TrackLight, shareddomain.TrackFull, shareddomain.TrackFull},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

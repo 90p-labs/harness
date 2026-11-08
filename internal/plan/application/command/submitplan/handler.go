@@ -20,6 +20,12 @@ type Command struct {
 	LiveRound int
 }
 
+type Result struct {
+	Track          shareddomain.Track
+	ApprovalWaived bool
+	QuestionsOpen  bool
+}
+
 type payload struct {
 	Path  string             `json:"path"`
 	Track shareddomain.Track `json:"track"`
@@ -37,21 +43,21 @@ func NewHandler(check Check, bus shareddomain.Dispatcher, cwd string) Handler {
 	return Handler{check: check, bus: bus, cwd: cwd}
 }
 
-func (h Handler) Handle(ctx context.Context, c Command) (shareddomain.Track, error) {
+func (h Handler) Handle(ctx context.Context, c Command) (Result, error) {
 	report, err := h.check(ctx, c.Path, c.LiveRound)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 	if len(report.Problems) > 0 {
 		lines := make([]string, len(report.Problems))
 		for i, p := range report.Problems {
 			lines[i] = p.String()
 		}
-		return "", fmt.Errorf("%w:\n%s", domain.ErrPlanHasProblems, strings.Join(lines, "\n"))
+		return Result{}, fmt.Errorf("%w:\n%s", domain.ErrPlanHasProblems, strings.Join(lines, "\n"))
 	}
 	raw, err := json.Marshal(payload{Path: c.Path, Track: report.Track})
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 	result, err := h.bus.Dispatch(ctx, shareddomain.Envelope{
 		Version: shareddomain.EnvelopeVersion,
@@ -61,12 +67,12 @@ func (h Handler) Handle(ctx context.Context, c Command) (shareddomain.Track, err
 		Payload: raw,
 	})
 	if err != nil {
-		return "", fmt.Errorf("dispatch %s: %w", shareddomain.EventPlanSubmitted, err)
+		return Result{}, fmt.Errorf("dispatch %s: %w", shareddomain.EventPlanSubmitted, err)
 	}
 	if reasons := rejection(result); len(reasons) > 0 {
-		return "", fmt.Errorf("%w: %s", ErrPlanRejected, strings.Join(reasons, "\n"))
+		return Result{}, fmt.Errorf("%w: %s", ErrPlanRejected, strings.Join(reasons, "\n"))
 	}
-	return report.Track, nil
+	return Result{Track: report.Track, ApprovalWaived: report.Doc.ApprovalWaived(), QuestionsOpen: report.Doc.QuestionsOpen()}, nil
 }
 
 func rejection(result shareddomain.DispatchResult) []string {

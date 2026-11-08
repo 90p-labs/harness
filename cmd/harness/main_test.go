@@ -12,7 +12,10 @@ import (
 	"syscall"
 	"testing"
 
+	plandomain "github.com/jorge07/harness/internal/plan/domain"
 	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
@@ -317,13 +320,15 @@ func verifyPasses(t *testing.T) {
 	}
 }
 
+var approveByTest = []string{"approve", "--by", "test", "--reason", "the test approves the plan"}
+
 func startWithPlan(t *testing.T, dir, plan string) (runID string) {
 	t.Helper()
 	_, stdout, _ := execute(t, commandRun, "start", "Add the login page")
 	runID = startedRunID(t, stdout)
 	writeRunPlan(t, dir, runID, plan)
-	for _, step := range []string{commandPlan, "approve"} {
-		if code, _, stderr := execute(t, commandRun, step); code != exitOK {
+	for _, step := range [][]string{{commandPlan}, approveByTest} {
+		if code, _, stderr := execute(t, append([]string{commandRun}, step...)...); code != exitOK {
 			t.Fatalf("run %s: code = %d, stderr = %q", step, code, stderr)
 		}
 	}
@@ -752,6 +757,115 @@ func initRepo(t *testing.T) string {
 	return dir
 }
 
+const (
+	planQuestion       = `"question":"Is the plan ready?","header":"Plan","options":[{"label":"Approve (Recommended)","description":"start the work"},{"label":"Change the plan","description":"edit plan.md"}]}`
+	claudeAnswerFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"AskUserQuestion","tool_input":{"questions":[{` + planQuestion + `]},` +
+		`"tool_response":{"questions":[{"question":"Is the plan ready?","header":"Plan"}],"answers":{"Is the plan ready?":%q}}}`
+	codexApproveInput = `{"cwd":".","hook_event_name":"PostToolUse","model":"gpt-5","turn_id":"t1","tool_name":"request_user_input","tool_use_id":"u3",` +
+		`"tool_input":{"questions":[{"id":"plan_approval",` + planQuestion + `]},"tool_response":{"answers":{"plan_approval":{"answers":["Approve (Recommended)"]}}}}`
+	approveLabel    = shareddomain.ApproveLabel + shareddomain.RecommendedSuffix
+	changeLabel     = shareddomain.ChangePlanLabel
+	recordedContext = approvalplugin.RecordedContext
+)
+
+var notRecorded = domain.ErrApprovalNotRecorded.Error()
+
+func submittedPlan(t *testing.T) (dir, runID string) {
+	t.Helper()
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	_, stdout, _ := execute(t, commandRun, "start", "Add the login page")
+	runID = startedRunID(t, stdout)
+	writeRunPlan(t, dir, runID, plan)
+	if code, _, stderr := execute(t, commandRun, commandPlan); code != exitOK {
+		t.Fatalf("run plan: code = %d, stderr = %q", code, stderr)
+	}
+	return dir, runID
+}
+
+func answer(t *testing.T, host, input string) string {
+	t.Helper()
+	code, stdout, stderr := executeWithStdin(t, input, "hook", "--host", host, "post-tool-use")
+	if code != exitOK {
+		t.Fatalf("hook: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	return stdout
+}
+
+func assertApprove(t *testing.T, wantCode int, want string) {
+	t.Helper()
+	code, stdout, stderr := execute(t, commandRun, "approve")
+	if code != wantCode || !strings.Contains(stdout+stderr, want) {
+		t.Fatalf("run approve: code = %d, stdout = %q, stderr = %q, want %d and %q", code, stdout, stderr, wantCode, want)
+	}
+}
+
+func TestApprovalHookClaude(t *testing.T) {
+	submittedPlan(t)
+	assertApprove(t, exitRuntime, notRecorded)
+
+	if out := answer(t, "claude", fmt.Sprintf(claudeAnswerFormat, approveLabel)); !strings.Contains(out, recordedContext) {
+		t.Fatalf("hook stdout = %q, want %q", out, recordedContext)
+	}
+
+	assertApprove(t, exitOK, " phase="+string(domain.PhaseWorking)+" ")
+}
+
+func TestApprovalHookCodex(t *testing.T) {
+	submittedPlan(t)
+
+	if out := answer(t, "codex", codexApproveInput); !strings.Contains(out, recordedContext) {
+		t.Fatalf("hook stdout = %q, want %q", out, recordedContext)
+	}
+
+	assertApprove(t, exitOK, " phase="+string(domain.PhaseWorking)+" ")
+}
+
+func TestApprovalHookRefusals(t *testing.T) {
+	t.Run("a Change the plan answer records nothing", func(t *testing.T) {
+		submittedPlan(t)
+
+		if out := answer(t, "claude", fmt.Sprintf(claudeAnswerFormat, changeLabel)); strings.Contains(out, recordedContext) {
+			t.Fatalf("hook stdout = %q, want no record", out)
+		}
+
+		assertApprove(t, exitRuntime, notRecorded)
+	})
+
+	t.Run("an edit of the plan after the answer needs a new answer", func(t *testing.T) {
+		dir, runID := submittedPlan(t)
+		answer(t, "claude", fmt.Sprintf(claudeAnswerFormat, approveLabel))
+		editPlan(t, dir, runID, func(plan string) string { return plan + "\n" })
+
+		assertApprove(t, exitRuntime, notRecorded)
+	})
+
+	t.Run("an open question in the edited plan stops a named model", func(t *testing.T) {
+		dir, runID := submittedPlan(t)
+		editPlan(t, dir, runID, func(plan string) string {
+			return strings.Replace(plan, "- "+plandomain.OpenQuestionsNone, "- Who owns the migration?", 1)
+		})
+
+		code, stdout, stderr := execute(t, append([]string{commandRun}, approveByTest...)...)
+
+		if code != exitRuntime || !strings.Contains(stderr, domain.ErrOpenQuestions.Error()) {
+			t.Fatalf("run approve --by: code = %d, stdout = %q, stderr = %q, want %d and %q", code, stdout, stderr, exitRuntime, domain.ErrOpenQuestions)
+		}
+	})
+}
+
+func editPlan(t *testing.T, dir, runID string, edit func(string) string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(shareddomain.RunPlanFile(runID)))
+	plan, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(edit(string(plan))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunLifecycle(t *testing.T) {
 	clearHarnessEnv(t)
 	dir, valid := tracedRepo(t)
@@ -762,7 +876,7 @@ func TestRunLifecycle(t *testing.T) {
 	}{
 		{[]string{"start", "Add the login page"}, domain.PhasePlanning},
 		{[]string{"plan"}, domain.PhaseAwaitingApproval},
-		{[]string{"approve"}, domain.PhaseWorking},
+		{approveByTest, domain.PhaseWorking},
 		{[]string{"review"}, domain.PhaseReviewing},
 		{[]string{"ship"}, domain.PhaseShipping},
 		{[]string{"done", "--pr", "https://github.com/o/r/pull/1"}, domain.PhaseDone},

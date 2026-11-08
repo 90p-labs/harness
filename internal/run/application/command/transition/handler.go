@@ -12,7 +12,10 @@ import (
 	"github.com/jorge07/harness/internal/run/domain"
 )
 
-const spanTransition = "run.transition"
+const (
+	spanTransition = "run.transition"
+	byReasonFormat = "approved by %s: %s"
+)
 
 const (
 	attrRunID     = attribute.Key("harness.run.id")
@@ -22,30 +25,33 @@ const (
 )
 
 var gatedEvents = map[domain.Event]bool{
-	domain.EventSubmitPlan: true,
-	domain.EventAmend:      true,
+	domain.EventSubmitPlan:  true,
+	domain.EventAmend:       true,
+	domain.EventApprovePlan: true,
 }
 
 type Command struct {
 	Key     domain.RunKey
 	Event   domain.Event
 	Reason  string
+	By      string
 	PRURL   string
 	RunID   string
 	Version int
 }
 
 type Flow struct {
-	repo   domain.RunRepository
-	hooks  domain.TransitionHooks
-	gate   domain.PlanGate
-	policy domain.Policy
-	clock  func() time.Time
-	tracer trace.Tracer
+	repo      domain.RunRepository
+	hooks     domain.TransitionHooks
+	gate      domain.PlanGate
+	approvals domain.ApprovalRepository
+	policy    domain.Policy
+	clock     func() time.Time
+	tracer    trace.Tracer
 }
 
-func NewFlow(repo domain.RunRepository, hooks domain.TransitionHooks, gate domain.PlanGate, policy domain.Policy, clock func() time.Time, tracer trace.Tracer) Flow {
-	return Flow{repo: repo, hooks: hooks, gate: gate, policy: policy, clock: clock, tracer: tracer}
+func NewFlow(repo domain.RunRepository, hooks domain.TransitionHooks, gate domain.PlanGate, approvals domain.ApprovalRepository, policy domain.Policy, clock func() time.Time, tracer trace.Tracer) Flow {
+	return Flow{repo: repo, hooks: hooks, gate: gate, approvals: approvals, policy: policy, clock: clock, tracer: tracer}
 }
 
 func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err error) {
@@ -66,15 +72,29 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 	if _, err := run.Apply(cmd, f.policy); err != nil {
 		return err
 	}
+	policy := f.policy
 	if gatedEvents[cmd.Event] {
-		if cmd.Track, err = f.gate.Submit(ctx, run); err != nil {
+		submission, err := f.gate.Submit(ctx, run)
+		if err != nil {
+			return err
+		}
+		cmd.Track = submission.Track
+		if cmd.Event == domain.EventSubmitPlan && submission.ApprovalWaived {
+			policy.ApprovalNeeded = false
+		}
+		if cmd.Event == domain.EventApprovePlan && submission.QuestionsOpen {
+			return domain.ErrOpenQuestions
+		}
+	}
+	if cmd.Event == domain.EventApprovePlan {
+		if cmd, err = f.approved(ctx, run, cmd); err != nil {
 			return err
 		}
 	}
 	if err := f.hooks.Before(ctx, run, cmd); err != nil {
 		return err
 	}
-	next, err := run.Apply(cmd, f.policy)
+	next, err := run.Apply(cmd, policy)
 	if err != nil {
 		return err
 	}
@@ -84,6 +104,25 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 	f.hooks.After(ctx, run, next)
 	span.SetAttributes(attrPhaseTo.String(string(next.Phase)))
 	return nil
+}
+
+func (f Flow) approved(ctx context.Context, run domain.Run, cmd domain.Command) (domain.Command, error) {
+	if cmd.By != "" {
+		cmd.Reason = fmt.Sprintf(byReasonFormat, cmd.By, cmd.Reason)
+		return cmd, nil
+	}
+	hash, err := f.gate.Hash(run)
+	if err != nil {
+		return cmd, err
+	}
+	recorded, err := f.approvals.Has(ctx, run.ID, hash)
+	if err != nil {
+		return cmd, err
+	}
+	if !recorded {
+		return cmd, domain.ErrApprovalNotRecorded
+	}
+	return cmd, nil
 }
 
 type Handler struct {
@@ -100,7 +139,7 @@ func (h Handler) Handle(ctx context.Context, cmd Command) error {
 	if err != nil {
 		return err
 	}
-	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, PRURL: cmd.PRURL})
+	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, By: cmd.By, PRURL: cmd.PRURL})
 }
 
 func (h Handler) load(ctx context.Context, cmd Command) (domain.Run, error) {
