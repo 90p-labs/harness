@@ -1,0 +1,50 @@
+-- tsconfig.json --
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  }
+}
+-- src/instrumentation.ts --
+export function register(): void {}
+-- src/app/globals.css --
+body {
+  margin: 0;
+}
+-- src/app/layout.tsx --
+import './globals.css'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+-- src/app/page.tsx --
+import { Greeting } from '@/components/greeting'
+
+export default function Page() {
+  return <Greeting name="world" />
+}
+-- src/app/api/health/route.ts --
+export async function GET() {
+  return Response.json({ ok: true })
+}
+-- src/components/greeting.tsx --
+'use client'
+
+import { useState } from 'react'
+
+export function Greeting({ name }: { name: string }) {
+  const [loud, setLoud] = useState(false)
+  return <button onClick={() => setLoud(!loud)}>{loud ? name.toUpperCase() : name}</button>
+}
+-- src/components/session-badge.tsx --
+'use client'
+
+import { cookies } from 'next/headers'
+
+export function SessionBadge() {
+  return <span>{String(cookies)}</span>
+}

@@ -1,0 +1,82 @@
+-- src/main.ts --
+export {}
+-- src/utils/format.ts --
+export const format = (value: string): string => value.trim()
+-- src/contexts/kernel.ts --
+import { SalesModule } from './sales/sales.module'
+
+export const modules = [SalesModule]
+-- src/contexts/shared/domain/base.aggregate.ts --
+export abstract class AggregateRoot {}
+-- src/contexts/sales/sales.module.ts --
+import { PlaceOrderHandler } from './application/commands/place-order/place-order.handler'
+import { OrderMemoryRepository } from './infrastructure/order.memory-repository'
+
+export class SalesModule {
+  readonly providers = [PlaceOrderHandler, OrderMemoryRepository]
+}
+-- src/contexts/sales/domain/order.aggregate.ts --
+import { AggregateRoot } from '../../shared/domain/base.aggregate'
+
+export class Order extends AggregateRoot {
+  constructor(readonly id: string) {
+    super()
+  }
+}
+-- src/contexts/sales/domain/order.repository.ts --
+import type { Order } from './order.aggregate'
+
+export interface OrderRepository {
+  save(order: Order): Promise<void>
+}
+-- src/contexts/sales/domain/order-placed.event.ts --
+export class OrderPlaced {
+  constructor(readonly orderId: string) {}
+}
+-- src/contexts/sales/application/commands/place-order/place-order.command.ts --
+export class PlaceOrder {
+  constructor(readonly orderId: string) {}
+}
+-- src/contexts/sales/application/commands/place-order/place-order.handler.ts --
+import { Order } from '../../../domain/order.aggregate'
+import type { OrderRepository } from '../../../domain/order.repository'
+import type { PlaceOrder } from './place-order.command'
+
+export class PlaceOrderHandler {
+  constructor(private readonly orders: OrderRepository) {}
+
+  async execute(command: PlaceOrder): Promise<void> {
+    await this.orders.save(new Order(command.orderId))
+  }
+}
+-- src/contexts/sales/application/queries/get-order/get-order.query.ts --
+export class GetOrder {
+  constructor(readonly orderId: string) {}
+}
+-- src/contexts/sales/application/queries/get-order/get-order.handler.ts --
+import type { GetOrder } from './get-order.query'
+
+export class GetOrderHandler {
+  async execute(query: GetOrder): Promise<string> {
+    return query.orderId
+  }
+}
+-- src/contexts/sales/application/event-handlers/notify-order-placed.handler.ts --
+import type { OrderPlaced } from '../../domain/order-placed.event'
+
+export class NotifyOrderPlacedHandler {
+  handle(event: OrderPlaced): void {
+    console.log(event.orderId)
+  }
+}
+-- src/contexts/sales/infrastructure/order.memory-repository.ts --
+import type { Order } from '../domain/order.aggregate'
+import type { OrderRepository } from '../domain/order.repository'
+
+export class OrderMemoryRepository implements OrderRepository {
+  readonly saved: Order[] = []
+
+  async save(order: Order): Promise<void> {
+    this.saved.push(order)
+  }
+}

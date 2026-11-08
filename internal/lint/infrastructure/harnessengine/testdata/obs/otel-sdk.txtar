@@ -1,0 +1,11 @@
+-- package.json --
+{
+  "name": "shop",
+  "dependencies": {
+    "@opentelemetry/api": "1.9.0"
+  }
+}
+-- src/main.ts --
+import { NodeSDK } from '@opentelemetry/sdk-node'
+
+new NodeSDK({}).start()

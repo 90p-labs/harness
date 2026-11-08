@@ -1,0 +1,74 @@
+-- tsconfig.json --
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  }
+}
+-- src/instrumentation.ts --
+export function register(): void {}
+-- src/app/globals.css --
+body {
+  margin: 0;
+}
+-- src/app/layout.tsx --
+import './globals.css'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+-- src/app/page.tsx --
+import { Greeting } from '@/components/greeting'
+
+export default function Page() {
+  return <Greeting name="world" />
+}
+-- src/app/api/health/route.ts --
+export async function GET() {
+  return Response.json({ ok: true })
+}
+-- src/app/api/report/route.ts --
+export async function GET() {
+  const rows: number[] = []
+  rows.push(1)
+  rows.push(2)
+  rows.push(3)
+  rows.push(4)
+  rows.push(5)
+  rows.push(6)
+  rows.push(7)
+  rows.push(8)
+  rows.push(9)
+  rows.push(10)
+  rows.push(11)
+  rows.push(12)
+  rows.push(13)
+  rows.push(14)
+  rows.push(15)
+  rows.push(16)
+  rows.push(17)
+  rows.push(18)
+  rows.push(19)
+  rows.push(20)
+  rows.push(21)
+  rows.push(22)
+  rows.push(23)
+  rows.push(24)
+  rows.push(25)
+  rows.push(26)
+  rows.push(27)
+  return Response.json(rows)
+}
+-- src/components/greeting.tsx --
+'use client'
+
+import { useState } from 'react'
+
+export function Greeting({ name }: { name: string }) {
+  const [loud, setLoud] = useState(false)
+  return <button onClick={() => setLoud(!loud)}>{loud ? name.toUpperCase() : name}</button>
+}

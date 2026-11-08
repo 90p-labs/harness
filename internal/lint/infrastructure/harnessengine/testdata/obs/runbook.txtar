@@ -1,0 +1,40 @@
+-- deploy/checkout.rules.yaml --
+groups:
+  - name: checkout
+    rules:
+      - alert: CheckoutDown
+        expr: up{job="checkout"} == 0
+        for: 5m
+        annotations:
+          runbook_url: https://runbooks.example.com/checkout-down
+-- deploy/checkout.rules.test.yaml --
+rule_files:
+  - checkout.rules.yaml
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="checkout"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CheckoutDown
+-- deploy/billing.rules.yaml --
+groups:
+  - name: billing
+    rules:
+      - alert: BillingDown
+        expr: up{job="billing"} == 0
+        for: 5m
+        annotations:
+          summary: Billing is down
+-- deploy/billing.rules.test.yaml --
+rule_files:
+  - billing.rules.yaml
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="billing"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BillingDown

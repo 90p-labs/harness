@@ -1,0 +1,31 @@
+-- deploy/api.rules.yaml --
+groups:
+  - name: api
+    rules:
+      - record: job:http_requests:rate5m
+        expr: sum(rate(http_requests_total[5m])) by (job)
+-- deploy/api.rules.test.yaml --
+rule_files:
+  - api.rules.yaml
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="api"}'
+        values: '0+10x30'
+    promql_expr_test:
+      - expr: job:http_requests:rate5m
+        eval_time: 5m
+-- deploy/dashboards/overview.json --
+{
+  "title": "Overview",
+  "panels": [
+    { "title": "Requests", "targets": [{ "expr": "job:http_requests:rate5m{job=\"api\"}" }] }
+  ]
+}
+-- deploy/dashboards/errors.json --
+{
+  "title": "Errors",
+  "panels": [
+    { "title": "Error ratio", "targets": [{ "expr": "job:http_errors:ratio5m{job=\"api\"}" }] }
+  ]
+}

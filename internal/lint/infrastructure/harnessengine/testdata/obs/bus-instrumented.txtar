@@ -1,0 +1,40 @@
+-- src/main.ts --
+export {}
+-- src/contexts/kernel.ts --
+import { SalesModule } from './sales/sales.module'
+import { LoggingMiddleware } from './sales/middleware/logging.middleware'
+
+export const modules = [SalesModule]
+export const middlewares = [LoggingMiddleware]
+-- src/contexts/sales/sales.module.ts --
+export class SalesModule {}
+-- src/contexts/sales/middleware/logging.middleware.ts --
+export class LoggingMiddleware {
+  handle(name: string): void {
+    console.log(name)
+  }
+}
+-- src/contexts/sales/middleware/tracing.middleware.ts --
+import { trace } from '@opentelemetry/api'
+
+export class TracingMiddleware {
+  handle(name: string): void {
+    trace.getTracer('bus').startSpan(name).end()
+  }
+}
+-- src/contexts/sales/domain/order-placed.event.ts --
+export class OrderPlaced {
+  readonly version = 1
+
+  constructor(readonly orderId: string) {}
+}
+-- src/contexts/sales/infrastructure/order-summary.projection.ts --
+import type { OrderPlaced } from '../domain/order-placed.event'
+
+export class OrderSummaryProjection {
+  readonly placed: string[] = []
+
+  on(event: OrderPlaced): void {
+    this.placed.push(event.orderId)
+  }
+}

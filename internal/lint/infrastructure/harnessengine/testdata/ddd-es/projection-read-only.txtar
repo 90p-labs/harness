@@ -1,0 +1,76 @@
+-- src/main.ts --
+export {}
+-- src/contexts/kernel.ts --
+import { SalesModule } from './sales/sales.module'
+
+export const modules = [SalesModule]
+-- src/contexts/sales/sales.module.ts --
+export class SalesModule {}
+-- src/contexts/sales/domain/order-placed.event.ts --
+export class OrderPlaced {
+  readonly version = 1
+
+  constructor(readonly orderId: string) {}
+}
+-- src/contexts/sales/domain/shipment-dispatched.event.ts --
+export class ShipmentDispatched {
+  readonly version = 1
+
+  constructor(readonly shipmentId: string) {}
+}
+-- src/contexts/sales/domain/order.aggregate.ts --
+import { OrderPlaced } from './order-placed.event'
+
+export class Order {
+  constructor(readonly id: string) {}
+
+  place(): void {
+    this.raise(new OrderPlaced(this.id))
+  }
+
+  applyOrderPlaced(event: OrderPlaced): void {
+    console.log(event.orderId)
+  }
+
+  private raise(event: OrderPlaced): void {
+    this.applyOrderPlaced(event)
+  }
+}
+-- src/contexts/sales/infrastructure/order-summary.projection.ts --
+import type { OrderPlaced } from '../domain/order-placed.event'
+
+export class OrderSummaryProjection {
+  readonly placed: string[] = []
+
+  on(event: OrderPlaced): void {
+    this.placed.push(event.orderId)
+  }
+}
+-- src/contexts/sales/domain/shipment.aggregate.ts --
+import { ShipmentDispatched } from './shipment-dispatched.event'
+
+export class Shipment {
+  constructor(readonly id: string) {}
+
+  dispatch(): void {
+    this.raise(new ShipmentDispatched(this.id))
+  }
+
+  applyShipmentDispatched(event: ShipmentDispatched): void {
+    console.log(event.shipmentId)
+  }
+
+  private raise(event: ShipmentDispatched): void {
+    this.applyShipmentDispatched(event)
+  }
+}
+-- src/contexts/sales/infrastructure/shipment-summary.projection.ts --
+import type { Shipment } from '../domain/shipment.aggregate'
+
+export class ShipmentSummaryProjection {
+  readonly dispatched: Shipment[] = []
+
+  on(shipment: Shipment): void {
+    this.dispatched.push(shipment)
+  }
+}
