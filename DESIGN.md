@@ -793,7 +793,7 @@ The payload of both events:
 
 - `rules` uses the `pack.yaml` key names. The `plugin` key is the GritQL path with the pack name first, such as `team/rules/x.grit`.
 - On `lint.check`, `files` is always a list: the git files that match the rule scopes, or the whole tree when a rule has no scope. An empty list means that no file matches. The default plugins list their own files.
-- The envelope `cwd` is the repo root.
+- The envelope `cwd` is the repo root. Under `harness lint canaries`, it is the canary folder, and `files` is relative to it.
 
 An exec lint plugin writes its findings in the verdict. An empty stdout is an allow with no findings.
 
@@ -812,7 +812,7 @@ plugins:
 - A custom pack rule with `engine: todo-lint` goes to this plugin. Its findings go through the same report, baseline ratchet and gates.
 - The default `timeout` of 5 seconds is short for a linter: set it in the `plugins` entry.
 - A plugin on `lint.prepare` gets the same payload with `files` null during `harness lint init`. The `.harness-lint/` folder exists before the first plugin runs.
-- A finding `file` is relative to the repo root, because it is part of the baseline key. The finding takes the severity of its rule; the plugin value is ignored.
+- A finding `file` is relative to the envelope `cwd`. Under `harness lint`, that is the repo root, because the file is part of the baseline key. The finding takes the severity of its rule; the plugin value is ignored.
 - These are config errors: a rule engine with no plugin, an exec plugin on `lint.check` with the name of an enabled default or the name `biome-rule`, and an exec plugin on `lint.prepare` without `lint.check`. An exec plugin can take the name of a disabled default.
 - These stop the lint as an engine error: a plugin failure, a deny, a finding whose rule is not one of the sent rules, and a finding with an absolute `file`.
 - The bus `plugin.call` span with `harness.plugin` times each engine.
@@ -854,7 +854,7 @@ rules:
 - `pack.yaml` has the same keys as a built-in pack. `plugin` is a path in the pack folder.
 - The name matches `^[a-z0-9][a-z0-9-]*$`. A built-in name, or the name of another custom pack, is an error.
 - `requires` names only built-in packs. Each required pack must also be in `lint.packs`.
-- A rule id, `biome` value or `oxlint` value that a built-in pack, another custom pack or an earlier rule of the pack uses is an error. The engines map a diagnostic to one rule.
+- A rule id, `biome` value or `oxlint` value that a built-in pack in `lint.packs`, another custom pack or an earlier rule of the pack uses is an error. The engines map a diagnostic to one rule. A built-in pack that is not in `lint.packs` claims nothing, so a custom pack can use the catalogue ids.
 - With a custom pack, `.harness-lint/VERSION` holds the binary version, a `+` and a hash of the custom pack files. An edit to a custom pack makes `harness lint` stop with "run harness lint init".
 - A rule has the engine `biome-grit`, `biome-rule`, `oxlint` or the name of a lint plugin. The engine `harness` is an error, because its checks are Go code in the binary. An empty engine is an error.
 - A severity other than `error`, `warn` or `info`, or no severity, is an error.
@@ -954,6 +954,43 @@ Pack `nextjs-ddd-shadcn`:
 | `combo/utils-location` | a `components.json` utils alias outside `src/components/` | harness | error |
 
 The shadcn `cn` helper lives in `src/components/lib/utils.ts`.
+
+#### Architecture rules in any language
+
+A project in another language checks the architecture rules with its own tool, through a lint plugin (ADR 0013). The `lint-setup` skill and the `linter` agent write the setup. The binary proves it on each run.
+
+- The rule catalogue is a data file embedded in the binary. Each rule has an id and a one-line description. Pack `ddd` holds `ddd/domain-purity`, `ddd/layer-direction`, `ddd/cross-context` and `ddd/file-suffix`, the ids of the built-in `ddd` pack.
+- `harness lint catalogue` prints one `id description` line for each rule, and `--json` prints the catalogue. It needs no `.harness.yaml` and no repo.
+- The setup writes the native tool config, a wrapper plugin on `lint.check`, a custom pack with the catalogue ids and the wrapper as engine, one canary folder for each rule and the manifest `lint/rules.yaml`.
+- A canary folder breaks one rule on purpose. It mirrors the source layout, such as `lint/canaries/ddd-layer-direction/src/...`, so the rule scope matches its files. The tool config and the pack scopes exclude `lint/canaries/`.
+- The wrapper command finds its script from the repo root, because the exec plugin runs in the envelope `cwd`: `[sh, -c, 'exec sh "$(git rev-parse --show-toplevel)/.harness/plugins/<name>.sh"']`.
+
+The manifest gives each rule of one catalogue pack a canary or a waiver. The engine and the scope come from the active pack rule.
+
+```yaml
+pack: ddd
+rules:
+  - id: ddd/layer-direction
+    canary: lint/canaries/ddd-layer-direction
+  - id: ddd/file-suffix
+    waived: deptrac checks the dependencies, not the file names.
+```
+
+`harness lint canaries` reads the manifest and prints one line for each catalogue rule, in the catalogue order:
+
+```text
+PASS ddd/domain-purity lint/canaries/ddd-domain-purity
+FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding
+FAIL ddd/cross-context: not in lint/rules.yaml
+WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
+```
+
+- For each canary, the check sends `lint.check` to the engine of the active rule, with the canary folder as `cwd`, the one rule, and the git files of the canary folder in the rule scope. Untracked files count. A finding with the rule id is a `PASS`.
+- No finding with the rule id, and a catalogue rule that is not in the manifest, are a `FAIL`. A `FAIL` exits 1.
+- These are config errors, and exit 1 before an engine runs: no `lint/rules.yaml` (the error names the `lint-setup` skill), a file that is not YAML, an unknown pack, an unknown or duplicate rule id, a rule with both or neither of `canary` and `waived`, a canary path outside the repo, a missing canary folder, and a canary rule that no active pack holds.
+- An engine error stops the check.
+- The built-in `ddd` pack has no canaries: its embedded fixtures prove each rule in the binary tests.
+- `harness init` prints `next: run the lint-setup skill to set up the architecture rules for <language>` for each detected language with no built-in pack: PHP (`composer.json`), Python (`pyproject.toml` or `requirements.txt`) and Go (`go.mod`). A repository with `lint/rules.yaml` gets no such line.
 
 ## Go-live
 

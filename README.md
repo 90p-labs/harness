@@ -214,6 +214,26 @@ error: lint found error findings
 
 Run `harness lint init` after each edit of a custom pack. A finding takes the severity of its rule. `lint.disabled` turns off a default engine, `harness`, `biome-grit` or `oxlint`, and the rules of that engine then do not run: for example, `lint: {disabled: [biome-grit]}`.
 
+### Architecture rules in any language
+
+The built-in `ddd` pack checks the layers and the contexts of a TypeScript project. For PHP, Python or Go, `harness init` prints a next step, such as `next: run the lint-setup skill to set up the architecture rules for PHP`. The `lint-setup` skill asks the open choices, and the `linter` agent writes the setup with the tool of the language: deptrac, import-linter, go-arch-lint or depguard. It writes the tool config, a wrapper lint plugin, a custom pack with the ids of `harness lint catalogue`, one canary folder that breaks each rule, and the manifest `lint/rules.yaml`. [`DESIGN.md`](DESIGN.md#architecture-rules-in-any-language) gives the formats.
+
+`harness lint canaries` proves that the tool still catches each rule, with no agent, so it runs as the gate `lint-canaries`. A config edit that misses a rule fails it, and a rule that the tool cannot catch shows its waiver:
+
+```console
+$ harness lint canaries
+PASS ddd/domain-purity lint/canaries/ddd-domain-purity
+PASS ddd/layer-direction lint/canaries/ddd-layer-direction
+FAIL ddd/cross-context lint/canaries/ddd-cross-context: the engine fake-arch gave no ddd/cross-context finding
+PASS ddd/file-suffix lint/canaries/ddd-file-suffix
+error: a lint canary failed
+$ harness lint canaries
+PASS ddd/domain-purity lint/canaries/ddd-domain-purity
+PASS ddd/layer-direction lint/canaries/ddd-layer-direction
+WAIVED ddd/cross-context: the tool cannot see the context boundaries in this project.
+PASS ddd/file-suffix lint/canaries/ddd-file-suffix
+```
+
 ### Signals plugin
 
 In `observing`, `harness live check` sends one `signals.check` event for each row of the `## Signals` table of the plan. A plugin answers only the rows of its own `source`, and a breach is a deny. [`docs/go-live.md`](docs/go-live.md) gives the table, the payload and the verdict. `scripts/prom-check.sh` reads the value of the query at the check time from `$PROMETHEUS_URL`, which must be set where `harness live check` runs. A failed read is a plugin failure:
