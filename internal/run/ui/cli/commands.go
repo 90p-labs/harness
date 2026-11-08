@@ -23,17 +23,19 @@ const (
 	flagFindings = "findings"
 	flagReason   = "reason"
 	flagPR       = "pr"
+	flagBy       = "by"
 
 	runLineFormat  = "run %s phase=%s review_round=%d live_round=%d"
 	reasonPrefix   = "reason: "
 	nextPrefix     = "next: "
 	noActiveRun    = "active: no"
 	missingFlagMsg = "required flag %q not set"
+	pairedFlagsMsg = "flags %q and %q go together"
 	planningHint   = "write the plan in %s, then harness run plan"
 )
 
 var phaseHints = map[domain.Phase]string{
-	domain.PhaseAwaitingApproval: "wait for the approval, then harness run approve",
+	domain.PhaseAwaitingApproval: "ask the Plan question; when the user picks Approve, run harness run approve",
 	domain.PhaseWorking:          "implement test first, run harness verify, then harness run review",
 	domain.PhaseReviewing:        "review the change, then harness run ship, or harness run rework --findings",
 	domain.PhaseShipping:         "merge the change, then harness run done --pr URL",
@@ -131,6 +133,7 @@ func statusCommand(connect Connect) *cobra.Command {
 }
 
 func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
+	approvedBy := spec.event == domain.EventApprovePlan
 	cmd := &cobra.Command{
 		Use:   spec.use,
 		Short: spec.short,
@@ -140,6 +143,9 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 			}
 			if spec.flag != "" && flagValue(cmd, spec.flag) == "" {
 				return fmt.Errorf(missingFlagMsg, spec.flag)
+			}
+			if approvedBy && (flagValue(cmd, flagBy) == "") != (flagValue(cmd, flagReason) == "") {
+				return fmt.Errorf(pairedFlagsMsg, flagBy, flagReason)
 			}
 			if spec.flag == flagPR {
 				_, err := shareddomain.ParsePRURL(flagValue(cmd, flagPR))
@@ -154,9 +160,12 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 					return err
 				}
 				command := transition.Command{Key: h.Key, Event: spec.event}
-				if spec.flag == flagPR {
+				switch {
+				case spec.flag == flagPR:
 					command.PRURL = flagValue(cmd, flagPR)
-				} else {
+				case approvedBy:
+					command.By, command.Reason = flagValue(cmd, flagBy), flagValue(cmd, flagReason)
+				default:
 					command.Reason = flagValue(cmd, spec.flag)
 				}
 				if err = h.Transition.Handle(ctx, command); err != nil {
@@ -168,6 +177,10 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 	}
 	if spec.flag != "" {
 		cmd.Flags().String(spec.flag, "", "the "+spec.flag+" of the change")
+	}
+	if approvedBy {
+		cmd.Flags().String(flagBy, "", "the model that approves without the recorded answer of the user")
+		cmd.Flags().String(flagReason, "", "why the model approves, with --by")
 	}
 	return cmd
 }

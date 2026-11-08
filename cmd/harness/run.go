@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"slices"
 	"time"
@@ -17,7 +19,9 @@ import (
 	planmodule "github.com/jorge07/harness/internal/plan"
 	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
 	runmodule "github.com/jorge07/harness/internal/run"
+	"github.com/jorge07/harness/internal/run/application/command/recordapproval"
 	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
 	"github.com/jorge07/harness/internal/run/ui/cli"
 	"github.com/jorge07/harness/internal/shared/application/eventbus"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
@@ -94,7 +98,8 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus})
 		return livecli.Lines(results), err
 	})
-	bus = eventbus.NewBus(slices.Concat(plugins, guards, deployPlugins, []shareddomain.Plugin{review, planView, session}), otel.GetTracerProvider(), otel.GetMeterProvider())
+	approval := approvalplugin.New(approvalAdapter{cfg: cfg, commonDir: commonDir, worktree: worktree}.Record)
+	bus = eventbus.NewBus(slices.Concat(plugins, guards, deployPlugins, []shareddomain.Plugin{review, planView, session, approval}), otel.GetTracerProvider(), otel.GetMeterProvider())
 	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, proofs: proofs, defaultBranch: defaultBranch}, nil
 }
 
@@ -124,11 +129,36 @@ type planGate struct {
 	worktree string
 }
 
-func (g planGate) Submit(ctx context.Context, run domain.Run) (shareddomain.Track, error) {
-	return g.submit.Handle(ctx, submitplan.Command{
+func (g planGate) Submit(ctx context.Context, run domain.Run) (domain.Submission, error) {
+	result, err := g.submit.Handle(ctx, submitplan.Command{
 		RunID: run.ID, Phase: string(run.Phase),
 		Path: planPath(g.worktree, run.ID), LiveRound: run.LiveRound,
 	})
+	return domain.Submission{Track: result.Track, ApprovalWaived: result.ApprovalWaived, QuestionsOpen: result.QuestionsOpen}, err
+}
+
+func (g planGate) Hash(run domain.Run) (string, error) {
+	content, err := os.ReadFile(planPath(g.worktree, run.ID))
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+type approvalAdapter struct {
+	cfg       config.Config
+	commonDir string
+	worktree  string
+}
+
+func (a approvalAdapter) Record(ctx context.Context, runID string) error {
+	db, err := openState(ctx, a.cfg, a.commonDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	return runmodule.NewApprovalRecorder(db, planGate{worktree: a.worktree}, time.Now).Handle(ctx, recordapproval.Command{RunID: runID})
 }
 
 func wrapArgs(cmd *cobra.Command) {

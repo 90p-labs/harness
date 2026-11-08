@@ -47,6 +47,13 @@ func (m *memoryRepository) Save(_ context.Context, run domain.Run) (domain.Run, 
 	return run, nil
 }
 
+type passingGate struct{}
+
+func (passingGate) Submit(context.Context, domain.Run) (domain.Submission, error) {
+	return domain.Submission{}, nil
+}
+func (passingGate) Hash(domain.Run) (string, error) { return "", nil }
+
 type silentHooks struct{}
 
 func (silentHooks) Before(context.Context, domain.Run, domain.Command) error { return nil }
@@ -56,19 +63,20 @@ func TestTransitionCommand(t *testing.T) {
 	cases := []struct {
 		name      string
 		phase     domain.Phase
-		args      string
+		args      []string
 		wantErr   error
 		wantSaved int
 		wantOut   string
 	}{
-		{"approve moves the run", domain.PhaseAwaitingApproval, "approve", nil, 1, "phase=working"},
-		{"plan in the wrong phase is illegal", domain.PhaseAwaitingApproval, "plan", domain.ErrIllegalTransition, 0, ""},
+		{"approve by a model moves the run", domain.PhaseAwaitingApproval,
+			[]string{"approve", "--by", "fable", "--reason", "the user approved all plans"}, nil, 1, "phase=working"},
+		{"plan in the wrong phase is illegal", domain.PhaseAwaitingApproval, []string{"plan"}, domain.ErrIllegalTransition, 0, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: tc.phase}}
 			connect := func(context.Context) (cli.Handlers, func() error, error) {
-				flow := transition.NewFlow(repo, silentHooks{}, nil, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"))
+				flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, nil, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"))
 				return cli.Handlers{
 					Transition: transition.NewHandler(repo, flow),
 					Status:     status.NewHandler(repo),
@@ -77,7 +85,7 @@ func TestTransitionCommand(t *testing.T) {
 			cmd := cli.NewCommand(connect)
 			var out bytes.Buffer
 			cmd.SetOut(&out)
-			cmd.SetArgs([]string{tc.args})
+			cmd.SetArgs(tc.args)
 
 			err := cmd.ExecuteContext(t.Context())
 
@@ -86,6 +94,30 @@ func TestTransitionCommand(t *testing.T) {
 			}
 			if len(repo.saved) != tc.wantSaved || !strings.Contains(out.String(), tc.wantOut) {
 				t.Errorf("saves = %d, output = %q, want %d and %q", len(repo.saved), out.String(), tc.wantSaved, tc.wantOut)
+			}
+		})
+	}
+}
+
+func TestApproveCommandFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"approve", "--by", "fable"},
+		{"approve", "--reason", "the user approved all plans"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			connect := func(context.Context) (cli.Handlers, func() error, error) {
+				t.Fatal("the command connected before the check of the flags")
+				return cli.Handlers{}, nil, nil
+			}
+			cmd := cli.NewCommand(connect)
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SetArgs(args)
+
+			err := cmd.ExecuteContext(t.Context())
+
+			if err == nil || !strings.Contains(err.Error(), `flags "by" and "reason" go together`) {
+				t.Fatalf("err = %v, want the paired flags error", err)
 			}
 		})
 	}

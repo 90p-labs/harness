@@ -14,6 +14,7 @@ const (
 
 var agentRoles = map[string]shareddomain.Role{
 	"explore":           shareddomain.RoleExplorer,
+	"explorer":          shareddomain.RoleExplorer,
 	"general-purpose":   shareddomain.RoleExplorer,
 	"claude-code-guide": shareddomain.RoleExplorer,
 	"worker":            shareddomain.RoleWorker,

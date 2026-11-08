@@ -12,6 +12,11 @@ These terms have one meaning in the code, the docs and the plans.
 - **Policy**: the settings that guards read, such as the approval need, the round limits and the go-live switch.
 - **Review round**: the count of rework requests since the last plan approval.
 - **Live round**: the count of regressions after a release. Each live round replans the run.
+- **Open question**: a decision of the plan that the code and the docs cannot make. It sits under `## Open questions` until the user answers it.
+- **Grill**: the rounds of questions that turn each open question into a decision of the user.
+- **Frontier**: the open questions whose parent decisions are made. One round asks the whole frontier.
+- **Approval record**: a row that holds the run id and the SHA-256 of `plan.md` when the user picks `Approve` on the `Plan` question. `run approve` needs it, unless `--by` names a model.
+- **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`.
 
 ## Plugin terms
 

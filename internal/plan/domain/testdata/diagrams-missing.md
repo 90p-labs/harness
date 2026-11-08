@@ -95,3 +95,7 @@ harness/
 ### PR sequence
 
 1. `feat/ping-store` (this run), based on `main`: the store and the screen.
+
+## Open questions
+
+- none

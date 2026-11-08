@@ -35,6 +35,7 @@ const (
 	frontMatter    = "---"
 	mermaidComment = "%%"
 	trailingSpace  = " \t\r"
+	bulletMark     = "- "
 )
 
 const (
@@ -156,7 +157,21 @@ func (p *parser) content(line string, n int) {
 		p.taskField(line, n)
 	case HeadingSpecs:
 		p.specsContent(line, n)
+	case HeadingOpenQuestions:
+		p.openQuestion(line, n)
 	}
+}
+
+func (p *parser) openQuestion(line string, n int) {
+	if line == "" {
+		return
+	}
+	question, ok := strings.CutPrefix(line, bulletMark)
+	if !ok {
+		p.problem(n, RuleOpenQuestions, "line must be `- %s` or `- question`", OpenQuestionsNone)
+		return
+	}
+	p.doc.OpenQuestions = append(p.doc.OpenQuestions, strings.TrimSpace(question))
 }
 
 func (p *parser) specsContent(line string, n int) {
@@ -238,7 +253,7 @@ func (p *parser) startTask(text string, n int) {
 }
 
 func (p *parser) taskField(line string, n int) {
-	bullet, ok := strings.CutPrefix(line, "- ")
+	bullet, ok := strings.CutPrefix(line, bulletMark)
 	if p.task < 0 || !ok {
 		return
 	}

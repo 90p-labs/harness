@@ -40,8 +40,8 @@ func TestParseDiagrams(t *testing.T) {
 
 	t.Run("accepts the diagrams of DESIGN.md", func(t *testing.T) {
 		found := designDiagrams(t)
-		if len(found) != 4 {
-			t.Fatalf("want 4 state and class diagrams in DESIGN.md, got %d", len(found))
+		if len(found) != 5 {
+			t.Fatalf("want 5 state and class diagrams in DESIGN.md, got %d", len(found))
 		}
 		for _, d := range found {
 			if err := parser.Parse(d.kind, d.body); err != nil {

@@ -219,8 +219,10 @@ func ruleCases() map[string][]ruleCase {
 			{name: "pr create with a check", call: bash("gh pr create --draft"), rc: commitCheck(true, nil)},
 			{name: "other commands never ask", call: bash("git status && gh pr view 3"), rc: commitCheck(false, errNoHead)},
 		},
+		RuleApprovalNoForge: approvalNoForgeCases(),
 		RuleAgentModelRouting: {
 			{name: "explorer without model", call: agentOf("Explore", ""), deny: true, step: "haiku"},
+			{name: "harness explorer with another model", call: agentOf("harness:explorer", "sonnet"), deny: true, step: "haiku"},
 			{name: "worker with another model", call: agentOf("kodify:worker", "opus"), deny: true, step: "sonnet"},
 			{name: "explorer model", call: agentOf("general-purpose", "haiku")},
 			{name: "prefixed upper case worker", call: agentOf("kodify:Worker", "sonnet")},

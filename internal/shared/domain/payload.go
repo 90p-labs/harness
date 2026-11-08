@@ -8,13 +8,14 @@ import (
 type ToolKind string
 
 const (
-	ToolKindShell  ToolKind = "shell"
-	ToolKindEdit   ToolKind = "edit"
-	ToolKindWrite  ToolKind = "write"
-	ToolKindRead   ToolKind = "read"
-	ToolKindSearch ToolKind = "search"
-	ToolKindAgent  ToolKind = "agent"
-	ToolKindOther  ToolKind = "other"
+	ToolKindShell    ToolKind = "shell"
+	ToolKindEdit     ToolKind = "edit"
+	ToolKindWrite    ToolKind = "write"
+	ToolKindRead     ToolKind = "read"
+	ToolKindSearch   ToolKind = "search"
+	ToolKindAgent    ToolKind = "agent"
+	ToolKindQuestion ToolKind = "question"
+	ToolKindOther    ToolKind = "other"
 )
 
 const (
@@ -57,6 +58,7 @@ type ToolPayload struct {
 	Kind     ToolKind        `json:"kind"`
 	Input    json.RawMessage `json:"input"`
 	Response json.RawMessage `json:"response,omitempty"`
+	Answers  []Answer        `json:"answers,omitempty"`
 }
 
 type StopPayload struct {

@@ -9,6 +9,7 @@ import (
 type Command struct {
 	Event  Event
 	Reason string
+	By     string
 	Track  shareddomain.Track
 	PRURL  string
 	At     time.Time

@@ -21,6 +21,7 @@ const (
 	RuleWritingStyle      = "writing-style"
 	RuleAgentModelRouting = "agent-model-routing"
 	RuleCommitsChecked    = "commits-checked"
+	RuleApprovalNoForge   = "approval-no-forge"
 )
 
 const (
@@ -80,6 +81,7 @@ func Rules() []Rule {
 		{RuleWritingStyle, denyWritingStyle},
 		{RuleAgentModelRouting, denyAgentModel},
 		{RuleCommitsChecked, denyUncheckedPublish},
+		{RuleApprovalNoForge, denyForgedApproval},
 	}
 }
 

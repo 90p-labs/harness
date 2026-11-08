@@ -42,6 +42,8 @@ type ToolCall struct {
 	AgentType string
 	Model     string
 	Texts     [][]string
+
+	AnswersGiven bool
 }
 
 type toolInput struct {
@@ -59,6 +61,16 @@ type toolInput struct {
 
 func ToolCallOf(p shareddomain.ToolPayload) (ToolCall, error) {
 	call := ToolCall{Kind: p.Kind}
+	if p.Kind == shareddomain.ToolKindQuestion {
+		var question struct {
+			Answers map[string]json.RawMessage `json:"answers"`
+		}
+		if err := json.Unmarshal(p.Input, &question); err != nil {
+			return ToolCall{}, fmt.Errorf("decode %s input: %w", p.Tool, err)
+		}
+		call.AnswersGiven = len(question.Answers) > 0
+		return call, nil
+	}
 	if !slices.Contains(inputTools, p.Tool) {
 		return call, nil
 	}

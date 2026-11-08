@@ -54,6 +54,7 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 	case cmd.Event == EventSubmitPlan || cmd.Event == EventAmend:
 		next.Track = shareddomain.Stricter(r.Track, cmd.Track)
 	case cmd.Event == EventApprovePlan:
+		next.Track = shareddomain.Stricter(r.Track, cmd.Track)
 		next.ReviewRound = 0
 	case cmd.Event == EventRequestRework:
 		next.ReviewRound++

@@ -1,13 +1,10 @@
 package domain
 
-import (
-	"context"
-
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-)
+import "context"
 
 type PlanGate interface {
-	Submit(ctx context.Context, run Run) (shareddomain.Track, error)
+	Submit(ctx context.Context, run Run) (Submission, error)
+	Hash(run Run) (string, error)
 }
 
 type TransitionHooks interface {

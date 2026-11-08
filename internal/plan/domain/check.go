@@ -48,7 +48,7 @@ var (
 	SignalsHeader  = []string{"Criterion", "Signal", "Source", "Query", "Breach", "Window", "Panel"}
 	TaskSides      = []string{SideBackend, SideFrontend, SideOther}
 	TaskFields     = []string{FieldSide, FieldOwned, FieldTestFirst, FieldDoD, FieldDependsOn}
-	TopHeadings    = []string{HeadingGoal, HeadingCriteria, HeadingTasks, HeadingDecisions, HeadingSpecs}
+	TopHeadings    = []string{HeadingGoal, HeadingCriteria, HeadingTasks, HeadingDecisions, HeadingOpenQuestions, HeadingSpecs}
 	FinalHeadings  = []string{HeadingCodeTree, HeadingTestTree, HeadingCommits, HeadingPRs}
 	SignalFolders  = []string{FolderCommand, FolderQuery, FolderHTTP, FolderConsumer}
 
@@ -83,6 +83,7 @@ func Check(doc Document, in CheckInput) []Problem {
 	checkRequiredDiagrams(doc, in, add)
 	checkSentences(doc, add)
 	checkTrace(doc, add)
+	checkOpenQuestions(doc, add)
 	slices.SortStableFunc(problems, func(a, b Problem) int {
 		if a.Line != b.Line {
 			return a.Line - b.Line
@@ -140,6 +141,21 @@ func checkHeadings(doc Document, add report) {
 			line = tail[0].Line
 		}
 		add(line, RuleHeadingMissing, "the tech specs must end with %s, in this order", strings.Join(FinalHeadings, ", "))
+	}
+}
+
+func checkOpenQuestions(doc Document, add report) {
+	line := headingLine(doc, 2, HeadingOpenQuestions)
+	if line == 0 {
+		return
+	}
+	hasNone := slices.Contains(doc.OpenQuestions, OpenQuestionsNone)
+	hasQuestion := slices.ContainsFunc(doc.OpenQuestions, func(q string) bool { return q != OpenQuestionsNone })
+	switch {
+	case len(doc.OpenQuestions) == 0:
+		add(line, RuleOpenQuestions, "write `- %s` or one question on each line", OpenQuestionsNone)
+	case hasNone && hasQuestion:
+		add(line, RuleOpenQuestions, "`- %s` stands beside a question: delete one of them", OpenQuestionsNone)
 	}
 }
 

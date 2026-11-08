@@ -118,6 +118,40 @@ func TestClaudeEncode(t *testing.T) {
 	}
 }
 
+const (
+	claudeQuestionInput = `{"questions":[{"question":"Is the plan ready?","header":"Plan","multiSelect":false,"options":[{"label":"Approve (Recommended)","description":"start the work"},{"label":"Change the plan","description":"edit plan.md"}]},{"question":"Which store?","header":"Store","multiSelect":false,"options":[{"label":"SQLite","description":"a"},{"label":"Postgres","description":"b"}]}]}`
+	claudePreQuestion   = `{"cwd":"/work","hook_event_name":"PreToolUse","tool_name":"AskUserQuestion","tool_input":` + claudeQuestionInput + `}`
+	claudePostQuestion  = `{"cwd":"/work","hook_event_name":"PostToolUse","tool_name":"AskUserQuestion","tool_input":` + claudeQuestionInput + `,"tool_response":{"questions":[{"question":"Is the plan ready?","header":"Plan"},{"question":"Which store?","header":"Store"}],"answers":{"Is the plan ready?":"Approve (Recommended)","Which store?":"SQLite"}}}`
+)
+
+func decodedAnswers(t *testing.T, codec hookcodec.Codec, hook domain.HookName, input string) (shareddomain.ToolPayload, []shareddomain.Answer) {
+	t.Helper()
+	envelope, err := codec.Decode(hook, []byte(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload shareddomain.ToolPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload, payload.Answers
+}
+
+func TestQuestionDecodeClaude(t *testing.T) {
+	codec := hookcodec.NewClaude()
+
+	payload, answers := decodedAnswers(t, codec, domain.HookPostToolUse, claudePostQuestion)
+	want := []shareddomain.Answer{{Header: shareddomain.ApprovalHeader, Label: shareddomain.ApproveLabel}, {Header: "Store", Label: "SQLite"}}
+	if payload.Kind != shareddomain.ToolKindQuestion || !slices.Equal(answers, want) {
+		t.Fatalf("post tool use: kind = %q, answers = %+v, want %q and %+v", payload.Kind, answers, shareddomain.ToolKindQuestion, want)
+	}
+
+	payload, answers = decodedAnswers(t, codec, domain.HookPreToolUse, claudePreQuestion)
+	if payload.Kind != shareddomain.ToolKindQuestion || answers != nil {
+		t.Fatalf("pre tool use: kind = %q, answers = %+v, want %q and none", payload.Kind, answers, shareddomain.ToolKindQuestion)
+	}
+}
+
 func TestClaudeIdentity(t *testing.T) {
 	codec := hookcodec.NewClaude()
 	if codec.Host() != shareddomain.HostClaude {
