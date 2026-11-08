@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -118,7 +119,7 @@ func TestExecPluginVerdict(t *testing.T) {
 		t.Fatalf("handle: %v", err)
 	}
 	want := domain.Verdict{Kind: domain.VerdictDeny, Reason: "saw tool.before on r1", Context: "ctx"}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
@@ -130,7 +131,7 @@ func TestExecPluginEmptyStdoutAllows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
-	if got != (domain.Verdict{Kind: domain.VerdictAllow}) {
+	if !reflect.DeepEqual(got, domain.Verdict{Kind: domain.VerdictAllow}) {
 		t.Fatalf("got %+v, want allow", got)
 	}
 }
@@ -180,7 +181,7 @@ func TestExecPluginDetachedChildKeepsVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
-	if got != (domain.Verdict{Kind: domain.VerdictDeny, Reason: "detached"}) {
+	if !reflect.DeepEqual(got, domain.Verdict{Kind: domain.VerdictDeny, Reason: "detached"}) {
 		t.Fatalf("got %+v, want the detached deny", got)
 	}
 }
@@ -197,7 +198,7 @@ func TestExecPluginRelativeCommandRunsInEnvelopeCwd(t *testing.T) {
 
 	got, err := plugin.Handle(context.Background(), envelope)
 
-	if err != nil || got != (domain.Verdict{Kind: domain.VerdictDeny, Reason: "from the worktree"}) {
+	if err != nil || !reflect.DeepEqual(got, domain.Verdict{Kind: domain.VerdictDeny, Reason: "from the worktree"}) {
 		t.Fatalf("got %+v, %v, want the deny of the worktree script", got, err)
 	}
 }

@@ -3,6 +3,7 @@ package sessionplugin_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -54,7 +55,7 @@ func TestLiveSessionContext(t *testing.T) {
 			if err != nil {
 				t.Fatalf("err = %v, want nil", err)
 			}
-			if got != tc.want {
+			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("verdict = %+v, want %+v", got, tc.want)
 			}
 		})

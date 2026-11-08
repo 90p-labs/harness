@@ -3,6 +3,7 @@ package eventbus_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -91,7 +92,7 @@ func TestDispatchVeto(t *testing.T) {
 			t.Fatalf("dispatch: %v", err)
 		}
 		want := domain.Verdict{Kind: domain.VerdictDeny, Reason: "b: no push", Context: "ctx-a"}
-		if result.Verdict != want {
+		if !reflect.DeepEqual(result.Verdict, want) {
 			t.Fatalf("verdict = %+v, want %+v", result.Verdict, want)
 		}
 		if !slices.Equal(f.calls, []string{"a", "b"}) {
@@ -113,7 +114,7 @@ func TestDispatchVeto(t *testing.T) {
 			t.Fatalf("dispatch: %v", err)
 		}
 		want := domain.Verdict{Kind: domain.VerdictDeny, Reason: "plugin failed: boom", Context: "ctx-a"}
-		if result.Verdict != want {
+		if !reflect.DeepEqual(result.Verdict, want) {
 			t.Fatalf("verdict = %+v, want %+v", result.Verdict, want)
 		}
 		if len(result.Failures) != 1 || result.Failures[0].Plugin != "b" || !errors.Is(result.Failures[0].Err, boom) {
@@ -151,7 +152,7 @@ func TestDispatchVeto(t *testing.T) {
 		result, _ := f.dispatch(bus, domain.EventToolBefore)
 
 		want := domain.Verdict{Kind: domain.VerdictAllow, Context: "one\n\ntwo"}
-		if result.Verdict != want {
+		if !reflect.DeepEqual(result.Verdict, want) {
 			t.Fatalf("verdict = %+v, want %+v", result.Verdict, want)
 		}
 	})
@@ -192,7 +193,7 @@ func TestDispatchCollect(t *testing.T) {
 		t.Fatalf("dispatch: %v", err)
 	}
 	want := domain.Verdict{Kind: domain.VerdictDeny, Reason: "a: errors high\nd: latency high", Context: "note"}
-	if result.Verdict != want {
+	if !reflect.DeepEqual(result.Verdict, want) {
 		t.Fatalf("verdict = %+v, want %+v", result.Verdict, want)
 	}
 	if len(result.Failures) != 1 || result.Failures[0].Plugin != "b" || !errors.Is(result.Failures[0].Err, boom) {
@@ -200,6 +201,33 @@ func TestDispatchCollect(t *testing.T) {
 	}
 	if !slices.Equal(f.calls, []string{"a", "b", "c", "d"}) {
 		t.Fatalf("calls = %v, want [a b c d]", f.calls)
+	}
+}
+
+func TestDispatchCollectFindings(t *testing.T) {
+	first := domain.Finding{Rule: "team/no-todo", Severity: domain.SeverityError, File: "src/a.ts", Line: 2, Message: "A TODO is left."}
+	second := domain.Finding{Rule: "team/no-fixme", Severity: domain.SeverityWarn, File: "src/b.ts", Line: 7, Message: "A FIXME is left."}
+	found := func(findings ...domain.Finding) domain.Verdict {
+		return domain.Verdict{Kind: domain.VerdictAllow, Findings: findings}
+	}
+	lint := events(domain.EventLintCheck)
+	f := newFixture()
+	collect := f.newBus(f.plugin("z", lint, found(second), nil), f.plugin("a", lint, found(first), nil))
+
+	result, err := f.dispatch(collect, domain.EventLintCheck)
+
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if !slices.Equal(result.Verdict.Findings, []domain.Finding{first, second}) {
+		t.Fatalf("findings = %+v, want the findings of a then z", result.Verdict.Findings)
+	}
+
+	observe := f.newBus(f.plugin("a", events(domain.EventGateAfter), found(first), nil))
+	result, err = f.dispatch(observe, domain.EventGateAfter)
+
+	if err != nil || len(result.Verdict.Findings) != 0 {
+		t.Fatalf("observe dispatch = %+v, %v, want no findings", result.Verdict, err)
 	}
 }
 
@@ -221,7 +249,7 @@ func TestDispatchContextObserve(t *testing.T) {
 			t.Fatalf("dispatch: %v", err)
 		}
 		want := domain.Verdict{Kind: domain.VerdictAllow, Context: "hello"}
-		if result.Verdict != want || len(result.Failures) != 0 {
+		if !reflect.DeepEqual(result.Verdict, want) || len(result.Failures) != 0 {
 			t.Fatalf("result = %+v", result)
 		}
 		if len(f.calls) != 3 {
@@ -240,7 +268,7 @@ func TestDispatchContextObserve(t *testing.T) {
 
 		result, _ := f.dispatch(bus, domain.EventSubagentStopped)
 
-		if result.Verdict != allow() || len(result.Failures) != 0 {
+		if !reflect.DeepEqual(result.Verdict, allow()) || len(result.Failures) != 0 {
 			t.Fatalf("result = %+v", result)
 		}
 		if len(f.calls) != 3 {

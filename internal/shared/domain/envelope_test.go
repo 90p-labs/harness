@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/jorge07/harness/internal/shared/domain"
@@ -68,11 +69,14 @@ func TestTransitionPhaseNames(t *testing.T) {
 
 func TestVerdictJSON(t *testing.T) {
 	var verdict domain.Verdict
-	if err := json.Unmarshal([]byte(`{"verdict":"deny","reason":"no push","context":"c"}`), &verdict); err != nil {
+	raw := `{"verdict":"deny","reason":"no push","context":"c","findings":[{"rule":"team/no-todo","severity":"error","file":"src/a.ts","line":2,"message":"A TODO is left."}]}`
+	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	want := domain.Verdict{Kind: domain.VerdictDeny, Reason: "no push", Context: "c"}
-	if verdict != want {
+	want := domain.Verdict{Kind: domain.VerdictDeny, Reason: "no push", Context: "c", Findings: []domain.Finding{
+		{Rule: "team/no-todo", Severity: domain.SeverityError, File: "src/a.ts", Line: 2, Message: "A TODO is left."},
+	}}
+	if !reflect.DeepEqual(verdict, want) {
 		t.Fatalf("got %+v, want %+v", verdict, want)
 	}
 }

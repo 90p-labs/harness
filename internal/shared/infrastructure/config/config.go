@@ -44,6 +44,7 @@ const (
 
 	defaultLiveEnvironment = "production"
 
+	keyLintDisabled      = "lint.disabled"
 	keyLintDDDRoot       = "lint.ddd.root"
 	keyLintDDDSrcFiles   = "lint.ddd.src_files"
 	keyLintChart         = "lint.observability.chart"
@@ -79,6 +80,7 @@ type Live struct {
 
 type Lint struct {
 	Packs         []string          `mapstructure:"packs"`
+	Disabled      []string          `mapstructure:"disabled"`
 	DDD           LintDDD           `mapstructure:"ddd"`
 	Shadcn        LintShadcn        `mapstructure:"shadcn"`
 	Observability LintObservability `mapstructure:"observability"`
@@ -201,6 +203,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyGitBranch, "")
 	v.SetDefault(keyLiveEnvironment, defaultLiveEnvironment)
 	v.SetDefault(keyLiveRollback, "")
+	v.SetDefault(keyLintDisabled, []any{})
 	v.SetDefault(keyLintDDDRoot, defaultLintDDDRoot)
 	v.SetDefault(keyLintDDDSrcFiles, []string{defaultLintSrcFile})
 	v.SetDefault(keyLintChart, defaultLintChart)

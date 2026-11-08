@@ -229,6 +229,7 @@ func TestLoadGates(t *testing.T) {
 
 func TestLoadLint(t *testing.T) {
 	defaults := config.Lint{
+		Disabled:      []string{},
 		DDD:           config.LintDDD{Root: "contexts", SrcFiles: []string{"main.ts"}},
 		Observability: config.LintObservability{Chart: "deploy/chart", Rules: "deploy/**/*.rules.yaml", Dashboards: "deploy/**/dashboards/*.json"},
 	}
@@ -242,6 +243,7 @@ func TestLoadLint(t *testing.T) {
 			name: "file over defaults",
 			file: `lint:
   packs: [ddd, shadcn]
+  disabled: [oxlint]
   ddd:
     root: domains
     domain_allow: [zod]
@@ -252,6 +254,7 @@ func TestLoadLint(t *testing.T) {
 `,
 			want: func(l config.Lint) config.Lint {
 				l.Packs = []string{"ddd", "shadcn"}
+				l.Disabled = []string{"oxlint"}
 				l.DDD = config.LintDDD{Root: "domains", DomainAllow: []string{"zod"}, SrcFiles: []string{"main.ts"}}
 				l.Shadcn.UIAllow = []string{"clsx"}
 				l.Observability.Chart = "charts/app"
