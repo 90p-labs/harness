@@ -35,6 +35,8 @@ var errUnknownVerdict = errors.New("unknown verdict")
 
 var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
 
+func DurationBuckets() []float64 { return slices.Clone(durationBuckets) }
+
 type Bus struct {
 	plugins  []domain.Plugin
 	tracer   trace.Tracer

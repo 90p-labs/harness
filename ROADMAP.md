@@ -321,13 +321,13 @@ harness/
 
 | # | Criterion | Test |
 |---|---|---|
-| 5.1 | The Claude Code codec decodes the fixture of each of the 7 hooks to its bus event and payload. | `go test ./internal/host/infrastructure/claudecode -run TestClaudeDecode -count=1` |
-| 5.2 | The Claude Code codec encodes allow, deny and context for each event to the output JSON of the spec. An allow prints nothing. | `go test ./internal/host/infrastructure/claudecode -run TestClaudeEncode -count=1` |
-| 5.3 | The Codex codec decodes its 4 hooks, and maps `shell` and `apply_patch` to the tool kinds `shell` and `edit`. | `go test ./internal/host/infrastructure/codex -run TestCodexDecode -count=1` |
-| 5.4 | The Codex codec encodes the verdicts like Claude Code, and an allow on `stop` prints `{}`. | `go test ./internal/host/infrastructure/codex -run TestCodexEncode -count=1` |
-| 5.5 | Claude Code declares 7 events and Codex declares 4. | `go test ./internal/host/domain -run TestCapabilities -count=1` |
-| 5.6 | On Codex, the `session-start` context names each missing event and its fallback, and states that Codex reports no subagent stop. | `go test ./internal/host/application/command/handlehook -run TestCodexFallbackContext -count=1` |
-| 5.7 | A harness error on a veto event gives a deny with `harness error`. On another event it gives one stderr line and no output. | `go test ./internal/host/application/command/handlehook -run TestHookFailsClosed -count=1` |
+| 5.1 | The Claude Code codec decodes the fixture of each of the 7 hooks to its bus event and payload. | `go test ./internal/host/infrastructure/hookcodec -run TestClaudeDecode -count=1` |
+| 5.2 | The Claude Code codec encodes allow, deny and context for each event to the output JSON of the spec. An allow prints nothing. | `go test ./internal/host/infrastructure/hookcodec -run TestClaudeEncode -count=1` |
+| 5.3 | The Codex codec decodes the input of each of the 7 hooks, and gives `edit` as the kind of `apply_patch`. | `go test ./internal/host/infrastructure/hookcodec -run TestCodexDecode -count=1` |
+| 5.4 | The Codex codec encodes the verdicts like Claude Code, and an allow on `stop` and on `subagent-stop` prints `{}`. | `go test ./internal/host/infrastructure/hookcodec -run TestCodexEncode -count=1` |
+| 5.5 | Each codec declares 7 events. `ToolKindOf` maps each tool name of both hosts to its kind. | `go test ./internal/host/domain -run TestCapabilities -count=1` |
+| 5.6 | For a fake codec with fewer events, the `session-start` payload names each missing event. The context gives one line for each. | `go test ./internal/host/application/command/handlehook -run TestMissingEventFallback -count=1` |
+| 5.7 | A harness error on a veto event gives a deny with `harness error`. On another event it gives one stderr line and the allow output. | `go test ./internal/host/application/command/handlehook -run TestHookFailsClosed -count=1` |
 | 5.8 | Input above 16 MiB is a harness error. | `go test ./internal/host/application/command/handlehook -run TestHookInputLimit -count=1` |
 | 5.9 | Each hook records one `hook.handle` span and one `harness.hook.duration` point with the host, hook and verdict attributes. | `go test ./internal/host/application/command/handlehook -run TestHandleHookTelemetry -count=1` |
 | 5.10 | `harness hook --host claude pre-tool-use` with a deny plugin prints the deny JSON and exits 0. | `go test ./internal/host/ui/cli -run TestHookCommand -count=1` |
@@ -336,11 +336,11 @@ harness/
 
 Tasks:
 
-1. **Host domain and payloads.** Owned: `internal/host/domain/`, `internal/shared/domain/payload.go`. Test first: `capability_test.go` with `TestCapabilities`, which fails because the package does not exist. DoD: criterion 5.5. Depends on: none.
-2. **Claude Code codec.** Owned: `internal/host/infrastructure/claudecode/`. Test first: `codec_test.go` with `TestClaudeDecode`, which fails because the package does not exist. DoD: criteria 5.1 and 5.2. Depends on: 1.
-3. **Codex codec.** Owned: `internal/host/infrastructure/codex/`. Test first: `codec_test.go` with `TestCodexDecode`, which fails because the package does not exist. DoD: criteria 5.3 and 5.4. Depends on: 1.
-4. **Hook handler and command.** Owned: `internal/host/application/`, `internal/host/ui/cli/hook.go`, `internal/host/ui/cli/hook_test.go`, `internal/host/module.go`, `cmd/harness/main.go`. Test first: `handler_test.go` with `TestHookFailsClosed`, which fails because the handler does not exist. DoD: criteria 5.6 to 5.10. Depends on: 2 and 3.
-5. **Install.** Owned: `internal/host/infrastructure/install/`, `hosts/`, `internal/host/ui/cli/host.go`, `internal/host/ui/cli/host_test.go`. Test first: `install_test.go` with `TestInstallClaude`, which fails because the package does not exist. DoD: criteria 5.11 and 5.12. Depends on: 1.
+1. **Host domain and payloads.** Owned: `internal/host/domain/`, `internal/shared/domain/payload.go`, `ROADMAP.md`, `DESIGN.md`. Test first: `capability_test.go` with `TestCapabilities`, which fails because the package does not exist. DoD: criterion 5.5. Depends on: none.
+2. **Claude Code codec.** Owned: `internal/host/infrastructure/hookcodec/codec.go` and `claude_test.go`. Test first: `claude_test.go` with `TestClaudeDecode`, which fails because the package does not exist. DoD: criteria 5.1 and 5.2. Depends on: 1.
+3. **Codex codec.** Owned: `internal/host/infrastructure/hookcodec/codex_test.go`. Test first: `codex_test.go` with `TestCodexDecode`, which fails because the package does not exist. DoD: criteria 5.3 and 5.4. Depends on: 1.
+4. **Hook handler and command.** Owned: `internal/host/application/`, `internal/host/ui/cli/hook.go`, `internal/host/ui/cli/hook_test.go`, `internal/host/module.go`, `internal/shared/application/eventbus/bus.go`, `cmd/harness/`. Test first: `handler_test.go` with `TestHookFailsClosed`, which fails because the handler does not exist. DoD: criteria 5.6 to 5.10, and the hook command test. Depends on: 2, 3 and 5.
+5. **Install.** Owned: `internal/host/infrastructure/install/`, `internal/host/ui/cli/host.go`, `internal/host/ui/cli/host_test.go`. Test first: `install_test.go` with `TestInstallClaude`, which fails because the package does not exist. DoD: criteria 5.11 and 5.12. Depends on: 1.
 
 Commits:
 
@@ -354,14 +354,12 @@ Code tree:
 
 ```tree
 harness/
+├── ROADMAP.md                              changed
+├── DESIGN.md                               changed
 ├── cmd/
 │   └── harness/
+│       ├── host.go                         new
 │       └── main.go                         changed
-├── hosts/
-│   ├── claude/
-│   │   └── settings.json                   new
-│   └── codex/
-│       └── hooks.json                      new
 └── internal/
     ├── host/
     │   ├── module.go                       new
@@ -374,17 +372,20 @@ harness/
     │   │       └── handlehook/
     │   │           └── handler.go          new
     │   ├── infrastructure/
-    │   │   ├── claudecode/
-    │   │   │   └── codec.go                new
-    │   │   ├── codex/
+    │   │   ├── hookcodec/
     │   │   │   └── codec.go                new
     │   │   └── install/
+    │   │       ├── claude.json             new
+    │   │       ├── codex.json              new
     │   │       └── install.go              new
     │   └── ui/
     │       └── cli/
     │           ├── hook.go                 new
     │           └── host.go                 new
-    └── plugin/
+    └── shared/
+        ├── application/
+        │   └── eventbus/
+        │       └── bus.go                  changed
         └── domain/
             └── payload.go                  new
 ```

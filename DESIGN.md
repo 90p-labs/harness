@@ -669,9 +669,9 @@ The `host` module maps each host hook to a bus event, and each verdict back to t
 ```go
 type Codec interface {
     Host() shareddomain.Host
-    Capabilities() []plugindomain.EventName
-    Decode(hook HookName, raw []byte) (plugindomain.Envelope, error)
-    Encode(hook HookName, verdict plugindomain.Verdict) ([]byte, error)
+    Capabilities() []shareddomain.EventName
+    Decode(hook HookName, raw []byte) (shareddomain.Envelope, error)
+    Encode(hook HookName, verdict shareddomain.Verdict) ([]byte, error)
 }
 ```
 
@@ -680,10 +680,10 @@ type Codec interface {
 | `session-start` | `SessionStart` | `SessionStart` | `session.started` |
 | `user-prompt` | `UserPromptSubmit` | `UserPromptSubmit` | `prompt.submitted` |
 | `pre-tool-use` | `PreToolUse` | `PreToolUse` | `tool.before` |
-| `post-tool-use` | `PostToolUse` | none | `tool.after` |
+| `post-tool-use` | `PostToolUse` | `PostToolUse` | `tool.after` |
 | `stop` | `Stop` | `Stop` | `turn.stopping` |
-| `subagent-start` | `SubagentStart` | none | `subagent.started` |
-| `subagent-stop` | `SubagentStop` | none | `subagent.stopped` |
+| `subagent-start` | `SubagentStart` | `SubagentStart` | `subagent.started` |
+| `subagent-stop` | `SubagentStop` | `SubagentStop` | `subagent.stopped` |
 
 Claude Code verdict output:
 
@@ -694,24 +694,27 @@ Claude Code verdict output:
 | `prompt.submitted` or `turn.stopping` deny | `{"decision":"block","reason":"..."}` |
 | context | `{"hookSpecificOutput":{"hookEventName":"...","additionalContext":"..."}}` |
 
-Codex uses the same JSON shapes. Codex rejects a `Stop` hook that prints no JSON, so an allow on `stop` prints `{}`.
+Codex uses the same JSON shapes. Codex rejects a `Stop` or `SubagentStop` hook that prints no JSON, so an allow on `stop` and on `subagent-stop` prints `{}`.
 
 Capabilities and fallback:
 
-- Each codec declares its events. Claude Code has all 7. Codex has 4.
-- On `session-start`, the handler puts the missing events in the payload. It adds one context line for each, with the written fallback.
-- On Codex, the adapter passes `agentRunning` false to `DecideStop`, because Codex reports no subagent stop.
-- `harness host capabilities --host codex` prints the table, so a user sees the gap before a run.
+- Each codec declares its events. Claude Code and Codex both send all 7 hooks.
+- On `session-start`, the handler puts the missing events in the payload. It adds one context line for each, `<event>: this host does not send it`. No host misses an event now, so a fake codec tests it.
+- `harness host capabilities --host H` prints each event and `yes` or `no`, so a user sees a gap before a run.
 
-The tool kind in the payload is `shell`, `edit`, `write`, `read`, `search`, `agent` or `other`. Claude Code `Bash` and Codex `shell` are `shell`. `Edit`, `MultiEdit` and Codex `apply_patch` are `edit`.
+The tool kind in the payload is `shell`, `edit`, `write`, `read`, `search`, `agent` or `other`. Both hosts send `Bash`, which is `shell`. `Edit`, `MultiEdit` and the Codex `apply_patch` are `edit`. `Write` is `write`, `Read` is `read`, `Grep` and `Glob` are `search`, and `Agent` is `agent`. One `ToolKindOf` in the host domain serves both hosts.
 
 `harness hook` rules:
 
-- It reads stdin up to 16 MiB, dispatches on the bus, encodes the verdict and always exits 0.
+- It reads stdin up to 16 MiB, dispatches on the bus, encodes the verdict and exits 0.
+- An unknown host or hook, or a bad flag or argument, writes one error line and exits 1 before it reads stdin. It never exits 2, because Claude Code reads exit status 2 as a block.
 - A harness error on a veto event fails closed: the output is a deny with the reason `harness error: ` and the error.
-- A harness error on another event writes one stderr line and prints nothing, or `{}` for a Codex `stop`.
+- A harness error or a plugin failure on a `stop` with `stop_hook_active` true writes one stderr line for each and prints the allow output. The host sends a blocked stop again with that flag, so a second block loops forever. The handler reads the flag from the raw input, so a stop that fails to decode allows too. A plugin deny with no failure still blocks.
+- A harness error on another event writes one stderr line and prints the allow output: nothing, or `{}` for a Codex `subagent-stop`.
+- A tool hook with no `tool_name` is a decode error, so a `pre-tool-use` fails closed.
+- The bus returns a context with an `allow` verdict. Each codec prints the context when it is not empty, except on `stop` and `subagent-stop`. On a deny, the reason gets a blank line and the context.
 
-`harness host install --host H` merges the hook template into `.claude/settings.json` or `.codex/hooks.json`. It keeps every other key and every hook that is not from the harness. A second run changes nothing.
+`harness host install --host H` merges the hook template into `.claude/settings.json` or `.codex/hooks.json`. It keeps every other key and every hook that is not from the harness. A harness hook is the command `harness hook` or a command that starts with `harness hook `. A second run changes nothing. It writes a temporary file and renames it, keeps the mode of an existing file (0644 for a new file), and keeps `&` and `<` as they are. The templates are embedded in the install package as `claude.json` and `codex.json`. `harness host capabilities` needs no git repo.
 
 ```mermaid
 classDiagram
@@ -732,10 +735,8 @@ classDiagram
         subagent-start
         subagent-stop
     }
-    class ClaudeCodec
-    class CodexCodec
-    Codec <|.. ClaudeCodec
-    Codec <|.. CodexCodec
+    class HookCodec
+    Codec <|.. HookCodec : NewClaude, NewCodex
     Codec ..> HookName
 ```
 
