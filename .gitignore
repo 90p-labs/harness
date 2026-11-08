@@ -1,4 +1,5 @@
 dist/
 coverage.out
 .kodify/
+.harness/
 .claude/worktrees/
