@@ -44,6 +44,7 @@ var checks = map[string]domain.Check{
 	domain.RuleClientServerBoundary: domain.ClientServerBoundary,
 	domain.RuleAppRouterFiles:       domain.AppRouterFiles,
 	domain.RuleThinRouteHandler:     domain.ThinRouteHandler,
+	domain.RuleNoLibFolder:          domain.NoLibFolder,
 	domain.RuleUIImports:            domain.UIImports,
 	domain.RuleComponentsJSON:       domain.ComponentsJSON,
 	domain.RuleComponentsNoBusiness: domain.ComponentsNoBusiness,

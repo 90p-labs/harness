@@ -931,6 +931,7 @@ Pack `nextjs`:
 | `next/client-server-boundary` | a `'use client'` file that imports `server-only`, `next/headers` or a file that imports `server-only` | harness | error |
 | `next/app-router-files` | a file in `src/app/` that is not a Next.js route file or a CSS module | harness | error |
 | `next/thin-route-handler` | an exported handler in `route.ts` with more than 30 lines | harness | warn |
+| `next/no-lib-folder` | a folder named `lib` at any depth in `src/` | harness | error |
 | `next/no-img-element` | the Biome rule `noImgElement` | biome-rule | error |
 | `next/no-head-element` | the Biome rule `noHeadElement` | biome-rule | error |
 | `next/no-html-link-for-pages` | the oxlint rule `nextjs/no-html-link-for-pages` | oxlint | error |
@@ -955,7 +956,7 @@ Pack `nextjs-ddd-shadcn`:
 | `combo/app-through-kernel` | a `src/app/` import of a business root path other than `kernel.ts` | harness | error |
 | `combo/utils-location` | a `components.json` utils alias outside `src/components/` | harness | error |
 
-The shadcn `cn` helper lives in `src/components/lib/utils.ts`.
+The shadcn `cn` helper lives in `src/components/shared/utils.ts`.
 
 #### Architecture rules in any language
 

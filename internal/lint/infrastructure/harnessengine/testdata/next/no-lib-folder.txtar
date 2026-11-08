@@ -1,0 +1,35 @@
+-- tsconfig.json --
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  }
+}
+-- src/instrumentation.ts --
+export function register(): void {}
+-- src/app/globals.css --
+body {
+  margin: 0;
+}
+-- src/app/layout.tsx --
+import './globals.css'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+-- src/app/page.tsx --
+export default function Page() {
+  return <p>hello</p>
+}
+-- src/features/lib/utils.ts --
+export function cn(...names: string[]): string {
+  return names.join(' ')
+}
+-- src/features/lib/format.ts --
+export function shout(text: string): string {
+  return text.toUpperCase()
+}

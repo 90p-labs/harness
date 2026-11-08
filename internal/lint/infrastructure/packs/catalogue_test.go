@@ -27,7 +27,7 @@ func TestPackCatalogue(t *testing.T) {
 	wantRules := map[domain.PackName]int{
 		domain.PackDDD:             23,
 		domain.PackDDDES:           3,
-		domain.PackNextjs:          7,
+		domain.PackNextjs:          8,
 		domain.PackNextjsDDDShadcn: 3,
 		domain.PackObservability:   10,
 		domain.PackShadcn:          4,

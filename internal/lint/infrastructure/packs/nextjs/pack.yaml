@@ -16,6 +16,11 @@ rules:
     severity: warn
     scope: "src/app/**/route.ts"
     message: A route handler has more than 30 lines. Move the logic into a use case.
+  - id: next/no-lib-folder
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A folder named lib has no place in src. Put shared UI code, such as the cn helper, in src/components/shared/.
   - id: next/no-img-element
     engine: biome-rule
     severity: error

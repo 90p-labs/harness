@@ -8,9 +8,9 @@
 -- components.json --
 {
   "tailwind": { "cssVariables": false },
-  "aliases": { "utils": "@/components/lib/utils" }
+  "aliases": { "utils": "@/components/shared/utils" }
 }
--- src/components/lib/utils.ts --
+-- src/components/shared/utils.ts --
 import { clsx, type ClassValue } from 'clsx'
 
 export function cn(...inputs: ClassValue[]): string {
@@ -21,7 +21,7 @@ import { Slot } from '@radix-ui/react-slot'
 import { cva } from 'class-variance-authority'
 import * as React from 'react'
 
-import { cn } from '@/components/lib/utils'
+import { cn } from '@/components/shared/utils'
 
 const variants = cva('inline-flex items-center', { variants: { size: { sm: 'h-8', md: 'h-10' } } })
 
