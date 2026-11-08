@@ -1,0 +1,17 @@
+name: architecture
+rules:
+  - id: ddd/domain-purity
+    engine: import-linter
+    severity: error
+    scope: "src/**/*.py"
+    message: The domain uses only itself, never the application layer, the infrastructure layer or a framework.
+  - id: ddd/layer-direction
+    engine: import-linter
+    severity: error
+    scope: "src/**/*.py"
+    message: The application layer uses the domain layer, never the infrastructure layer.
+  - id: ddd/cross-context
+    engine: import-linter
+    severity: error
+    scope: "src/**/*.py"
+    message: A bounded context uses another context only through its public entry point or its published events.

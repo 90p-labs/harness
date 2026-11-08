@@ -3,8 +3,12 @@ plugins:
     command: [sh, .harness/plugins/ruff-lint.sh]
     events: [lint.check]
     timeout: 60s
+  - name: import-linter
+    command: [sh, -c, 'exec sh "$(git rev-parse --show-toplevel)/.harness/plugins/import-linter.sh"']
+    events: [lint.check]
+    timeout: 60s
 lint:
-  packs: [./lint/python]
+  packs: [./lint/python, ./lint/architecture]
 
 verify:
   parallel: 2
@@ -16,12 +20,14 @@ setup:
 
 gates:
   - id: py-typecheck
-    run: docker compose run --rm -T python uv run --no-sync mypy .
+    run: docker compose run --rm -T python uv run --no-sync mypy src tests
     paths: &python-inputs ["**/*.py", "**/*.pyi", "**/py.typed", "tests/**", pyproject.toml, uv.lock, .python-version, compose.yaml]
   - id: lint
     run: harness lint --json
     baseline: .harness-baseline/lint.json
+  - id: lint-canaries
+    run: harness lint canaries
   - id: py-test
     run: docker compose run --rm -T python uv run --no-sync pytest
     paths: *python-inputs
-    needs: [py-typecheck, lint]
+    needs: [py-typecheck, lint, lint-canaries]
