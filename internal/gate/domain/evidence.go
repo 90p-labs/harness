@@ -13,11 +13,16 @@ const (
 type Status string
 
 const (
-	StatusPass   Status = "PASS"
-	StatusFail   Status = "FAIL"
-	StatusVetoed Status = "VETOED"
-	StatusCached Status = "CACHED"
+	StatusPass    Status = "PASS"
+	StatusFail    Status = "FAIL"
+	StatusVetoed  Status = "VETOED"
+	StatusCached  Status = "CACHED"
+	StatusSkipped Status = "SKIPPED"
 )
+
+func (s Status) Passed() bool {
+	return s == StatusPass || s == StatusCached
+}
 
 type Evidence struct {
 	Repo      string

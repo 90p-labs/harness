@@ -48,6 +48,7 @@ const (
 	packsKeptFormat     = "lint packs: kept %s\n"
 	packsNoneLine       = "lint packs: none detected\n"
 	gatesWroteFormat    = "gates: wrote %s\n"
+	setupWroteFormat    = "setup: wrote %s\n"
 	gatesKeptLine       = "gates: kept\n"
 	lintInitFormat      = "lint init: wrote %s\n"
 	baselineFormat      = "lint baseline: wrote %s\n"
@@ -120,7 +121,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		fmt.Fprintf(out, packsWroteFormat, packs)
 	}
 
-	gates, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus).
+	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus).
 		Handle(ctx, initgates.Command{Dir: worktree})
 	switch {
 	case errors.Is(err, gatedomain.ErrGatesExist):
@@ -128,8 +129,15 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 	case err != nil:
 		return err
 	default:
-		ids := make([]string, len(gates))
-		for i, gate := range gates {
+		if len(written.Setup) > 0 {
+			steps := make([]string, len(written.Setup))
+			for i, step := range written.Setup {
+				steps[i] = step.ID
+			}
+			fmt.Fprintf(out, setupWroteFormat, strings.Join(steps, listSeparator))
+		}
+		ids := make([]string, len(written.Gates))
+		for i, gate := range written.Gates {
 			ids[i] = gate.ID
 		}
 		fmt.Fprintf(out, gatesWroteFormat, cmp.Or(strings.Join(ids, listSeparator), noItems))

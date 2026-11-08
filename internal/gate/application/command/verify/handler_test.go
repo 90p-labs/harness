@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,24 +47,48 @@ var errInjected = errors.New("injected")
 
 var statusResult = map[domain.Status]domain.Result{domain.StatusPass: domain.ResultPass, domain.StatusFail: domain.ResultFail}
 
-type fakeHasher struct {
-	hash string
-	err  error
+type idLog struct {
+	mu  sync.Mutex
+	ids []string
 }
 
-func (f fakeHasher) InputHash(context.Context, string, domain.Gate) (string, error) {
+func (l *idLog) add(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.ids = append(l.ids, id)
+}
+
+func (l *idLog) list() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.ids)
+}
+
+type fakeHasher struct {
+	hash   string
+	err    error
+	hashed *idLog
+}
+
+func (f fakeHasher) InputHash(_ context.Context, _ string, gate domain.Gate) (string, error) {
+	if f.hashed != nil {
+		f.hashed.add(gate.ID)
+	}
 	return f.hash, f.err
 }
 
 type ran struct{ dir, gate string }
 
 type fakeRunner struct {
+	mu       sync.Mutex
 	outcomes map[string]domain.Outcome
 	err      error
 	ran      []ran
 }
 
 func (f *fakeRunner) Run(_ context.Context, dir string, gate domain.Gate) (domain.Outcome, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.ran = append(f.ran, ran{dir: dir, gate: gate.ID})
 	if f.err != nil {
 		return domain.Outcome{}, f.err
@@ -70,6 +97,7 @@ func (f *fakeRunner) Run(_ context.Context, dir string, gate domain.Gate) (domai
 }
 
 type fakeEvidence struct {
+	mu      sync.Mutex
 	records map[string]domain.Evidence
 	saved   []domain.Evidence
 	findErr error
@@ -79,22 +107,29 @@ type fakeEvidence struct {
 func recordKey(gate string) string { return gate + "@" + inputHash }
 
 func (f *fakeEvidence) Find(_ context.Context, _, gateID, hash string) (domain.Evidence, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	e, ok := f.records[gateID+"@"+hash]
 	return e, ok, f.findErr
 }
 
 func (f *fakeEvidence) Save(_ context.Context, e domain.Evidence) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.saved = append(f.saved, e)
 	return f.saveErr
 }
 
 type fakeDispatcher struct {
+	mu        sync.Mutex
 	deny      map[string]bool
 	errEvent  shareddomain.EventName
 	envelopes []shareddomain.Envelope
 }
 
 func (f *fakeDispatcher) Dispatch(_ context.Context, e shareddomain.Envelope) (shareddomain.DispatchResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.envelopes = append(f.envelopes, e)
 	if e.Event == f.errEvent {
 		return shareddomain.DispatchResult{}, errInjected
@@ -111,6 +146,27 @@ func (f *fakeDispatcher) Dispatch(_ context.Context, e shareddomain.Envelope) (s
 	return shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}, nil
 }
 
+type fakeSetups struct {
+	mu    sync.Mutex
+	last  map[string]string
+	saved []string
+}
+
+func (f *fakeSetups) LastPass(_ context.Context, _, stepID string) (string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	hash, ok := f.last[stepID]
+	return hash, ok, nil
+}
+
+func (f *fakeSetups) SavePass(_ context.Context, _, stepID, hash string, _ time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.saved = append(f.saved, stepID+"@"+hash)
+	f.last[stepID] = hash
+	return nil
+}
+
 type fakeSource struct {
 	gates []domain.Gate
 	err   error
@@ -125,15 +181,17 @@ type fixture struct {
 	spans      *tracetest.SpanRecorder
 	reader     *sdkmetric.ManualReader
 	files      map[string]string
+	setups     *fakeSetups
+	created    map[string]bool
 	handler    verify.Handler
 	readErr    error
 }
 
 func newFixture(source domain.GateSource) *fixture {
-	return newFixtureWith(source, fakeHasher{hash: inputHash})
+	return newFixtureWith(source, fakeHasher{hash: inputHash}, nil)
 }
 
-func newFixtureWith(source domain.GateSource, hasher fakeHasher) *fixture {
+func newFixtureWith(source domain.GateSource, hasher fakeHasher, runner domain.Runner) *fixture {
 	f := &fixture{
 		runner:     &fakeRunner{outcomes: map[string]domain.Outcome{}},
 		evidence:   &fakeEvidence{records: map[string]domain.Evidence{}},
@@ -141,6 +199,8 @@ func newFixtureWith(source domain.GateSource, hasher fakeHasher) *fixture {
 		spans:      tracetest.NewSpanRecorder(),
 		reader:     sdkmetric.NewManualReader(),
 		files:      map[string]string{},
+		setups:     &fakeSetups{last: map[string]string{}},
+		created:    map[string]bool{},
 	}
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(f.spans)).Tracer("test")
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(f.reader)).Meter("test")
@@ -154,9 +214,13 @@ func newFixtureWith(source domain.GateSource, hasher fakeHasher) *fixture {
 		}
 		return []byte(content), nil
 	}
+	if runner == nil {
+		runner = f.runner
+	}
+	exists := func(path string) (bool, error) { return f.created[path], nil }
 	f.handler = verify.NewHandler(
-		hasher, f.runner, f.evidence, f.dispatcher, source,
-		readFile, tracer, meter, func() time.Time { return fixedNow },
+		hasher, runner, f.evidence, f.setups, f.dispatcher, source,
+		readFile, exists, tracer, meter, func() time.Time { return fixedNow },
 	)
 	return f
 }
@@ -443,7 +507,7 @@ func TestVerifyErrors(t *testing.T) {
 			if hasher.hash == "" {
 				hasher.hash = inputHash
 			}
-			f := newFixtureWith(tc.src, hasher)
+			f := newFixtureWith(tc.src, hasher, nil)
 			if tc.setup != nil {
 				tc.setup(f)
 			}
@@ -454,5 +518,415 @@ func TestVerifyErrors(t *testing.T) {
 				t.Fatal("want an error")
 			}
 		})
+	}
+}
+
+const (
+	fmtGate       = "fmt"
+	typecheckGate = "typecheck"
+	e2eGate       = "e2e"
+	docsGate      = "docs"
+	startEvent    = "start:"
+	endEvent      = "end:"
+)
+
+type step struct {
+	outcome domain.Outcome
+	err     error
+}
+
+var passStep = step{outcome: passOutcome()}
+
+type gatedRunner struct {
+	started   chan string
+	cancelled chan string
+	release   map[string]chan step
+	events    idLog
+	mu        sync.Mutex
+	inFlight  int
+	peak      int
+}
+
+func newGatedRunner(ids ...string) *gatedRunner {
+	g := &gatedRunner{started: make(chan string), cancelled: make(chan string), release: map[string]chan step{}}
+	for _, id := range ids {
+		g.release[id] = make(chan step)
+	}
+	return g
+}
+
+func (g *gatedRunner) Run(ctx context.Context, _ string, gate domain.Gate) (domain.Outcome, error) {
+	g.mu.Lock()
+	g.inFlight++
+	g.peak = max(g.peak, g.inFlight)
+	g.mu.Unlock()
+	g.events.add(startEvent + gate.ID)
+	g.started <- gate.ID
+	var s step
+	select {
+	case s = <-g.release[gate.ID]:
+	case <-ctx.Done():
+		g.cancelled <- gate.ID
+		s = <-g.release[gate.ID]
+	}
+	g.events.add(endEvent + gate.ID)
+	g.mu.Lock()
+	g.inFlight--
+	g.mu.Unlock()
+	return s.outcome, s.err
+}
+
+func (g *gatedRunner) peakInFlight() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.peak
+}
+
+type handled struct {
+	result verify.Result
+	err    error
+}
+
+func handleAsync(f *fixture, cmd verify.Command) <-chan handled {
+	done := make(chan handled, 1)
+	go func() {
+		result, err := f.handler.Handle(context.Background(), cmd)
+		done <- handled{result: result, err: err}
+	}()
+	return done
+}
+
+func receive(ch <-chan string, n int) []string {
+	got := make([]string, n)
+	for i := range got {
+		got[i] = <-ch
+	}
+	slices.Sort(got)
+	return got
+}
+
+func needing(id string, needs ...string) domain.Gate {
+	g := gate(id)
+	g.Needs = needs
+	return g
+}
+
+func parallel(n int, gates ...domain.Gate) verify.Command {
+	cmd := command(gates...)
+	cmd.Parallel = n
+	return cmd
+}
+
+func gatesOf(f *fixture) (ran, saved, dispatched []string) {
+	for _, r := range f.runner.ran {
+		ran = append(ran, r.gate)
+	}
+	for _, e := range f.evidence.saved {
+		saved = append(saved, e.GateID)
+	}
+	for _, e := range f.dispatcher.envelopes {
+		var payload verify.GateBeforePayload
+		_ = json.Unmarshal(e.Payload, &payload)
+		dispatched = append(dispatched, payload.Gate)
+	}
+	return ran, saved, dispatched
+}
+
+func TestHandleSchedules(t *testing.T) {
+	t.Run("parallel up to the limit, then the needs", func(t *testing.T) {
+		runner := newGatedRunner(fmtGate, lintGate, typecheckGate, testGate)
+		f := newFixtureWith(nil, fakeHasher{hash: inputHash}, runner)
+
+		done := handleAsync(f, parallel(2, gate(fmtGate), gate(lintGate), gate(typecheckGate), needing(testGate, fmtGate, lintGate, typecheckGate)))
+
+		if got := receive(runner.started, 2); !slices.Equal(got, []string{fmtGate, lintGate}) {
+			t.Fatalf("first starts = %q, want fmt and lint together", got)
+		}
+		runner.release[fmtGate] <- passStep
+		if got := receive(runner.started, 1); got[0] != typecheckGate {
+			t.Fatalf("start after fmt = %q, want typecheck", got)
+		}
+		runner.release[lintGate] <- passStep
+		runner.release[typecheckGate] <- passStep
+		if got := receive(runner.started, 1); got[0] != testGate {
+			t.Fatalf("start after the needs = %q, want %s", got, testGate)
+		}
+		runner.release[testGate] <- passStep
+		h := <-done
+
+		if h.err != nil || h.result.Failed {
+			t.Fatalf("result = %+v, err = %v", h.result, h.err)
+		}
+		if peak := runner.peakInFlight(); peak != 2 {
+			t.Errorf("peak in flight = %d, want 2", peak)
+		}
+		events := runner.events.list()
+		testStart := slices.Index(events, startEvent+testGate)
+		for _, need := range []string{fmtGate, lintGate, typecheckGate} {
+			if end := slices.Index(events, endEvent+need); end < 0 || end > testStart {
+				t.Errorf("events = %q, want %s to end before %s starts", events, need, testGate)
+			}
+		}
+	})
+
+	t.Run("no parallel key and no needs keep the gates order", func(t *testing.T) {
+		ids := []string{lintGate, fmtGate, testGate}
+		runner := newGatedRunner(ids...)
+		f := newFixtureWith(nil, fakeHasher{hash: inputHash}, runner)
+
+		done := handleAsync(f, command(gate(lintGate), gate(fmtGate), gate(testGate)))
+
+		for _, id := range ids {
+			if got := <-runner.started; got != id {
+				t.Fatalf("start = %s, want %s", got, id)
+			}
+			runner.release[id] <- passStep
+		}
+		if h := <-done; h.err != nil || runner.peakInFlight() != 1 {
+			t.Fatalf("err = %v, peak = %d, want one gate at a time", h.err, runner.peakInFlight())
+		}
+	})
+
+	t.Run("a cached need lets the gate start", func(t *testing.T) {
+		f := newFixture(nil)
+		f.evidence.records[recordKey(lintGate)] = domain.Evidence{GateID: lintGate, InputHash: inputHash, Result: domain.ResultPass}
+		f.runner.outcomes[testGate] = passOutcome()
+
+		result, err := f.handler.Handle(context.Background(), parallel(2, gate(lintGate), needing(testGate, lintGate)))
+
+		if err != nil || result.Lines[0].Status != domain.StatusCached || result.Lines[1].Status != domain.StatusPass {
+			t.Fatalf("result = %+v, err = %v, want CACHED then PASS", result, err)
+		}
+	})
+}
+
+func TestHandleSkips(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(f *fixture)
+	}{
+		{name: "failed need", setup: func(f *fixture) { f.runner.outcomes[lintGate] = failOutcome() }},
+		{name: "vetoed need", setup: func(f *fixture) {
+			f.runner.outcomes[lintGate] = passOutcome()
+			f.dispatcher.deny[lintGate] = true
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hashed := &idLog{}
+			f := newFixtureWith(nil, fakeHasher{hash: inputHash, hashed: hashed}, nil)
+			f.runner.outcomes[fmtGate] = passOutcome()
+			f.runner.outcomes[docsGate] = passOutcome()
+			tc.setup(f)
+
+			result, err := f.handler.Handle(context.Background(), parallel(3,
+				gate(fmtGate), gate(lintGate), needing(testGate, fmtGate, lintGate), needing(e2eGate, testGate), gate(docsGate),
+			))
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantSkips := []verify.Line{
+				{Gate: testGate, Status: domain.StatusSkipped, Need: lintGate},
+				{Gate: e2eGate, Status: domain.StatusSkipped, Need: testGate},
+			}
+			if !slices.Equal(result.Lines[2:4], wantSkips) || result.Lines[4].Status != domain.StatusPass || !result.Failed {
+				t.Fatalf("lines = %+v, want the skips %+v, docs PASS and failed", result.Lines, wantSkips)
+			}
+			ran, saved, dispatched := gatesOf(f)
+			for _, skipped := range []string{testGate, e2eGate} {
+				for name, ids := range map[string][]string{"ran": ran, "saved": saved, "dispatched": dispatched, "hashed": hashed.list()} {
+					if slices.Contains(ids, skipped) {
+						t.Errorf("%s %q holds the skipped gate %s", name, ids, skipped)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestHandleKeepsOrder(t *testing.T) {
+	t.Run("a gate listed before its need", func(t *testing.T) {
+		f := newFixture(nil)
+		f.runner.outcomes[testGate] = domain.Outcome{Result: domain.ResultPass, Tail: "test tail"}
+		f.runner.outcomes[lintGate] = domain.Outcome{Result: domain.ResultPass, Tail: "lint tail"}
+
+		result, err := f.handler.Handle(context.Background(), parallel(2, needing(testGate, lintGate), gate(lintGate)))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []verify.Line{
+			{Gate: testGate, Status: domain.StatusPass, Tail: "test tail"},
+			{Gate: lintGate, Status: domain.StatusPass, Tail: "lint tail"},
+		}
+		if ran, _, _ := gatesOf(f); !slices.Equal(result.Lines, want) || !slices.Equal(ran, []string{lintGate, testGate}) {
+			t.Fatalf("lines = %+v, ran = %q, want %+v after lint then test", result.Lines, ran, want)
+		}
+	})
+
+	t.Run("the second gate ends first", func(t *testing.T) {
+		runner := newGatedRunner(fmtGate, lintGate)
+		f := newFixtureWith(nil, fakeHasher{hash: inputHash}, runner)
+
+		done := handleAsync(f, parallel(2, gate(fmtGate), gate(lintGate)))
+		receive(runner.started, 2)
+		runner.release[lintGate] <- step{outcome: domain.Outcome{Result: domain.ResultPass, Tail: "lint tail"}}
+		runner.release[fmtGate] <- step{outcome: domain.Outcome{Result: domain.ResultFail, Tail: "fmt tail"}}
+		h := <-done
+
+		want := []verify.Line{
+			{Gate: fmtGate, Status: domain.StatusFail, Tail: "fmt tail"},
+			{Gate: lintGate, Status: domain.StatusPass, Tail: "lint tail"},
+		}
+		if h.err != nil || !slices.Equal(h.result.Lines, want) {
+			t.Fatalf("lines = %+v, err = %v, want %+v", h.result.Lines, h.err, want)
+		}
+	})
+}
+
+func TestHandleStopsOnError(t *testing.T) {
+	runner := newGatedRunner(fmtGate, lintGate, testGate)
+	f := newFixtureWith(nil, fakeHasher{hash: inputHash}, runner)
+
+	done := handleAsync(f, parallel(2, gate(fmtGate), gate(lintGate), gate(testGate)))
+	receive(runner.started, 2)
+	runner.release[fmtGate] <- step{err: errInjected}
+	if got := <-runner.cancelled; got != lintGate {
+		t.Fatalf("cancelled = %s, want %s", got, lintGate)
+	}
+	select {
+	case h := <-done:
+		t.Fatalf("returned %+v before the running gate ended", h)
+	default:
+	}
+	runner.release[lintGate] <- step{outcome: failOutcome()}
+	h := <-done
+
+	if !errors.Is(h.err, errInjected) {
+		t.Fatalf("err = %v, want the first error", h.err)
+	}
+	if events := runner.events.list(); slices.Contains(events, startEvent+testGate) {
+		t.Errorf("events = %q, want no start after the error", events)
+	}
+	if _, saved, _ := gatesOf(f); len(saved) != 0 {
+		t.Errorf("saved = %q, want no evidence from a cancelled run", saved)
+	}
+	for _, e := range f.dispatcher.envelopes {
+		if e.Event == shareddomain.EventGateAfter {
+			t.Errorf("dispatched %s after the cancel", e.Event)
+		}
+	}
+}
+
+func TestHandleSharedSchedulerCriteria(t *testing.T) {
+	criterion := domain.CriterionGateID(1)
+	runner := newGatedRunner(testGate, criterion)
+	f := newFixtureWith(fakeSource{gates: []domain.Gate{gate(criterion)}}, fakeHasher{hash: inputHash}, runner)
+
+	done := handleAsync(f, parallel(2, gate(testGate)))
+
+	want := []string{criterion, testGate}
+	slices.Sort(want)
+	if got := receive(runner.started, 2); !slices.Equal(got, want) {
+		t.Fatalf("starts = %q, want the criterion gate beside the configured gate", got)
+	}
+	runner.release[testGate] <- passStep
+	runner.release[criterion] <- passStep
+	if h := <-done; h.err != nil || len(h.result.Lines) != 2 {
+		t.Fatalf("result = %+v, err = %v", h.result, h.err)
+	}
+}
+
+const (
+	depsStep   = "deps"
+	toolsStep  = "tools"
+	vendorFile = "vendor/autoload.php"
+)
+
+func setupStep(id, creates string) domain.Setup {
+	return domain.Setup{Gate: gate(id), Creates: creates}
+}
+
+func withSetup(cmd verify.Command, steps ...domain.Setup) verify.Command {
+	cmd.Setup = steps
+	return cmd
+}
+
+func TestHandleSetup(t *testing.T) {
+	t.Run("runs the steps in file order before the gates and records the hash", func(t *testing.T) {
+		f := newFixture(nil)
+		for _, id := range []string{depsStep, toolsStep, testGate} {
+			f.runner.outcomes[id] = passOutcome()
+		}
+
+		result, err := f.handler.Handle(context.Background(), withSetup(command(gate(testGate)), setupStep(depsStep, ""), setupStep(toolsStep, "")))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []ran{{workDir, depsStep}, {workDir, toolsStep}, {workDir, testGate}}; !slices.Equal(f.runner.ran, want) {
+			t.Errorf("ran = %+v, want %+v", f.runner.ran, want)
+		}
+		if want := []verify.SetupLine{{Step: depsStep, Duration: 2 * time.Second}, {Step: toolsStep, Duration: 2 * time.Second}}; !slices.Equal(result.Setup, want) {
+			t.Errorf("setup lines = %+v, want %+v", result.Setup, want)
+		}
+		if want := []string{depsStep + "@" + inputHash, toolsStep + "@" + inputHash}; !slices.Equal(f.setups.saved, want) {
+			t.Errorf("saved setup = %q, want %q", f.setups.saved, want)
+		}
+		if len(f.evidence.saved) != 1 || len(f.dispatcher.envelopes) != 2 || len(result.Lines) != 1 {
+			t.Errorf("evidence = %+v, events = %d, lines = %+v, want only the gate in them", f.evidence.saved, len(f.dispatcher.envelopes), result.Lines)
+		}
+	})
+
+	cases := map[string]struct {
+		last    string
+		created bool
+		creates string
+		runs    bool
+	}{
+		"skips a step with the same hash and its creates path": {last: inputHash, created: true, creates: vendorFile},
+		"skips a step with the same hash and no creates path":  {last: inputHash},
+		"runs a step whose creates path is missing":            {last: inputHash, creates: vendorFile, runs: true},
+		"runs a step whose hash changed":                       {last: "tree-0", created: true, creates: vendorFile, runs: true},
+		"runs a step with no pass":                             {runs: true},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(nil)
+			f.runner.outcomes[depsStep] = passOutcome()
+			f.runner.outcomes[testGate] = passOutcome()
+			if c.last != "" {
+				f.setups.last[depsStep] = c.last
+			}
+			f.created[filepath.Join(workDir, vendorFile)] = c.created
+
+			result, err := f.handler.Handle(context.Background(), withSetup(command(gate(testGate)), setupStep(depsStep, c.creates)))
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ran := slices.Contains(f.runner.ran, ran{workDir, depsStep}); ran != c.runs || len(result.Setup) == 0 == c.runs {
+				t.Errorf("step ran = %v, setup lines = %+v, want ran %v", ran, result.Setup, c.runs)
+			}
+		})
+	}
+}
+
+func TestHandleSetupFails(t *testing.T) {
+	f := newFixture(nil)
+	f.runner.outcomes[depsStep] = failOutcome()
+	f.runner.outcomes[testGate] = passOutcome()
+
+	_, err := f.handler.Handle(context.Background(), withSetup(command(gate(testGate)), setupStep(depsStep, ""), setupStep(toolsStep, "")))
+
+	if !errors.Is(err, domain.ErrSetupFailed) || !strings.Contains(err.Error(), depsStep) || !strings.Contains(err.Error(), failTail) {
+		t.Fatalf("err = %v, want a setup failure that names %s and holds its tail", err, depsStep)
+	}
+	if want := []ran{{workDir, depsStep}}; !slices.Equal(f.runner.ran, want) {
+		t.Errorf("ran = %+v, want only the failed step", f.runner.ran)
+	}
+	if len(f.setups.saved) != 0 || len(f.evidence.saved) != 0 || len(f.dispatcher.envelopes) != 0 {
+		t.Errorf("setup saved = %q, evidence = %+v, events = %d, want nothing", f.setups.saved, f.evidence.saved, len(f.dispatcher.envelopes))
 	}
 }

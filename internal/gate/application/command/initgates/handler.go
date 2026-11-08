@@ -17,13 +17,18 @@ type Command struct {
 	Dir string
 }
 
+type Result struct {
+	Setup []domain.Setup
+	Gates []domain.Gate
+}
+
 type Detect func(dir string) ([]domain.Gate, error)
 
 type Files func(ctx context.Context, dir string) ([]string, error)
 
 type HasGates func(dir string) (bool, error)
 
-type WriteGates func(dir string, gates []domain.Gate) error
+type WriteGates func(dir string, setup []domain.Setup, gates []domain.Gate) error
 
 type Handler struct {
 	detect Detect
@@ -37,40 +42,43 @@ func NewHandler(detect Detect, files Files, bus shareddomain.Dispatcher, has Has
 	return Handler{detect: detect, files: files, bus: bus, has: has, write: write}
 }
 
-func (h Handler) Handle(ctx context.Context, c Command) ([]domain.Gate, error) {
+func (h Handler) Handle(ctx context.Context, c Command) (Result, error) {
 	exists, err := h.has(c.Dir)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	if exists {
-		return nil, domain.ErrGatesExist
+		return Result{}, domain.ErrGatesExist
 	}
 	gates, err := h.detect(c.Dir)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	proposed, err := h.propose(ctx, c.Dir)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
-	gates = append(gates, proposed...)
-	if err := domain.ValidateGates(gates); err != nil {
-		return nil, err
+	proposed.Gates = append(gates, proposed.Gates...)
+	if err := domain.ValidateSetup(proposed.Setup); err != nil {
+		return Result{}, err
 	}
-	if err := h.write(c.Dir, gates); err != nil {
-		return nil, err
+	if err := domain.ValidateGates(proposed.Gates); err != nil {
+		return Result{}, err
 	}
-	return gates, nil
+	if err := h.write(c.Dir, proposed.Setup, proposed.Gates); err != nil {
+		return Result{}, err
+	}
+	return proposed, nil
 }
 
-func (h Handler) propose(ctx context.Context, dir string) ([]domain.Gate, error) {
+func (h Handler) propose(ctx context.Context, dir string) (Result, error) {
 	files, err := h.files(ctx, dir)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	payload, err := json.Marshal(shareddomain.GatesDetectPayload{Files: files})
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	result, err := h.bus.Dispatch(ctx, shareddomain.Envelope{
 		Version: shareddomain.EnvelopeVersion,
@@ -79,32 +87,51 @@ func (h Handler) propose(ctx context.Context, dir string) ([]domain.Gate, error)
 		Payload: payload,
 	})
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	failures := make([]error, len(result.Failures))
 	for i, failure := range result.Failures {
 		failures[i] = failure.Err
 	}
 	if err := errors.Join(failures...); err != nil {
-		return nil, fmt.Errorf("%s: %w", shareddomain.EventGatesDetect, err)
+		return Result{}, fmt.Errorf("%s: %w", shareddomain.EventGatesDetect, err)
 	}
 	if result.Verdict.Kind == shareddomain.VerdictDeny {
-		return nil, fmt.Errorf("%s denied: %s", shareddomain.EventGatesDetect, result.Verdict.Reason)
+		return Result{}, fmt.Errorf("%s denied: %s", shareddomain.EventGatesDetect, result.Verdict.Reason)
 	}
-	var gates []domain.Gate
+	var proposed Result
 	for line := range strings.SplitSeq(result.Verdict.Context, proposalSeparator) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		var proposal shareddomain.ProposedGate
 		if err := json.Unmarshal([]byte(line), &proposal); err != nil {
-			return nil, fmt.Errorf("%s line %q: %w", shareddomain.EventGatesDetect, line, err)
+			return Result{}, fmt.Errorf("%s line %q: %w", shareddomain.EventGatesDetect, line, err)
+		}
+		if proposal.Setup {
+			step, err := proposeSetup(proposal)
+			if err != nil {
+				return Result{}, err
+			}
+			proposed.Setup = append(proposed.Setup, step)
+			continue
+		}
+		if proposal.Creates != "" {
+			return Result{}, fmt.Errorf("%w: gate %q: creates is only for a setup step", domain.ErrInvalidGate, proposal.ID)
 		}
 		gate, err := domain.NewGate(proposal.ID, proposal.Run, proposal.Paths, 0, "")
 		if err != nil {
-			return nil, err
+			return Result{}, err
 		}
-		gates = append(gates, gate)
+		gate.Needs = proposal.Needs
+		proposed.Gates = append(proposed.Gates, gate)
 	}
-	return gates, nil
+	return proposed, nil
+}
+
+func proposeSetup(proposal shareddomain.ProposedGate) (domain.Setup, error) {
+	if len(proposal.Needs) > 0 {
+		return domain.Setup{}, fmt.Errorf("%w: setup step %q: a setup step has no needs", domain.ErrInvalidSetup, proposal.ID)
+	}
+	return domain.NewSetup(proposal.ID, proposal.Run, proposal.Paths, proposal.Creates)
 }

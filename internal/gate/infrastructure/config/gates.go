@@ -18,6 +18,7 @@ import (
 const (
 	fileName    = ".harness.yaml"
 	keyGates    = "gates"
+	keySetup    = "setup"
 	keyLint     = "lint"
 	keyPacks    = "packs"
 	tagString   = "!!str"
@@ -37,6 +38,7 @@ func Decode(cfg []sharedconfig.Gate) ([]domain.Gate, error) {
 		if err != nil {
 			return nil, err
 		}
+		gate.Needs = c.Needs
 		gates = append(gates, gate)
 	}
 	if err := domain.ValidateGates(gates); err != nil {
@@ -45,7 +47,29 @@ func Decode(cfg []sharedconfig.Gate) ([]domain.Gate, error) {
 	return gates, nil
 }
 
+func DecodeSetup(cfg []sharedconfig.Setup) ([]domain.Setup, error) {
+	steps := make([]domain.Setup, 0, len(cfg))
+	for _, c := range cfg {
+		step, err := domain.NewSetup(c.ID, c.Run, c.Paths, c.Creates)
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, step)
+	}
+	if err := domain.ValidateSetup(steps); err != nil {
+		return nil, err
+	}
+	return steps, nil
+}
+
 type Writer struct{}
+
+type setupEntry struct {
+	ID      string   `yaml:"id"`
+	Run     string   `yaml:"run"`
+	Paths   []string `yaml:"paths,omitempty"`
+	Creates string   `yaml:"creates,omitempty"`
+}
 
 type gateEntry struct {
 	ID       string   `yaml:"id"`
@@ -53,6 +77,7 @@ type gateEntry struct {
 	Paths    []string `yaml:"paths,omitempty"`
 	Timeout  string   `yaml:"timeout,omitempty"`
 	Baseline string   `yaml:"baseline,omitempty"`
+	Needs    []string `yaml:"needs,omitempty"`
 }
 
 func (Writer) HasGates(dir string) (bool, error) {
@@ -60,22 +85,37 @@ func (Writer) HasGates(dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return keyIndex(doc.Content[nodeFirstEl], keyGates) >= 0, nil
+	return hasGateKeys(doc.Content[nodeFirstEl]), nil
 }
 
-func (Writer) WriteGates(dir string, gates []domain.Gate) error {
+func hasGateKeys(root *yaml.Node) bool {
+	return keyIndex(root, keyGates) >= 0 || keyIndex(root, keySetup) >= 0
+}
+
+func (Writer) WriteGates(dir string, setup []domain.Setup, gates []domain.Gate) error {
 	doc, err := readDocument(dir)
 	if err != nil {
 		return err
 	}
 	root := doc.Content[nodeFirstEl]
-	if keyIndex(root, keyGates) >= 0 {
+	if hasGateKeys(root) {
 		return domain.ErrGatesExist
+	}
+	if len(setup) > 0 {
+		steps := make([]setupEntry, len(setup))
+		for i, step := range setup {
+			steps[i] = setupEntry{ID: step.ID, Run: step.Run, Paths: step.Paths, Creates: step.Creates}
+		}
+		var seq yaml.Node
+		if err := seq.Encode(steps); err != nil {
+			return fmt.Errorf("encode setup: %w", err)
+		}
+		root.Content = append(root.Content, keyNode(keySetup), &seq)
 	}
 
 	entries := make([]gateEntry, len(gates))
 	for i, gate := range gates {
-		entries[i] = gateEntry{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Baseline: gate.Baseline}
+		entries[i] = gateEntry{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Baseline: gate.Baseline, Needs: gate.Needs}
 		if gate.Timeout != domain.DefaultTimeout {
 			entries[i].Timeout = gate.Timeout.Round(time.Millisecond).String()
 		}

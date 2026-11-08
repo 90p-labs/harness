@@ -1,3 +1,11 @@
+verify:
+  parallel: 2
+
+setup:
+  - id: go-mod
+    run: docker compose run --rm -T go go mod download
+    paths: [go.mod, go.sum, compose.yaml]
+
 gates:
   - id: go-fmt
     run: docker compose run --rm -T go sh -c 'out=$(gofmt -l . 2>&1); test -z "$out" || { echo "$out"; exit 1; }'
@@ -8,3 +16,4 @@ gates:
   - id: go-test
     run: docker compose run --rm -T go go test ./...
     paths: *go-inputs
+    needs: [go-fmt, go-vet]
