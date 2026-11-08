@@ -86,11 +86,11 @@ $ harness init --host claude
 lint packs: kept ./lint/architecture
 gates: kept
 lint init: wrote .harness-lint
-lint baseline: wrote .harness-baseline/lint.json (0 findings, run harness lint to see them)
+lint baseline: wrote .harness-lint/baseline.json (0 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
 ```
 
-The setup keeps the `gates` key and the lint pack of the example. `harness lint init` writes `.harness-lint/VERSION`. `harness lint baseline` writes `.harness-baseline/lint.json` with no findings.
+The setup keeps the `gates` key and the lint pack of the example. `harness lint init` writes `.harness-lint/VERSION`. `harness lint baseline` writes `.harness-lint/baseline.json` with no findings.
 The `next:` line is gone, because the pack `architecture` now gives the rules with the `.go` scope to go-arch-lint.
 `harness init` always installs the hooks. With the harness plugin, each hook then runs twice. See the root README for the setup with the plugin.
 
@@ -395,10 +395,9 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 ├── .harness
 │   └── plugins
 │       └── go-arch-lint.sh                                                                     you add, commit
-├── .harness-baseline
-│   └── lint.json                                                                               harness writes (lint baseline), commit
 ├── .harness-lint
-│   └── VERSION                                                                                 harness writes (lint init), commit
+│   ├── VERSION                                                                                 harness writes (lint init), commit
+│   └── baseline.json                                                                           harness writes (lint baseline), commit
 ├── cmd
 │   └── app
 │       └── main.go
@@ -511,7 +510,7 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 ```
 
 The harness keeps the state of `harness verify` in `.git/.harness/state.db`. The `.harness/` folder of the tree holds only the plugin. The harness writes its run folders there when you run `harness run`. `.gitignore` ignores them, except `.harness/plugins/`.
-The harness writes `.claude/settings.json`, `.harness-lint/VERSION` and `.harness-baseline/lint.json` when you run `harness init --host claude`.
+The harness writes `.claude/settings.json`, `.harness-lint/VERSION` and `.harness-lint/baseline.json` when you run `harness init --host claude`.
 `go.sum` appeared after the proof added the dependency `go-cmp`. A module with no dependency has no `go.sum`.
 
 ## The gate paths

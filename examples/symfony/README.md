@@ -111,7 +111,7 @@ $ harness lint init
 $ harness lint baseline
 ```
 
-`harness lint init` writes `.harness-lint/VERSION`. `harness lint baseline` writes `.harness-baseline/lint.json` with no findings, because the code of the proof breaks no rule.
+`harness lint init` writes `.harness-lint/VERSION`. `harness lint baseline` writes `.harness-lint/baseline.json` with no findings, because the code of the proof breaks no rule.
 The harness writes one setup step under the `setup` key and six gates under the `gates` key of `.harness.yaml`. The listing shows the setup step and the first three gates:
 
 ```yaml
@@ -139,7 +139,7 @@ setup:
 gates:
   - id: lint
     run: harness lint --json
-    baseline: .harness-baseline/lint.json
+    baseline: .harness-lint/baseline.json
   - id: lint-canaries
     run: harness lint canaries
   - id: make-cs
@@ -181,7 +181,7 @@ The `make-test` gate ends with the `needs` key:
 ```
 
 The four `make` gates have the same `paths`. The setup step has its own `paths`. The `lint` and `lint-canaries` gates have no `paths`, so every tracked file is their input.
-Commit `.harness.yaml`, `.harness-lint/` and `.harness-baseline/`. Then run the gates two times:
+Commit `.harness.yaml` and `.harness-lint/`. Then run the gates two times:
 
 ```console
 $ harness verify
@@ -528,10 +528,9 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   └── plugins
 │       ├── deptrac.sh                                      you add, commit
 │       └── make-gates.sh                                   you add, commit
-├── .harness-baseline
-│   └── lint.json                                           harness writes (lint baseline), commit
 ├── .harness-lint
-│   └── VERSION                                             harness writes (lint init), commit
+│   ├── VERSION                                             harness writes (lint init), commit
+│   └── baseline.json                                       harness writes (lint baseline), commit
 ├── .phpunit.cache
 │   └── test-run-history
 ├── bin

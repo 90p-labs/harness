@@ -648,7 +648,7 @@ gates:
     paths: ["**/*.go", "go.mod", "go.sum"]
   - id: lint
     run: harness lint --json
-    baseline: .harness-baseline/lint.json
+    baseline: .harness-lint/baseline.json
 ```
 
 Needs and parallel runs:
@@ -743,7 +743,7 @@ Commands:
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
 - A veto stops at the first deny, and `guard.commits-checked` sorts first. A test of another rule disables `commits-checked`.
 - The `GateSource` port adds one gate for each criterion of the active plan, with the id `criterion-N`. Each criterion gets its own evidence record. The criterion gates go through the same scheduler as the configured gates.
-- `harness init --host H` sets up a repository in one step and prints one line for each step. First it keeps `lint.packs`, or it writes the packs that the repository files show: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it runs `gates init` with these packs, `lint init`, `lint baseline` and `host install`. With no pack, it skips the baseline, so a later pack gets a full first baseline. The baseline line gives the number of findings and the command that shows them: `lint baseline: wrote .harness-baseline/lint.json (3 findings, run harness lint to see them)`. With no gate to write, it prints `gates: none detected`. When it chooses packs but the `gates` key exists, it stops before the first write, because the kept gates have no `lint` gate. A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. When a lint engine is missing, it stops at the baseline step, and the steps before it stay.
+- `harness init --host H` sets up a repository in one step and prints one line for each step. First it keeps `lint.packs`, or it writes the packs that the repository files show: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it runs `gates init` with these packs, `lint init`, `lint baseline` and `host install`. With no pack, it skips the baseline, so a later pack gets a full first baseline. The baseline line gives the number of findings and the command that shows them: `lint baseline: wrote .harness-lint/baseline.json (3 findings, run harness lint to see them)`. With no gate to write, it prints `gates: none detected`. When it chooses packs but the `gates` key exists, it stops before the first write, because the kept gates have no `lint` gate. A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. When a lint engine is missing, it stops at the baseline step, and the steps before it stay.
 
 Before the review, an in-process plugin on `run.transition.before` verifies the trace of the plan against the branch. The pure function `VerifyTrace` checks these rules:
 
@@ -767,12 +767,12 @@ A lint pack is a set of rules with ids, an engine, a severity and a scope. The `
 - Every GritQL message starts with the rule id in brackets, such as `[ddd/event-readonly]`.
 - The severity is `error`, `warn` or `info`. Only an `error` finding fails the lint gate.
 - The Biome engine runs both the `biome-grit` rules and the `biome-rule` rules, once for each scope.
-- The built-in packs are embedded in the binary. A custom pack is a folder in the repo. `harness lint init` writes `.harness-lint/` into the repo. The team commits it.
-- The `.harness-lint/` folder holds `VERSION`, `plugins/` (the GritQL files), `biome/SCOPE/biome.json` for each scope, and `oxlintrc.json`.
+- The built-in packs are embedded in the binary. A custom pack is a folder in the repo. `harness lint init` writes `.harness-lint/` into the repo. The team commits it. Lint init keeps `baseline.json`, and it refuses while the baseline is at the old path.
+- The `.harness-lint/` folder holds `VERSION`, `baseline.json`, `plugins/` (the GritQL files), `biome/SCOPE/biome.json` for each scope, and `oxlintrc.json`.
 - `harness lint` stops with "run harness lint init" when `.harness-lint/VERSION` differs from the binary version.
 - `harness lint` prints one line for each finding: severity, rule id, file, line and message. It exits 1 when an `error` finding exists.
 - `harness lint --json` prints the findings report. It exits 0 when it has findings, and 1 on an engine error. The lint gate uses this form.
-- `harness lint baseline` writes all findings to `.harness-baseline/lint.json` when no baseline file exists. Else it only removes the keys that no longer match. It never adds a key.
+- `harness lint baseline` writes all findings to `.harness-lint/baseline.json` when no baseline file exists. Else it only removes the keys that no longer match. It never adds a key.
 - The Biome and oxlint engine tests have the build tag `linters`. The CI workflow `lint-engines.yml` installs the pinned tools and runs them with `go test -tags linters ./internal/lint/...`.
 
 #### Lint plugins

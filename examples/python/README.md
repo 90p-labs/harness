@@ -134,7 +134,7 @@ The `setup` key of `.harness.yaml` holds one step, and the `gates` key holds fou
 
 - `py-install` is the setup step. It runs `uv sync --locked` in the container.
 - `py-typecheck` runs `uv run --no-sync mypy src tests` in the container. Put the mypy settings, such as `strict`, in the `[tool.mypy]` table of `pyproject.toml`.
-- `lint` runs `harness lint --json` on the host, with the baseline `.harness-baseline/lint.json`.
+- `lint` runs `harness lint --json` on the host, with the baseline `.harness-lint/baseline.json`.
 - `lint-canaries` runs `harness lint canaries` on the host. The `lint-setup` skill adds it by hand to the `gates` key.
 - `py-test` runs `uv run --no-sync pytest` in the container. It has `needs: [py-typecheck, lint, lint-canaries]`.
 
@@ -203,7 +203,7 @@ The finding of the ruff pack is the only one, because the code has no broken con
 
 ```console
 $ harness lint baseline
-$ cat .harness-baseline/lint.json
+$ cat .harness-lint/baseline.json
 {
   "version": 1,
   "findings": [
@@ -221,7 +221,7 @@ $ harness host install --host claude
 ```
 
 `harness lint` still exits with code 1 on this finding. Only the gate `lint` reads the baseline.
-Commit `.harness.yaml`, `compose.yaml`, `.importlinter`, `.gitignore`, `.harness/plugins/`, `lint/`, `.harness-lint/`, `.harness-baseline/` and `.claude/`.
+Commit `.harness.yaml`, `compose.yaml`, `.importlinter`, `.gitignore`, `.harness/plugins/`, `lint/`, `.harness-lint/` and `.claude/`.
 
 ### 5. Verify two times
 
@@ -344,7 +344,7 @@ The proof removed `import os` from `src/shop/order/domain/order.py`:
 ```console
 $ harness lint
 $ harness lint baseline
-$ cat .harness-baseline/lint.json
+$ cat .harness-lint/baseline.json
 {
   "version": 1,
   "findings": []
@@ -593,10 +593,9 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │       ├── domain_purity.py     you add, commit
 │       ├── import-linter.sh     you add, commit
 │       └── ruff-lint.sh         you add, commit
-├── .harness-baseline
-│   └── lint.json            harness writes (lint baseline), commit
 ├── .harness-lint
-│   └── VERSION              harness writes (lint init), commit
+│   ├── VERSION              harness writes (lint init), commit
+│   └── baseline.json        harness writes (lint baseline), commit
 ├── lint
 │   ├── architecture
 │   │   └── pack.yaml        you add, commit
