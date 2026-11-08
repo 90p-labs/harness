@@ -219,39 +219,39 @@ Run `harness lint init` after each edit of a custom pack. A finding takes the se
 
 ### Architecture rules in any language
 
-The built-in `ddd` pack checks the layers and the contexts of a TypeScript project. For TypeScript, a canary is optional: the binary tests prove the built-in rules, and with no `lint/rules.yaml`, `harness lint canaries` prints `lint canaries: only built-in rules are active, so there is no canary to run`. For PHP, Python or Go, `harness init` prints a next step, such as `next: run the lint-setup skill to set up the architecture rules for PHP`. The `lint-setup` skill asks the open choices, and the `linter` agent writes the setup with the tool of the language: deptrac, import-linter, go-arch-lint or depguard. It writes the tool config, a wrapper lint plugin, a custom pack with the ids of `harness lint catalogue`, one canary folder that breaks each rule, and the manifest `lint/rules.yaml`. [`DESIGN.md`](DESIGN.md#architecture-rules-in-any-language) gives the formats.
+The built-in `ddd` pack checks the layers and the contexts of a TypeScript project. For TypeScript, a canary is optional: the binary tests prove the built-in rules, and with no `rules.yaml` in the proof folder, `harness lint canaries --proof lint/proof` prints `lint canaries: only built-in rules are active, so there is no canary to run`. For PHP, Python or Go, `harness init` prints a next step, such as `next: run the lint-setup skill to set up the architecture rules for PHP`. The `lint-setup` skill asks the open choices, and the `linter` agent writes the setup with the tool of the language: deptrac, import-linter, go-arch-lint or depguard. It writes the tool config, a wrapper lint plugin, a custom pack with the ids of `harness lint catalogue`, and a temporary proof folder `lint/proof/` with one canary folder that breaks each rule and a `rules.yaml`. The skill deletes the proof folder after the proof, so the project commits no canary. [`DESIGN.md`](DESIGN.md#architecture-rules-in-any-language) gives the formats.
 
-`harness lint canaries` proves that the tool still catches each rule, with no agent, so it runs as the gate `lint-canaries`. A config edit that misses a rule fails it, and a rule that the tool cannot catch shows its waiver:
+`harness lint canaries --proof lint/proof` proves that the tool catches each rule. The flag is required. A rule that the tool cannot catch shows its waiver, and the skill reports each waiver to the user:
 
 ```console
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-PASS ddd/layer-direction lint/canaries/ddd-layer-direction
-FAIL ddd/cross-context lint/canaries/ddd-cross-context: the engine fake-arch gave no ddd/cross-context finding
-PASS ddd/file-suffix lint/canaries/ddd-file-suffix
+$ harness lint canaries --proof lint/proof
+PASS ddd/src-roots ddd-src-roots
+PASS ddd/domain-purity ddd-domain-purity
+PASS ddd/layer-direction ddd-layer-direction
+FAIL ddd/cross-context ddd-cross-context: the engine fake-arch gave no ddd/cross-context finding
+PASS ddd/file-suffix ddd-file-suffix
 error: a lint canary failed
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-PASS ddd/layer-direction lint/canaries/ddd-layer-direction
+$ harness lint canaries --proof lint/proof
+PASS ddd/src-roots ddd-src-roots
+PASS ddd/domain-purity ddd-domain-purity
+PASS ddd/layer-direction ddd-layer-direction
 WAIVED ddd/cross-context: the tool cannot see the context boundaries in this project.
-PASS ddd/file-suffix lint/canaries/ddd-file-suffix
+PASS ddd/file-suffix ddd-file-suffix
 ```
 
-A canary passes only when the finding is for a file inside the canary folder. `ddd/src-roots` makes the tool report each file or dependency that it cannot place, so no source folder drops out of the check. A waiver needs a reason of 3 words or more, and a manifest that waives each rule fails. The waiver shows in lint/rules.yaml and in the `WAIVED` lines of `harness lint canaries`. `harness verify` prints only the gate status, so run `harness lint canaries` to see the waivers.
+A canary passes only when the finding is for a file inside the canary folder. `ddd/src-roots` makes the tool report each file or dependency that it cannot place, so no source folder drops out of the check. A waiver needs a reason of 3 words or more, and a proof that waives each rule fails. On a `FAIL`, the skill stops and keeps `lint/proof/`. On success, it deletes the folder and reports each `PASS` and each `WAIVED` line. A later edit of the tool config that breaks a rule stays green until someone runs the skill again.
 
-A repository with two languages keeps one `lint/rules.yaml`. `harness init` prints a `next:` line for each language that no plugin rule covers, also when the manifest exists. Run the `lint-setup` skill for each language: the second pack holds the same catalogue ids on its own engine, and its scope must not hold a file of the first. A rule on two engines gives one canary or one waiver for each engine under `engines`, and each line names its engine. This is a TypeScript and PHP repository with the built-in `ddd` pack and a deptrac pack:
+A repository with two languages runs the skill once for each language. `harness init` prints a `next:` line for each language that no plugin rule covers. Run the `lint-setup` skill for each language: the second pack holds the same catalogue ids on its own engine, and its scope must not hold a file of the first. A rule on two engines gives one canary or one waiver for each engine under `engines`, and each line names its engine. This is a TypeScript and PHP repository with the built-in `ddd` pack and a deptrac pack:
 
 ```console
-$ harness lint canaries
-PASS ddd/src-roots deptrac lint/canaries/ddd-src-roots
-PASS ddd/src-roots harness lint/canaries/ts-src-roots
-PASS ddd/domain-purity deptrac lint/canaries/ddd-domain-purity
-PASS ddd/domain-purity harness lint/canaries/ts-domain-purity
-PASS ddd/layer-direction deptrac lint/canaries/ddd-layer-direction
-PASS ddd/layer-direction harness lint/canaries/ts-layer-direction
-PASS ddd/cross-context deptrac lint/canaries/ddd-cross-context
+$ harness lint canaries --proof lint/proof
+PASS ddd/src-roots deptrac ddd-src-roots
+PASS ddd/src-roots harness ts-src-roots
+PASS ddd/domain-purity deptrac ddd-domain-purity
+PASS ddd/domain-purity harness ts-domain-purity
+PASS ddd/layer-direction deptrac ddd-layer-direction
+PASS ddd/layer-direction harness ts-layer-direction
+PASS ddd/cross-context deptrac ddd-cross-context
 WAIVED ddd/cross-context harness: the binary fixtures prove the built-in rule.
 WAIVED ddd/file-suffix: the binary fixtures prove the built-in rule.
 $ harness lint

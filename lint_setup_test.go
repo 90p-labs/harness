@@ -19,7 +19,11 @@ const (
 	frontmatterEnd = "\n---\n"
 
 	initLintSetupLine = "next: run the lint-setup skill"
+	proofCommand      = "harness lint canaries --proof"
+	proofFolder       = "lint/proof/"
 )
+
+var committedProofPaths = []string{"lint/rules.yaml", "lint/canaries"}
 
 var knownLintTools = []string{"deptrac", "import-linter", "go-arch-lint", "depguard", "`ddd` pack"}
 
@@ -31,6 +35,20 @@ func frontmatterKeys(t *testing.T, path string) []string {
 		t.Fatalf("%s: no YAML frontmatter", path)
 	}
 	return slices.Sorted(maps.Keys(fields))
+}
+
+func requireProof(t *testing.T, path, text string) {
+	t.Helper()
+	for _, want := range []string{proofCommand, proofFolder} {
+		if !strings.Contains(text, want) {
+			t.Errorf("%s does not name %q", path, want)
+		}
+	}
+	for _, refused := range committedProofPaths {
+		if strings.Contains(text, refused) {
+			t.Errorf("%s names %q, which a project no longer commits", path, refused)
+		}
+	}
 }
 
 func TestLintSetupSkill(t *testing.T) {
@@ -60,6 +78,7 @@ func TestLintSetupSkill(t *testing.T) {
 			t.Errorf("%s does not name %q for its questions", lintSetupSkill, want)
 		}
 	}
+	requireProof(t, lintSetupSkill, skill)
 	if keys := frontmatterKeys(t, lintSetupSkill); !slices.Contains(keys, "argument-hint") {
 		t.Errorf("%s frontmatter keys = %v, want argument-hint for the language", lintSetupSkill, keys)
 	}
@@ -76,6 +95,7 @@ func TestLintSetupStartsAfterInit(t *testing.T) {
 }
 
 func TestLintSetupAgent(t *testing.T) {
+	requireProof(t, linterAgent, readDoc(t, linterAgent))
 	got, want := frontmatterKeys(t, linterAgent), frontmatterKeys(t, reviewerAgent)
 
 	if !slices.Equal(got, want) {

@@ -1,12 +1,12 @@
 ---
 name: lint-setup
-description: "Sets up the architecture rules of the harness catalogue on a project in any language: the native tool config, a wrapper lint plugin, one canary for each rule and the manifest lint/rules.yaml, proven by harness lint canaries. Use when harness init prints the next step for the lint-setup skill, or when the user types /harness:lint-setup (Codex: $harness:lint-setup) with a language."
+description: "Sets up the architecture rules of the harness catalogue on a project in any language: the native tool config, a wrapper lint plugin, and a temporary proof folder with one canary for each rule, run by harness lint canaries --proof and then deleted. Use when harness init prints the next step for the lint-setup skill, or when the user types /harness:lint-setup (Codex: $harness:lint-setup) with a language."
 argument-hint: "[language]"
 ---
 
 # Architecture rules in any language
 
-The harness keeps a catalogue of architecture rules. A native tool of the project language checks them, and a wrapper plugin maps its output to harness findings. A canary for each rule proves on each run that the tool still catches it.
+The harness keeps a catalogue of architecture rules. A native tool of the project language checks them, and a wrapper plugin maps its output to harness findings. At setup, a canary for each rule proves that the tool catches it. The canaries live in the temporary folder `lint/proof/`, and the skill deletes it after the proof. A project commits no canary.
 
 Language: `$ARGUMENTS`. When it is empty, the `linter` agent finds the languages.
 
@@ -33,7 +33,7 @@ Language: `$ARGUMENTS`. When it is empty, the `linter` agent finds the languages
 | PHP | deptrac | the layer and context rules, from its layers and its ruleset. `--report-uncovered` gives the unplaced classes and dependencies |
 | Python | import-linter | the layer and context rules. Exhaustive `layers` contracts give `ddd/src-roots`, an `independence` contract gives `ddd/cross-context`, and a custom contract type with an allow list gives `ddd/domain-purity`, because a `forbidden` contract cannot hold an allow list |
 | Go | go-arch-lint or depguard | the layer and context rules, from the allowed imports of each component. go-arch-lint reports an unplaced file |
-| TypeScript | the built-in `ddd` pack | each rule. Add `ddd` to `lint.packs` and stop: the binary tests prove this pack, so the canary is optional. With no `lint/rules.yaml`, `harness lint canaries` prints one line and passes. Next to another language, the manifest gives the engine `harness` a TypeScript canary or a waiver for each rule |
+| TypeScript | the built-in `ddd` pack | each rule. Add `ddd` to `lint.packs` and stop: the binary tests prove this pack, so the canary is optional. With no `rules.yaml` in the proof folder, `harness lint canaries --proof lint/proof` prints one line and passes. Next to another language, the proof `rules.yaml` gives the engine `harness` a TypeScript canary or a waiver for each rule |
 
 For a language that is not in the table, the agent searches for a tool and proposes it. The user chooses.
 
@@ -47,17 +47,19 @@ A tool that checks only imports cannot catch `ddd/file-suffix`. Then the rule is
    - the native tool config. The user owns this file and can tune it after the setup.
    - the wrapper plugin `.harness/plugins/<tool>.sh` on `lint.check`, and its `plugins` entry in `.harness.yaml`.
    - the custom pack `lint/architecture/pack.yaml` with the catalogue ids and the wrapper as engine, and its entry in `lint.packs`.
-   - one canary folder for each rule under `lint/canaries/`, and the manifest `lint/rules.yaml`.
+   - the proof folder `lint/proof/`: the `rules.yaml` and one canary folder for each rule. The folder is temporary and untracked.
 
-   For a second language, the agent keeps the first setup. It adds the new pack next to the first, in its own folder such as `lint/architecture-go`, and adds its entries to the same `lint/rules.yaml`. A rule that two packs hold gets an entry for each engine under `engines`.
-4. The agent runs `harness lint init`, `harness lint canaries` and `harness lint`. `harness lint` must give no finding in `lint/canaries/`.
-5. A rule that the tool cannot catch comes back as a waiver question. Ask it. On a yes, the agent writes `waived: <reason>` for the rule, with a reason of 3 words or more. On a no, the agent tunes the tool config and runs the check again. A manifest that waives each rule fails: at least one rule needs a canary.
-6. Run `harness gates init` to add the `lint-canaries` gate. When `.harness.yaml` has a `gates` key with a gate, the command refuses and names the key: add `{id: lint-canaries, run: harness lint canaries}` to it by hand. An empty `gates: []` counts as absent.
-7. Show the last output of `harness lint canaries` to the user.
+   For a second language, the agent keeps the first setup. It adds the new pack next to the first, in its own folder such as `lint/architecture-go`. The first proof is gone, so it writes the proof again for every active rule: a canary or a waiver for each engine of the rule. A rule that two packs hold gets an entry for each engine under `engines`.
+4. The agent runs `harness lint init`, `harness lint canaries --proof lint/proof` and `harness lint`. `harness lint` must give no finding in `lint/proof/`.
+5. A rule that the tool cannot catch comes back as a waiver question. Ask it. On a yes, the agent writes `waived: <reason>` for the rule in the proof `rules.yaml`, with a reason of 3 words or more, and keeps the rule out of the custom pack. On a no, the agent tunes the tool config and runs the check again. A proof that waives each rule fails: at least one rule needs a canary.
+6. On a `FAIL` line, stop. Keep `lint/proof/` so the user can read it, and report the `FAIL` lines. Do not delete the folder.
+7. On success, delete `lint/proof/`. Run `git status --porcelain` and check that it names no file under `lint/proof/`. Report each `PASS` line and each `WAIVED` line with its reason to the user, so a waiver is not silent.
+
+The proof is a setup step. A later edit of the tool config that breaks a rule stays green until someone runs the skill again.
 
 ## Files
 
-The plugin entry. The exec plugin runs in the envelope `cwd`, which is the canary folder under `harness lint canaries`. So the command finds the script from the repository root:
+The plugin entry. The exec plugin runs in the envelope `cwd`, which is the canary folder under `harness lint canaries --proof`. So the command finds the script from the repository root:
 
 ```yaml
 plugins:
@@ -69,7 +71,7 @@ lint:
   packs: [./lint/architecture]
 ```
 
-The custom pack holds one rule for each catalogue id with a canary, with the wrapper as engine. A waived rule needs no pack rule:
+The custom pack holds one rule for each catalogue id with a canary, with the wrapper as engine. A waived rule id has no rule in the custom pack:
 
 ```yaml
 name: architecture
@@ -81,18 +83,18 @@ rules:
     message: The application layer uses the domain layer, never the infrastructure layer.
 ```
 
-The manifest gives each rule of the catalogue pack a canary or a waiver:
+The proof `lint/proof/rules.yaml` gives each rule of the catalogue pack a canary or a waiver. A canary path is relative to the proof folder:
 
 ```yaml
 pack: ddd
 rules:
   - id: ddd/layer-direction
-    canary: lint/canaries/ddd-layer-direction
+    canary: ddd-layer-direction
   - id: ddd/file-suffix
     waived: deptrac checks the dependencies, not the file names.
 ```
 
-When two active packs hold a rule on two engines, for example the built-in `ddd` pack (engine `harness`) and a deptrac pack, the rule gives one canary or one waiver for each engine under `engines`. A rule on one engine keeps the single form. `harness lint canaries` names the engine on each line of an `engines` entry:
+When two active packs hold a rule on two engines, for example the built-in `ddd` pack (engine `harness`) and a deptrac pack, the rule gives one canary or one waiver for each engine under `engines`. A rule on one engine keeps the single form. `harness lint canaries --proof` names the engine on each line of an `engines` entry:
 
 ```yaml
 pack: ddd
@@ -100,20 +102,22 @@ rules:
   - id: ddd/domain-purity
     engines:
       harness:
-        canary: lint/canaries/ts-domain-purity
+        canary: ts-domain-purity
       deptrac:
-        canary: lint/canaries/ddd-domain-purity
+        canary: ddd-domain-purity
   - id: ddd/file-suffix
     engines:
       harness:
         waived: the binary fixtures prove the built-in rule.
 ```
 
-A canary folder mirrors the source layout, for example `lint/canaries/ddd-layer-direction/src/Order/Application/PlaceOrder.php`. It breaks its one rule on purpose and breaks no other rule. The tool config and the pack scopes must not include `lint/canaries/`.
+A canary folder mirrors the source layout, for example `lint/proof/ddd-layer-direction/src/Order/Application/PlaceOrder.php`. It breaks its one rule on purpose and breaks no other rule. The tool config and the pack scopes must not include `lint/proof/`. No `.gitignore` rule may match `lint/proof/`: the file list drops an ignored file, so its canary would fail.
+
+The command refuses a proof folder outside the work tree and a canary path that leaves the proof folder.
 
 ## Wrapper contract
 
-- Read the envelope from stdin. Analyse the files of `payload.files` under the envelope `cwd`. Under `harness lint canaries`, `cwd` is the canary folder: point the tool at `cwd`, not at the repository `src/`.
+- Read the envelope from stdin. Analyse the files of `payload.files` under the envelope `cwd`. Under `harness lint canaries --proof`, `cwd` is the canary folder: point the tool at `cwd`, not at the repository `src/`.
 - Give each finding a `rule` from `payload.rules` and a `file` relative to `cwd`. Keep only findings whose file is in `payload.files`. A canary passes only on a finding for a file inside the canary folder.
 - Map each file that the tool cannot place to `ddd/src-roots`, and each dependency that it cannot place to the rule of the layer that holds the dependant file. Never drop an unplaced file or dependency.
 - End each pack rule scope with the file extension of the language, such as `src/**/*.php`. `harness init` uses the extension to find the languages that the pack covers.
