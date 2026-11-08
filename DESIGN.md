@@ -29,7 +29,7 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 | run use cases | `internal/run/application` | `harness run` commands and queries |
 | plan | `internal/plan` | Plan parse and checks, plan view |
 | host | `internal/host` | Claude Code and Codex hook codecs |
-| guard | `internal/guard` | Built-in guard rules as in-process plugins on `tool.before` |
+| guard | `internal/guard` | Built-in guard rules as in-process plugins on `tool.before` and `turn.stopping` |
 | gate | `internal/gate` | Verification gates from YAML, baseline ratchet, evidence |
 | lint | `internal/lint` | Rule packs |
 | live | `internal/live` | Merge and deploy records, signal checks, regression findings |
@@ -194,6 +194,23 @@ classDiagram
 ## Plugin events
 
 A plugin is a building block. Built-in pieces and exec plugins implement the same `Plugin` port. The bus sends each event to the plugins that subscribe to it, in name order.
+
+The guard builds one plugin named `guard.<id>` for each rule that is not in `guard.disabled`. The bus puts the plugin name before each deny. The rules are:
+
+| Rule | Event | Denies |
+|---|---|---|
+| `pr-no-merge` | `tool.before` | `gh pr merge` |
+| `pr-draft-only` | `tool.before` | `gh pr create` without `--draft` |
+| `pr-body-shape` | `tool.before` | A PR body with no `## Summary`, `## What` or `## Why`, a line above 40 words, or a diagram with no marks |
+| `git-no-force` | `tool.before` | A forced `git push` |
+| `git-no-push-default` | `tool.before` | A `git push` to the default branch |
+| `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |
+| `secrets-read` | `tool.before` | A read of a secret file |
+| `test-no-focus-skip` | `tool.before` | A focused or skipped test in a test edit |
+| `shell-write-source` | `tool.before` | A shell write to a source file |
+| `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
+| `agent-model-routing` | `tool.before` | An agent call whose model differs from the role table of the host |
+| `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
 
 Event kinds:
 
@@ -434,6 +451,8 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `run.max_stop_blocks` | `3` | 1 or more |
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
 | `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
+| `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
+| `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` |
 
 `execplugin.FromConfig` checks the plugin event names and builds the exec plugins. The host constants live in `internal/shared/domain`, so the envelope and the role table use one set.
 

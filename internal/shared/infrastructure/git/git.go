@@ -22,7 +22,22 @@ const (
 	scpSeparator         = ':'
 	gitSuffix            = ".git"
 	missingConfigExit    = 1
+	quietMissingRefExit  = 1
+	originRemotePrefix   = "origin/"
+	fallbackBranch       = "main"
 )
+
+func DefaultBranch(ctx context.Context, dir string) (string, error) {
+	out, err := run(ctx, dir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == quietMissingRefExit {
+		return fallbackBranch, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimPrefix(out, originRemotePrefix), nil
+}
 
 func TopLevel(ctx context.Context, dir string) (string, error) {
 	out, err := run(ctx, dir, "rev-parse", "--show-toplevel")
