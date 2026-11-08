@@ -12,7 +12,46 @@ Status: pre-alpha.
 
 ## Install
 
-The harness needs Go 1.27 (see `go.mod`). Install it from source:
+The harness is a plugin for Claude Code and for Codex. The plugin installs the skill `harness`, the agent `reviewer` and the hooks of the host. The hooks act only in a git repository with `.harness.yaml` at its top level. In any other folder, they do nothing.
+
+The repository is private. Log in to GitHub once, so that the host can clone the plugin and the plugin can download the binary:
+
+```sh
+gh auth login
+gh auth setup-git
+```
+
+The plugin starts the binary through `bin/harness`, which runs `dist/harness-OS-ARCH` of the plugin folder. When that binary is missing:
+
+- A command downloads the binary of release `v<plugin version>` with `gh`. Without `gh`, or when the download fails, it builds the binary with Go. Without both, it exits 127 and names the fix.
+- A hook never builds, because it must not block the session. It starts the `gh` download in the background and skips itself. A skipped hook prints `{}`, so the guard is off until the binary is there. When the download fails, the next hooks print its error, and a hook tries again after 10 minutes.
+- On a machine with Go and no `gh`, start `/harness:harness status` once (Codex: `$harness:harness status`). The skill runs `bin/harness version`, which builds the binary.
+
+The plugin puts no `harness` command on the `PATH`. The setup commands below and a gate such as `harness lint --json` need one: build it from source, or download the asset `harness-OS-ARCH` of release `v<plugin version>` (`gh release download v<plugin version> -R jorge07/harness -p harness-OS-ARCH`), make it executable and put it on the `PATH` as `harness`.
+
+Do not also run `harness host install` in a repository where you use the plugin: each hook then runs twice.
+
+### Claude Code
+
+```text
+/plugin marketplace add jorge07/harness
+/plugin install harness@harness
+```
+
+From a shell, the same steps are `claude plugin marketplace add jorge07/harness` and `claude plugin install harness@harness`. Then run `/reload-plugins` or start a new session. Start a run with `/harness:harness <prompt>`.
+
+### Codex
+
+```sh
+codex plugin marketplace add jorge07/harness
+codex plugin add harness@harness
+```
+
+Open `/hooks` in Codex once and trust the harness hooks. Codex does not run a plugin hook that you did not trust. Start a run with `$harness:harness <prompt>`.
+
+### Build from source
+
+Use this path for a repository without the plugin, or to put `harness` on the `PATH`. The harness needs Go 1.27 (see `go.mod`):
 
 ```sh
 git clone https://github.com/jorge07/harness.git
@@ -22,6 +61,10 @@ make build                 # or: go build -o dist/harness ./cmd/harness
 make check                 # gofmt, go vet and go test
 ./dist/harness version
 ```
+
+Without the plugin, step 4 of the setup below writes the hooks into the repository.
+
+## Set up a repository
 
 The lint packs call external tools. Put them on the `PATH`:
 
@@ -34,8 +77,6 @@ The lint packs call external tools. Put them on the `PATH`:
 ```sh
 npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0
 ```
-
-## Set up a repository
 
 The config is `.harness.yaml` at the git top level. Run the commands below from the repository root.
 
@@ -69,7 +110,7 @@ The config is `.harness.yaml` at the git top level. Run the commands below from 
    go-test: go test ./...
    ```
 
-4. Install the hooks of the host. The command merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key.
+4. Skip this step when you use the plugin: the plugin installs the hooks. Without the plugin, install the hooks of the host. The command merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key.
 
    ```console
    $ harness host install --host claude
@@ -81,7 +122,7 @@ The config is `.harness.yaml` at the git top level. Run the commands below from 
    ...
    ```
 
-5. Commit `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and the host config. Add `.harness/` to `.gitignore`: it holds the run folders.
+5. Commit `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and the host config of step 4, if you wrote one. Add `.harness/` to `.gitignore`: it holds the run folders.
 
 An example `.harness.yaml`. `harness config` prints the effective config, and an unknown key is an error:
 

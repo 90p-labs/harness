@@ -3,6 +3,7 @@ package harness
 import (
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,7 +20,12 @@ const (
 	phaseNoneMarker  = "[*]"
 	diagramBlockWant = 1
 	lintHeading      = "\n### Lint packs\n"
+	readmeFile       = "README.md"
+	installHeading   = "\n## Install\n"
+	subHeading       = "### "
 )
+
+var installPaths = []string{"Claude Code", "Codex", "Build from source"}
 
 var (
 	edgeLine     = regexp.MustCompile(`^\s*(\S+) --> (\S+): (\S+)(?: \[(.+)\])?$`)
@@ -130,6 +136,27 @@ func TestDesignLintRulesMatchCatalogue(t *testing.T) {
 		if !shipped[id] {
 			t.Errorf("DESIGN.md rule %s is not in the catalogue", id)
 		}
+	}
+}
+
+func TestReadmeInstallOrder(t *testing.T) {
+	raw, err := os.ReadFile(readmeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, found := strings.Cut(string(raw), installHeading)
+	if !found {
+		t.Fatalf("%s has no Install section", readmeFile)
+	}
+	section, _, _ := strings.Cut(rest, nextHeading)
+	var got []string
+	for _, line := range strings.Split(section, "\n") {
+		if title, ok := strings.CutPrefix(line, subHeading); ok {
+			got = append(got, title)
+		}
+	}
+	if !slices.Equal(got, installPaths) {
+		t.Errorf("Install subsections = %q, want %q", got, installPaths)
 	}
 }
 

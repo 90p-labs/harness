@@ -890,6 +890,17 @@ The tool kind in the payload is `shell`, `edit`, `write`, `read`, `search`, `age
 
 `harness host install --host H` merges the hook template into `.claude/settings.json` or `.codex/hooks.json`. With no `--host`, it detects the host. The variable `CLAUDECODE` means `claude`, and `CODEX_SANDBOX` or `CODEX_SANDBOX_NETWORK_DISABLED` means `codex`. Codex sets these two only in its sandbox, so the `.codex/` folder is the normal Codex signal. The folders `.claude/` and `.codex/` count only when no variable names a host. Zero or two hosts stop the command with exit 2 and the reason. It keeps every other key and every hook that is not from the harness. A harness hook is the command `harness hook` or a command that starts with `harness hook `. A second run changes nothing. It writes a temporary file and renames it, keeps the mode of an existing file (0644 for a new file), and keeps `&` and `<` as they are. The templates are embedded in the install package as `claude.json` and `codex.json`. `harness host capabilities` needs no git repo.
 
+The plugin is the second install path, for a user and not for one repository. `.claude-plugin/` and `.codex-plugin/` hold the manifests, and `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` list the plugin at the repository root. `hooks/hooks.json` (Claude Code) and `hooks/codex.json` (Codex) call `"${CLAUDE_PLUGIN_ROOT}/bin/harness" hook --host H <hook>` for each event of the codec. A test in the codec package reads the two plugin files and the two install templates. Each file must hold one hook for each event of `Capabilities()`, under the host event name of that hook.
+
+The launcher `bin/harness` rules:
+
+- A hook acts only in a git repository with `.harness.yaml` at its top level, from `git rev-parse --show-toplevel` in the working folder. Elsewhere it prints `{}` and exits 0. A repository-local `host install` opts in by its hooks, so the binary still fails closed outside git.
+- It runs `dist/harness-OS-ARCH` of the plugin folder when it exists.
+- A command with no binary downloads the asset `harness-OS-ARCH` of release `v<version>` (from `.claude-plugin/plugin.json`) with `gh`. Then it builds with Go. With neither, it exits 127 with the fix.
+- A hook with no binary never builds. It starts the `gh` download in the background under a lock (a lock older than 10 minutes is stale), prints `{}` and names the cause on stderr. A failed download leaves its error in `dist/.download.failed`. Each hook then prints that error with no new download, until the file is older than 10 minutes.
+
+A release is a `v*` tag. The workflow `release.yml` stops when the tag is not `v` plus the version of both manifests. Then it runs `make dist`, which builds `harness-OS-ARCH` for darwin and linux on amd64 and arm64, and publishes the four binaries.
+
 ```mermaid
 classDiagram
     class Codec {
