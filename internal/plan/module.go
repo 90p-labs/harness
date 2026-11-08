@@ -9,7 +9,9 @@ import (
 	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
 	"github.com/jorge07/harness/internal/plan/application/query/markdiagram"
 	"github.com/jorge07/harness/internal/plan/domain"
+	"github.com/jorge07/harness/internal/plan/infrastructure/gitdiff"
 	"github.com/jorge07/harness/internal/plan/infrastructure/mermaid"
+	"github.com/jorge07/harness/internal/plan/infrastructure/reviewplugin"
 	"github.com/jorge07/harness/internal/plan/ui/cli"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
@@ -18,6 +20,10 @@ const tracerName = "github.com/jorge07/harness/internal/plan"
 
 func NewDiagram() markdiagram.Handler {
 	return markdiagram.NewHandler(mermaid.Parser{}, otel.Tracer(tracerName))
+}
+
+func NewReviewPlugin(worktree string, proofs domain.ProofReader, defaultBranch func(ctx context.Context) (string, error)) shareddomain.Plugin {
+	return reviewplugin.New(worktree, gitdiff.Reader{}, proofs, defaultBranch)
 }
 
 func NewModule(bus shareddomain.Dispatcher, worktree string) cli.Handlers {

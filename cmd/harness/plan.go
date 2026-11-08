@@ -46,7 +46,7 @@ func newDiagramCommand() *cobra.Command {
 }
 
 func planPath(worktree, runID string) string {
-	return filepath.Join(worktree, filepath.FromSlash(domain.PlanFile(runID)))
+	return filepath.Join(worktree, filepath.FromSlash(shareddomain.RunPlanFile(runID)))
 }
 
 func activePlan(ctx context.Context, flags *pflag.FlagSet) (query checkplan.Query, err error) {

@@ -32,16 +32,9 @@ func hooksWith(bus *recorder) pluginhooks.Hooks {
 	return pluginhooks.NewHooks(bus, worktree)
 }
 
-type payload struct {
-	Event  string `json:"event"`
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Reason string `json:"reason"`
-}
-
-func decode(t *testing.T, envelope plugindomain.Envelope) payload {
+func decode(t *testing.T, envelope plugindomain.Envelope) plugindomain.TransitionPayload {
 	t.Helper()
-	var p payload
+	var p plugindomain.TransitionPayload
 	if err := json.Unmarshal(envelope.Payload, &p); err != nil {
 		t.Fatalf("payload: %v", err)
 	}
@@ -71,7 +64,7 @@ func TestHooksBeforeDeny(t *testing.T) {
 		t.Fatalf("dispatched %d envelopes", len(plugin.got))
 	}
 	requireEnvelope(t, plugin.got[0], plugindomain.EventRunTransitionBefore, domain.PhaseWorking)
-	want := payload{Event: string(domain.EventSubmitPlan), From: string(domain.PhaseWorking), Reason: "why"}
+	want := plugindomain.TransitionPayload{Event: string(domain.EventSubmitPlan), From: string(domain.PhaseWorking), Reason: "why"}
 	if got := decode(t, plugin.got[0]); got != want {
 		t.Fatalf("payload = %+v, want %+v", got, want)
 	}
@@ -98,7 +91,7 @@ func TestHooksAfterEnvelope(t *testing.T) {
 		t.Fatalf("dispatched %d envelopes", len(plugin.got))
 	}
 	requireEnvelope(t, plugin.got[0], plugindomain.EventRunTransitionAfter, domain.PhaseNone)
-	want := payload{Event: string(domain.EventStart), From: string(domain.PhaseNone), To: string(domain.PhasePlanning), Reason: "go"}
+	want := plugindomain.TransitionPayload{Event: string(domain.EventStart), From: string(domain.PhaseNone), To: string(domain.PhasePlanning), Reason: "go"}
 	if got := decode(t, plugin.got[0]); got != want {
 		t.Fatalf("payload = %+v, want %+v", got, want)
 	}

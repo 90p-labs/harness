@@ -12,6 +12,7 @@ import (
 	"github.com/jorge07/harness/internal/run/application/command/transition"
 	"github.com/jorge07/harness/internal/run/application/query/status"
 	"github.com/jorge07/harness/internal/run/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
@@ -90,7 +91,7 @@ func Lines(s status.Status) []string {
 
 func hint(s status.Status) string {
 	if s.Phase == domain.PhasePlanning {
-		return fmt.Sprintf(planningHint, domain.PlanFile(s.ID))
+		return fmt.Sprintf(planningHint, shareddomain.RunPlanFile(s.ID))
 	}
 	return phaseHints[s.Phase]
 }
