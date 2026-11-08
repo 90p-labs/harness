@@ -16,6 +16,8 @@ const (
 	defaultTip = "main"
 )
 
+var errNoHead = errors.New("no commit yet")
+
 type ruleCase struct {
 	name string
 	call ToolCall
@@ -46,7 +48,14 @@ func baseContext() RuleContext {
 		Worktree:      testWork,
 		DefaultBranch: func() (string, error) { return defaultTip, nil },
 		AgentModels:   map[string]string{"explorer": "haiku", "worker": "sonnet"},
+		CommitChecked: func() (bool, error) { return true, nil },
 	}
+}
+
+func commitCheck(checked bool, err error) *RuleContext {
+	rc := baseContext()
+	rc.CommitChecked = func() (bool, error) { return checked, err }
+	return &rc
 }
 
 func focusCases() []ruleCase {
@@ -199,6 +208,16 @@ func ruleCases() map[string][]ruleCase {
 			{name: "arrow and accent", call: bash("git commit -m 'café " + arrow + " ok'")},
 			{name: "em dash in another command", call: bash("echo " + emDash)},
 			{name: "co author word in prose", call: bash("git commit -m 'drop the co-authored trailer'")},
+		},
+		RuleCommitsChecked: {
+			{name: "push without a check", call: bash("git push origin feat/x"), rc: commitCheck(false, nil), deny: true, step: "harness verify --commits"},
+			{name: "deny names the way out with no gates", call: bash("git push origin feat/x"), rc: commitCheck(false, nil), deny: true, step: "guard.disabled"},
+			{name: "pr create without a check", call: bash("gh pr create --draft"), rc: commitCheck(false, nil), deny: true, step: "harness verify --commits"},
+			{name: "push after a launcher", call: bash("env FOO=1 git -C sub push"), rc: commitCheck(false, nil), deny: true, step: "harness verify --commits"},
+			{name: "push without a head", call: bash("git push"), rc: commitCheck(false, errNoHead), deny: true, step: "commit, then run harness verify --commits"},
+			{name: "push with a check", call: bash("git push origin feat/x"), rc: commitCheck(true, nil)},
+			{name: "pr create with a check", call: bash("gh pr create --draft"), rc: commitCheck(true, nil)},
+			{name: "other commands never ask", call: bash("git status && gh pr view 3"), rc: commitCheck(false, errNoHead)},
 		},
 		RuleAgentModelRouting: {
 			{name: "explorer without model", call: agentOf("Explore", ""), deny: true, step: "haiku"},

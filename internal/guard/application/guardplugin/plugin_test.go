@@ -61,6 +61,7 @@ func deps(stop domain.StopDecider) guardplugin.Deps {
 		ReadFile:      os.ReadFile,
 		DefaultBranch: func(context.Context, string) (string, error) { return "main", nil },
 		Stop:          stop,
+		CommitChecked: func(context.Context, string) (bool, error) { return true, nil },
 		Models:        map[shareddomain.Host]map[string]string{},
 		Meter:         metricnoop.NewMeterProvider().Meter("test"),
 	}
@@ -138,16 +139,16 @@ func TestGuardPluginNames(t *testing.T) {
 			t.Errorf("%s subscribes to %v, want only %s", p.Name(), p.Subscribes(), event)
 		}
 	}
-	if len(want) != 12 || !slices.Equal(got, want) {
-		t.Fatalf("names = %v, want the 12 %v", got, want)
+	if len(want) != 13 || !slices.Equal(got, want) {
+		t.Fatalf("names = %v, want the 13 %v", got, want)
 	}
 }
 
 func TestGuardDisabled(t *testing.T) {
 	plugins := build(t, []string{domain.RuleGitNoForce, domain.RuleStopHoldsTurn}, deps(&fakeStop{}))
 
-	if len(plugins) != 10 {
-		t.Fatalf("plugins = %d, want 10", len(plugins))
+	if len(plugins) != 11 {
+		t.Fatalf("plugins = %d, want 11", len(plugins))
 	}
 	for _, p := range plugins {
 		if p.Name() == pluginPrefix+domain.RuleGitNoForce || p.Name() == pluginPrefix+domain.RuleStopHoldsTurn {
@@ -161,6 +162,50 @@ func TestGuardDisabled(t *testing.T) {
 	_, err := guardplugin.Plugins([]string{domain.RuleGitNoForce, "no-such-rule"}, deps(&fakeStop{}))
 	if err == nil || !strings.Contains(err.Error(), "no-such-rule") {
 		t.Fatalf("error = %v, want one naming no-such-rule", err)
+	}
+}
+
+func TestCommitsCheckedRule(t *testing.T) {
+	var asked int
+	var askedDir string
+	checked, checkErr := false, error(nil)
+	d := deps(&fakeStop{})
+	d.CommitChecked = func(_ context.Context, dir string) (bool, error) {
+		asked++
+		askedDir = dir
+		return checked, checkErr
+	}
+	bus := newBus(build(t, nil, d))
+	denyPrefix := pluginPrefix + domain.RuleCommitsChecked + ": "
+
+	for _, command := range []string{"git push origin feat/x", "gh pr create --draft --title t"} {
+		cwd := t.TempDir()
+		v := dispatch(t, bus, bash(t, cwd, command))
+		if v.Kind != shareddomain.VerdictDeny || !strings.HasPrefix(v.Reason, denyPrefix) || !strings.Contains(v.Reason, "harness verify --commits") {
+			t.Errorf("%q without a check = %+v, want a deny from commits-checked", command, v)
+		}
+		if askedDir != cwd {
+			t.Errorf("%q asked the check for %q, want the tool call dir %q", command, askedDir, cwd)
+		}
+	}
+
+	checkErr = errors.New("no commit yet")
+	v := dispatch(t, bus, bash(t, t.TempDir(), "git push origin feat/x"))
+	if v.Kind != shareddomain.VerdictDeny || !strings.Contains(v.Reason, "commit, then run harness verify --commits") {
+		t.Errorf("push without a HEAD = %+v, want the commit next step", v)
+	}
+
+	checked, checkErr = true, nil
+	for _, command := range []string{"git push origin feat/x", "gh pr create --draft --title t"} {
+		if v := dispatch(t, bus, bash(t, t.TempDir(), command)); v.Kind != shareddomain.VerdictAllow {
+			t.Errorf("%q with a check = %+v, want allow", command, v)
+		}
+	}
+
+	asked = 0
+	dispatch(t, bus, bash(t, t.TempDir(), "git status"))
+	if asked != 0 {
+		t.Errorf("git status asked the commit check %d times, want 0", asked)
 	}
 }
 
@@ -347,7 +392,7 @@ func TestDefaultBranchOverride(t *testing.T) {
 	})
 
 	t.Run("configured value skips git", func(t *testing.T) {
-		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{})
+		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil })
 		if err != nil {
 			t.Fatalf("new plugins: %v", err)
 		}

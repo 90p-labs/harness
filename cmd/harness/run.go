@@ -60,11 +60,19 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	}
 	key := domain.RunKey{Repo: repo, Worktree: worktree}
 	guards, err := guard.NewPlugins(cfg.Guard.Disabled, cfg.Git.DefaultBranch, modelsByHost(cfg.Roles), worktree,
-		stopAdapter{cfg: cfg, commonDir: commonDir, key: key})
+		stopAdapter{cfg: cfg, commonDir: commonDir, key: key},
+		commitCheckAdapter{cfg: cfg}.Passed)
 	if err != nil {
 		return environment{}, err
 	}
-	bus := eventbus.NewBus(append(plugins, guards...), otel.GetTracerProvider(), otel.GetMeterProvider())
+	review := planmodule.NewReviewPlugin(worktree, proofAdapter{flags: flags, cfg: cfg, commonDir: commonDir, key: key},
+		func(ctx context.Context) (string, error) {
+			if cfg.Git.DefaultBranch != "" {
+				return cfg.Git.DefaultBranch, nil
+			}
+			return git.DefaultBranch(ctx, worktree)
+		})
+	bus := eventbus.NewBus(append(append(plugins, guards...), review), otel.GetTracerProvider(), otel.GetMeterProvider())
 	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus}, nil
 }
 

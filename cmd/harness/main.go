@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -45,7 +47,10 @@ func usageArgs(check cobra.PositionalArgs) cobra.PositionalArgs {
 var version = "dev"
 
 func main() {
-	os.Exit(run(context.Background(), os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -90,6 +95,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().String(config.FlagConfig, "", "path of the config file")
 	root.PersistentFlags().String(config.FlagStateDSN, "", "state database DSN")
 	root.AddCommand(newConfigCommand(), newRunCommand(root.PersistentFlags()), newPlanCommand(root.PersistentFlags()), newDiagramCommand(), newHostCommand(root.PersistentFlags()))
+	root.AddCommand(newVerifyCommand(root.PersistentFlags()), newGatesCommand(root.PersistentFlags()))
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",

@@ -20,6 +20,7 @@ func NewPlugins(
 	models map[shareddomain.Host]map[string]string,
 	worktree string,
 	stop domain.StopDecider,
+	commitChecked func(ctx context.Context, dir string) (bool, error),
 ) ([]shareddomain.Plugin, error) {
 	resolve := git.DefaultBranch
 	if defaultBranch != "" {
@@ -29,6 +30,7 @@ func NewPlugins(
 		ReadFile:      os.ReadFile,
 		DefaultBranch: resolve,
 		Stop:          stop,
+		CommitChecked: commitChecked,
 		Models:        models,
 		Worktree:      worktree,
 		Meter:         otel.Meter(instrumentationName),

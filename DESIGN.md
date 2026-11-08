@@ -210,6 +210,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `shell-write-source` | `tool.before` | A shell write to a source file |
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
 | `agent-model-routing` | `tool.before` | An agent call whose model differs from the role table of the host |
+| `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
 
 Event kinds:
@@ -452,7 +453,8 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
 | `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
-| `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` |
+| `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |
+| `gates` | empty list | A list of gates; each gate is valid and its id is unique, and an error names the gate |
 
 `execplugin.FromConfig` checks the plugin event names and builds the exec plugins. The host constants live in `internal/shared/domain`, so the envelope and the role table use one set.
 
@@ -581,7 +583,9 @@ Commands:
 - `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
 - `harness gates init` detects the toolchain (Go, pnpm, npm, Biome) and writes the `gates` key. It refuses to change an existing key.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
-- A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`.
+- With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
+- A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
+- A veto stops at the first deny, and `guard.commits-checked` sorts first. A test of another rule disables `commits-checked`.
 - The `GateSource` port adds one gate for each criterion of the active plan, with the id `criterion-N`. Each criterion gets its own evidence record.
 
 Before the review, an in-process plugin on `run.transition.before` verifies the trace of the plan against the branch. The pure function `VerifyTrace` checks these rules:
