@@ -265,7 +265,7 @@ func SrcRoots(tree Tree, _ Graph, settings Settings) []Violation {
 		switch {
 		case !nested && !slices.Contains(settings.DDD.SrcFiles, name):
 			found = append(found, Violation{File: file})
-		case nested && !slices.Contains(allowed, name) && !seen[name]:
+		case nested && !slices.Contains(allowed, name) && !seen[name] && slices.Contains(scriptExts, path.Ext(file)):
 			seen[name] = true
 			found = append(found, Violation{File: path.Join(sourceFolder, name)})
 		}
