@@ -39,7 +39,8 @@ func newHostCommand(flags *pflag.FlagSet) *cobra.Command {
 }
 
 func asUsageError(err error) error {
-	if errors.Is(err, hostcli.ErrUnknownHost) || errors.Is(err, hostdomain.ErrUnknownHook) {
+	if errors.Is(err, hostcli.ErrUnknownHost) || errors.Is(err, hostdomain.ErrUnknownHook) ||
+		errors.Is(err, hostdomain.ErrNoHost) || errors.Is(err, hostdomain.ErrManyHosts) {
 		return usageError{err}
 	}
 	return err

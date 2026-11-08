@@ -71,6 +71,34 @@ func TestHostCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("install with no --host asks the handler to detect the host", func(t *testing.T) {
+		installed = nil
+
+		if _, err := run(t, handlers, "install"); err != nil {
+			t.Fatal(err)
+		}
+		if len(installed) != 1 || installed[0] != "" {
+			t.Fatalf("installed = %q, want one empty host", installed)
+		}
+	})
+
+	t.Run("install returns the detection refusal", func(t *testing.T) {
+		refusing := handlers
+		refusing.Install = func(context.Context, shareddomain.Host) (string, error) {
+			return "", hostdomain.ErrManyHosts
+		}
+
+		if _, err := run(t, refusing, "install"); !errors.Is(err, hostdomain.ErrManyHosts) {
+			t.Fatalf("err = %v, want ErrManyHosts", err)
+		}
+	})
+
+	t.Run("capabilities still needs --host", func(t *testing.T) {
+		if _, err := run(t, handlers, "capabilities"); err == nil {
+			t.Fatal("capabilities ran with no --host")
+		}
+	})
+
 	t.Run("capabilities prints yes and no for each event", func(t *testing.T) {
 		out, err := run(t, handlers, "capabilities", "--host", "codex")
 		if err != nil {
