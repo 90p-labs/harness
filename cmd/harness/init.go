@@ -151,7 +151,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		fmt.Fprint(out, line)
 	}
 
-	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath, Manifest: lintdomain.ManifestFile}, env.bus).
+	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintdomain.BaselinePath, Manifest: lintdomain.ManifestFile}, env.bus).
 		Handle(ctx, initgates.Command{Dir: worktree})
 	switch {
 	case errors.Is(err, gatedomain.ErrGatesExist):
@@ -182,11 +182,11 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 	if packs == "" {
 		fmt.Fprint(out, baselineSkippedLine)
 	} else {
-		kept, err := lint.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintmodule.BaselinePath})
+		kept, err := lint.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintdomain.BaselinePath})
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, baselineFormat, lintmodule.BaselinePath, kept)
+		fmt.Fprintf(out, baselineFormat, lintdomain.BaselinePath, kept)
 	}
 	path, err := hostHandlers.Install(ctx, agentHost)
 	if err != nil {

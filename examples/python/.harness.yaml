@@ -24,7 +24,7 @@ gates:
     paths: &python-inputs ["**/*.py", "**/*.pyi", "**/py.typed", "tests/**", pyproject.toml, uv.lock, .python-version, compose.yaml]
   - id: lint
     run: harness lint --json
-    baseline: .harness-baseline/lint.json
+    baseline: .harness-lint/baseline.json
   - id: lint-canaries
     run: harness lint canaries
   - id: py-test

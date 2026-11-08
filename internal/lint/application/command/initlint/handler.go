@@ -2,7 +2,9 @@ package initlint
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -40,8 +42,15 @@ func (h Handler) Handle(ctx context.Context, cmd Command) error {
 	if err != nil {
 		return err
 	}
+	_, err = os.Stat(filepath.Join(cmd.Dir, domain.OldBaselinePath))
+	switch {
+	case err == nil:
+		return domain.ErrOldBaseline
+	case !errors.Is(err, fs.ErrNotExist):
+		return err
+	}
 	lintDir := filepath.Join(cmd.Dir, domain.LintDir)
-	if err := os.RemoveAll(lintDir); err != nil {
+	if err := clearKeepingBaseline(lintDir); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(lintDir, dirMode); err != nil {
@@ -53,4 +62,20 @@ func (h Handler) Handle(ctx context.Context, cmd Command) error {
 		}
 	}
 	return os.WriteFile(filepath.Join(lintDir, domain.VersionFile), []byte(h.version), fileMode)
+}
+
+func clearKeepingBaseline(lintDir string) error {
+	entries, err := os.ReadDir(lintDir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Name() == domain.BaselineFile {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(lintDir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }

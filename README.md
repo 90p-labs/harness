@@ -92,21 +92,21 @@ $ harness init --host claude
 lint packs: wrote ddd
 gates: wrote node-typecheck, node-test, lint
 lint init: wrote .harness-lint
-lint baseline: wrote .harness-baseline/lint.json (3 findings, run harness lint to see them)
+lint baseline: wrote .harness-lint/baseline.json (3 findings, run harness lint to see them)
 host: wrote /home/dev/shop/.claude/settings.json
 ```
 
-The baseline keeps the findings that exist today, so the `lint` gate fails only on new ones. Run `harness lint` to see them. Commit the host config .claude/settings.json (or `.codex/hooks.json`) with `.harness.yaml`, `.harness-lint/` and `.harness-baseline/`, so each clone gets the hooks.
+The baseline keeps the findings that exist today, so the `lint` gate fails only on new ones. Run `harness lint` to see them. Commit the host config .claude/settings.json (or `.codex/hooks.json`) with `.harness.yaml` and `.harness-lint/`, so each clone gets the hooks.
 
 A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. With no pack, it skips the baseline. With no gate to write, it prints `gates: none detected` and writes no `gates` key. An empty `gates` or `setup` list counts as absent. When it chooses packs but the `gates` key holds a gate, it stops before it writes: set `lint.packs` and the `lint` gate by hand, or remove the `gates` key. Without a lint engine on the `PATH`, it stops at the baseline step: install the engine and run it again. After a full run, do step 5 below.
 
 ### Step by step
 
 1. Set the lint packs first, if you use them, for example `lint: {packs: [ddd]}`. `gates init` adds the lint gate only when `lint.packs` is set.
-2. Run `harness lint init` to write the engine files of the packs into `.harness-lint/`. Run `harness lint` to see the findings, and `harness lint baseline` to record them as the baseline. The lint gate fails only on a new `error` finding. A later `harness lint baseline` only removes the keys that no longer match, so the baseline only shrinks.
+2. Run `harness lint init` to write the engine files of the packs into `.harness-lint/`. Lint init keeps `baseline.json`. Run `harness lint` to see the findings, and `harness lint baseline` to record them as the baseline. The lint gate fails only on a new `error` finding. A later `harness lint baseline` only removes the keys that no longer match, so the baseline only shrinks.
 3. Run `harness gates init` to detect the gates. It reads the toolchain (Go, pnpm, npm, Biome) and the deploy plugins, and writes the `gates` key. It refuses to change an existing key.
 4. Skip this step when you use the plugin: the plugin installs the hooks. Else run `harness host install --host claude` (or `--host codex`). It merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key. `harness host capabilities --host codex` prints each host event and whether the host supports it.
-5. Commit `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and the host config, if you wrote one. Add `.harness/` to `.gitignore`: it holds the run folders.
+5. Commit `.harness.yaml`, `.harness-lint/` and the host config, if you wrote one. Add `.harness/` to `.gitignore`: it holds the run folders.
 
 An example `.harness.yaml`. `harness config` prints the effective config, and an unknown key is an error:
 
@@ -135,7 +135,7 @@ gates:
     run: go vet ./...
   - id: lint
     run: harness lint --json
-    baseline: .harness-baseline/lint.json
+    baseline: .harness-lint/baseline.json
   - id: go-test
     run: go test ./...
     paths: ["**/*.go", go.mod, go.sum]   # a docs change does not run the gate again

@@ -104,7 +104,7 @@ A team linter can feed the same lint report, baseline ratchet and gate `lint` as
 1. Write a pack folder, such as `lint/python/pack.yaml`. Each rule names a lint engine plugin as its `engine`, and its `scope` selects the files.
 2. Write an exec plugin on `lint.check`. It reads the rules and the files from the payload, runs the linter, and returns `{"verdict":"allow","findings":[...]}`. Each finding needs a rule id of the payload and a file that is relative to the repository.
 3. Register the plugin under `plugins:`, and add the pack folder to `lint.packs`, such as `./lint/python`. Set `timeout` above the start time of the linter. The default is 5 s.
-4. Run `harness lint init`, `harness lint` and `harness lint baseline`. Then add the gate `lint`, `harness lint --json` with the baseline `.harness-baseline/lint.json`.
+4. Run `harness lint init`, `harness lint` and `harness lint baseline`. Then add the gate `lint`, `harness lint --json` with the baseline `.harness-lint/baseline.json`.
 
 The harness calls a lint engine only when an active pack has a rule for it. A pack with only plugin rules needs no Biome, no oxlint and no Node.
 Run `harness lint init` again after each edit of the pack. The [Custom lint pack](../README.md#custom-lint-pack-and-lint-engine-plugin) section of the root README gives the contract.

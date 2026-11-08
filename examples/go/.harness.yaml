@@ -28,6 +28,6 @@ gates:
     needs: [go-fmt, go-vet]
   - id: lint
     run: harness lint --json
-    baseline: .harness-baseline/lint.json
+    baseline: .harness-lint/baseline.json
   - id: lint-canaries
     run: harness lint canaries

@@ -1,10 +1,12 @@
 package initlint_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jorge07/harness/internal/lint/application/command/initlint"
@@ -128,6 +130,32 @@ func TestLintInitVersion(t *testing.T) {
 		}
 	})
 
+	t.Run("a second init keeps the baseline", func(t *testing.T) {
+		dir := t.TempDir()
+		baseline := filepath.Join(dir, domain.BaselinePath)
+		stale := filepath.Join(dir, domain.LintDir, "oxlintrc.json")
+		want := []byte("{\"version\":1,\"findings\":[]}\n")
+		if err := os.MkdirAll(filepath.Dir(baseline), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		for file, content := range map[string][]byte{baseline: want, stale: []byte("{}")} {
+			if err := os.WriteFile(file, content, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if err := initlint.NewHandler(nil, lookup, nil, binaryVersion).Handle(context.Background(), initlint.Command{Dir: dir}); err != nil {
+			t.Fatal(err)
+		}
+
+		if got, err := os.ReadFile(baseline); err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("baseline = %q, err = %v, want %q", got, err, want)
+		}
+		if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale file stat err = %v, want not exist", err)
+		}
+	})
+
 	t.Run("a missing required pack writes nothing", func(t *testing.T) {
 		dir := t.TempDir()
 		needsDDD := func(name domain.PackName) (domain.Pack, error) {
@@ -158,4 +186,35 @@ func TestLintInitVersion(t *testing.T) {
 			t.Fatalf("VERSION must not exist, stat err = %v", statErr)
 		}
 	})
+}
+
+func TestLintInitLegacyBaseline(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, domain.OldBaselinePath)
+	version := filepath.Join(dir, domain.LintDir, domain.VersionFile)
+	for _, file := range []string{old, version} {
+		if err := os.MkdirAll(filepath.Dir(file), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte("v1.0.0"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := initlint.NewHandler(nil, lookup, nil, binaryVersion).Handle(context.Background(), initlint.Command{Dir: dir})
+
+	if !errors.Is(err, domain.ErrOldBaseline) {
+		t.Fatalf("err = %v, want ErrOldBaseline", err)
+	}
+	for _, part := range []string{domain.OldBaselinePath, domain.BaselinePath, ".harness.yaml"} {
+		if !strings.Contains(err.Error(), part) {
+			t.Errorf("err = %q, want it to name %s", err, part)
+		}
+	}
+	if _, statErr := os.Stat(old); statErr != nil {
+		t.Errorf("old baseline stat err = %v, want it kept", statErr)
+	}
+	if got := readVersion(t, dir); got != "v1.0.0" {
+		t.Errorf("VERSION = %q, want it unchanged", got)
+	}
 }

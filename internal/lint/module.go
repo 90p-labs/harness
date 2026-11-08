@@ -27,8 +27,6 @@ import (
 
 const (
 	instrumentationName = "github.com/jorge07/harness/internal/lint"
-
-	BaselinePath = ".harness-baseline/lint.json"
 )
 
 type Handlers struct {

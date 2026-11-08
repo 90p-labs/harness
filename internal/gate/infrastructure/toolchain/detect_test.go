@@ -138,7 +138,7 @@ func TestDetectBrokenPackageJSON(t *testing.T) {
 }
 
 func TestDetectLintGates(t *testing.T) {
-	const baseline = ".harness-baseline/lint.json"
+	const baseline = ".harness-lint/baseline.json"
 	lintGate := func() domain.Gate {
 		g, err := domain.NewGate("lint", "harness lint --json", nil, 0, baseline)
 		if err != nil {

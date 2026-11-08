@@ -97,7 +97,7 @@ $ harness init --host claude
 lint packs: wrote nextjs, shadcn
 gates: wrote node-lint, lint
 lint init: wrote .harness-lint
-lint baseline: wrote .harness-baseline/lint.json (11 findings, run harness lint to see them)
+lint baseline: wrote .harness-lint/baseline.json (11 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
 $ cat .harness.yaml
 lint:
@@ -109,11 +109,11 @@ gates:
     run: pnpm run lint
   - id: lint
     run: harness lint --json
-    baseline: .harness-baseline/lint.json
+    baseline: .harness-lint/baseline.json
 ```
 
 The 11 findings include `next/no-lib-folder` on `src/lib`, because shadcn creates `src/lib/utils.ts`.
-Remove the files that this run wrote before the next step: `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and `.claude/`.
+Remove the files that this run wrote before the next step: `.harness.yaml`, `.harness-lint/` and `.claude/`.
 
 ### 2. Copy the example
 
@@ -159,7 +159,7 @@ $ harness init --host claude
 lint packs: kept nextjs, shadcn, ddd
 gates: kept
 lint init: wrote .harness-lint
-lint baseline: wrote .harness-baseline/lint.json (10 findings, run harness lint to see them)
+lint baseline: wrote .harness-lint/baseline.json (10 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
 $ harness lint canaries
 PASS ddd/src-roots lint/canaries/ddd-src-roots
@@ -172,7 +172,7 @@ PASS ddd/file-suffix lint/canaries/ddd-file-suffix
 The `ddd` pack reads the business root `src/contexts/`. The proof app has two contexts, `cart` and `catalog`, each with the folders `domain`, `application` and `infrastructure`, and the file `src/contexts/kernel.ts`.
 The baseline accepts the findings of the new app: the 11 findings of step 1 without the `lib` finding.
 `harness lint` gives no finding in `lint/canaries/`, so the canaries do not change the baseline.
-Commit `.harness.yaml`, `lint/`, `.harness-lint/`, `.harness-baseline/` and `.claude/`.
+Commit `.harness.yaml`, `lint/`, `.harness-lint/` and `.claude/`.
 
 ### 4. Verify two times
 
@@ -408,15 +408,15 @@ PASS node-build 5.954s
 
 ### Accept a finding
 
-Some findings are not worth a fix now. Accept them in the baseline `.harness-baseline/lint.json`.
+Some findings are not worth a fix now. Accept them in the baseline `.harness-lint/baseline.json`.
 The proof added `src/contexts/cart/domain/legacy-total.entity.ts`. It imports a path in `infrastructure`, which `ddd/domain-purity` forbids.
-The baseline only shrinks, so `harness lint baseline` does not add a finding. To accept the new finding, delete `.harness-baseline/lint.json` and write it again:
+The baseline only shrinks, so `harness lint baseline` does not add a finding. To accept the new finding, delete `.harness-lint/baseline.json` and write it again:
 
 ```console
-$ rm .harness-baseline/lint.json
+$ rm .harness-lint/baseline.json
 $ harness lint baseline
 $ git diff --stat
- .harness-baseline/lint.json |  7 +++++++
+ .harness-lint/baseline.json |  7 +++++++
  .harness.yaml               |  2 ++
  package.json                |  1 +
  pnpm-lock.yaml              | 13 +++++++++++--
@@ -443,8 +443,6 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 .
 ├── .claude
 │   └── settings.json        harness writes (host install), commit
-├── .harness-baseline
-│   └── lint.json            harness writes (lint baseline), commit
 ├── .harness-lint
 │   ├── biome
 │   │   ├── s02bf6b06
@@ -472,6 +470,7 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   │       ├── cn-classnames.grit   harness writes (lint init), commit
 │   │       └── no-raw-colors.grit   harness writes (lint init), commit
 │   ├── VERSION              harness writes (lint init), commit
+│   ├── baseline.json        harness writes (lint baseline), commit
 │   └── oxlintrc.json        harness writes (lint init), commit
 ├── lint
 │   ├── canaries

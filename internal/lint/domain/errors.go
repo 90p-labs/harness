@@ -8,6 +8,9 @@ var (
 	ErrStaleLintFiles = errors.New("lint files are stale, run harness lint init")
 	ErrEngineMissing  = errors.New("lint engine is missing")
 
+	ErrOldBaseline = errors.New("the lint baseline is at " + OldBaselinePath + ": run git mv " + OldBaselinePath + " " + BaselinePath +
+		", then set baseline: " + BaselinePath + " on the lint gate in .harness.yaml")
+
 	ErrUnknownEngine       = errors.New("unknown lint engine")
 	ErrEngineTaken         = errors.New("lint plugin name is taken by a default lint plugin")
 	ErrPrepareWithoutCheck = errors.New("a lint plugin on lint.prepare needs lint.check")
