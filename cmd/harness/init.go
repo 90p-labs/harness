@@ -41,12 +41,22 @@ const (
 	dependencyNext = "next"
 	dependencyNest = "@nestjs/core"
 
+	languagePHP     = "PHP"
+	languagePython  = "Python"
+	languageGo      = "Go"
+	composerJSON    = "composer.json"
+	pyprojectTOML   = "pyproject.toml"
+	requirementsTXT = "requirements.txt"
+	goMod           = "go.mod"
+
 	listSeparator = ", "
 	noItems       = "none"
 
 	packsWroteFormat    = "lint packs: wrote %s\n"
 	packsKeptFormat     = "lint packs: kept %s\n"
 	packsNoneLine       = "lint packs: none detected\n"
+	lintSetupPrefix     = "next: run the lint-setup skill"
+	lintSetupFormat     = lintSetupPrefix + " to set up the architecture rules for %s\n"
 	gatesWroteFormat    = "gates: wrote %s\n"
 	setupWroteFormat    = "setup: wrote %s\n"
 	gatesKeptLine       = "gates: kept\n"
@@ -55,6 +65,15 @@ const (
 	baselineSkippedLine = "lint baseline: skipped, no lint pack\n"
 	hostFormat          = "host: wrote %s\n"
 )
+
+var languagesWithNoPack = []struct {
+	name    string
+	markers []string
+}{
+	{languagePHP, []string{composerJSON}},
+	{languagePython, []string{pyprojectTOML, requirementsTXT}},
+	{languageGo, []string{goMod}},
+}
 
 var errGatesBeforePacks = errors.New("the gates key exists without lint.packs, so gates init cannot add the lint gate: " +
 	"set lint.packs and the lint gate in .harness.yaml by hand, or remove the gates key and run harness init again")
@@ -120,6 +139,13 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		}
 		fmt.Fprintf(out, packsWroteFormat, packs)
 	}
+	languages, err := detectLanguagesWithNoManifest(worktree)
+	if err != nil {
+		return err
+	}
+	for _, language := range languages {
+		fmt.Fprintf(out, lintSetupFormat, language)
+	}
 
 	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus).
 		Handle(ctx, initgates.Command{Dir: worktree})
@@ -161,6 +187,31 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 	}
 	_, err = fmt.Fprintf(out, hostFormat, path)
 	return err
+}
+
+func detectLanguagesWithNoManifest(dir string) ([]string, error) {
+	_, err := os.Stat(filepath.Join(dir, lintdomain.ManifestFile))
+	if err == nil {
+		return nil, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("read %s: %w", lintdomain.ManifestFile, err)
+	}
+	var found []string
+	for _, language := range languagesWithNoPack {
+		for _, marker := range language.markers {
+			_, err := os.Stat(filepath.Join(dir, marker))
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("read %s: %w", marker, err)
+			}
+			found = append(found, language.name)
+			break
+		}
+	}
+	return found, nil
 }
 
 func choosePacks(dir string) ([]string, error) {

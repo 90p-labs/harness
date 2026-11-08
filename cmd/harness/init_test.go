@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,6 +60,7 @@ func TestInitSetsUpARepository(t *testing.T) {
 	}
 	want := []string{
 		"lint packs: none detected",
+		fmt.Sprintf(strings.TrimSuffix(lintSetupFormat, "\n"), languageGo),
 		"gates: wrote go-fmt, go-vet, go-test",
 		"lint init: wrote .harness-lint",
 		"lint baseline: skipped, no lint pack",
@@ -116,7 +118,7 @@ func TestInitTwiceKeepsTheSetup(t *testing.T) {
 	code, stdout, stderr = execute(t, commandInit, initHostFlag, hostClaude)
 
 	if code != exitOK || stderr != "" {
-		t.Fatalf("second run: code = %d, stderr = %q", code, stderr)
+		t.Fatalf("second run: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
 	}
 	for _, line := range []string{"lint packs: kept observability\n", "gates: kept\n", "lint baseline: wrote .harness-baseline/lint.json\n"} {
 		if !strings.Contains(stdout, line) {
@@ -125,6 +127,19 @@ func TestInitTwiceKeepsTheSetup(t *testing.T) {
 	}
 	if second := readConfig(t, dir); second != first {
 		t.Errorf(".harness.yaml changed:\n%s\nwant:\n%s", second, first)
+	}
+}
+
+func TestInitWithAManifestNamesNoLanguage(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	writeRepoFile(t, dir, "go.mod", goModuleFile)
+	writeRepoFile(t, dir, lintdomain.ManifestFile, "pack: ddd\n")
+
+	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+	if code != exitOK || strings.Contains(stdout, lintSetupPrefix) {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want no lint-setup line with %s", code, stdout, stderr, lintdomain.ManifestFile)
 	}
 }
 
@@ -169,10 +184,26 @@ func TestInitRefusesAnUnknownHost(t *testing.T) {
 	}
 }
 
-func TestInitStopsAtAMissingEngine(t *testing.T) {
+func TestInitNamesEachLanguageWithNoBuiltInPack(t *testing.T) {
 	clearHarnessEnv(t)
 	dir := initRepo(t)
-	writeRepoFile(t, dir, componentsJSON, "{}\n")
+	writeRepoFile(t, dir, packageJSON, `{"dependencies":{"next":"16.0.0"}}`)
+	writeRepoFile(t, dir, "composer.json", "{}\n")
+	withOnlyGitOnPath(t)
+
+	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+	if code != exitRuntime || !strings.Contains(stderr, "biome") {
+		t.Fatalf("code = %d, stderr = %q, want %d and the biome error after the packs step", code, stderr, exitRuntime)
+	}
+	want := "lint packs: wrote " + packNextjs + "\n" + fmt.Sprintf(lintSetupFormat, languagePHP)
+	if !strings.HasPrefix(stdout, want) || strings.Count(stdout, lintSetupPrefix) != 1 {
+		t.Fatalf("stdout = %q, want it to start with %q and hold one lint-setup line", stdout, want)
+	}
+}
+
+func withOnlyGitOnPath(t *testing.T) {
+	t.Helper()
 	git, err := exec.LookPath(gitBinary)
 	if err != nil {
 		t.Fatal(err)
@@ -182,11 +213,21 @@ func TestInitStopsAtAMissingEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
+}
+
+func TestInitStopsAtAMissingEngine(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	writeRepoFile(t, dir, componentsJSON, "{}\n")
+	withOnlyGitOnPath(t)
 
 	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
 
 	if code != exitRuntime || !strings.Contains(stderr, "biome") {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and the biome error", code, stdout, stderr, exitRuntime)
+	}
+	if strings.Contains(stdout, lintSetupPrefix) {
+		t.Errorf("stdout = %q, want no lint-setup line for a TypeScript repo", stdout)
 	}
 	config := readConfig(t, dir)
 	if !strings.Contains(config, "- "+packShadcn) || !strings.Contains(config, "id: lint") {
