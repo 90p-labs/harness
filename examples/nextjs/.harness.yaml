@@ -1,0 +1,13 @@
+lint:
+  packs: [nextjs, shadcn]
+
+gates:
+  - id: node-typecheck
+    run: docker compose run --rm -T node sh -c 'pnpm install --frozen-lockfile && pnpm exec next typegen && pnpm exec tsc --noEmit'
+    paths: &node-inputs ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.mts", "**/*.cts", "**/*.json", .npmrc, pnpm-lock.yaml, pnpm-workspace.yaml, compose.yaml, Dockerfile]
+  - id: node-lint
+    run: docker compose run --rm -T node sh -c 'pnpm install --frozen-lockfile && pnpm run lint'
+    paths: *node-inputs
+  - id: lint
+    run: harness lint --json
+    baseline: .harness-baseline/lint.json

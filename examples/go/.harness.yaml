@@ -1,0 +1,10 @@
+gates:
+  - id: go-fmt
+    run: docker compose run --rm -T go sh -c 'out=$(gofmt -l . 2>&1); test -z "$out" || { echo "$out"; exit 1; }'
+    paths: ["**/*.go", go.mod, go.sum, compose.yaml]
+  - id: go-vet
+    run: docker compose run --rm -T go go vet ./...
+    paths: &go-inputs ["**/*.go", "**/testdata/**", go.mod, go.sum, go.work, go.work.sum, compose.yaml]
+  - id: go-test
+    run: docker compose run --rm -T go go test ./...
+    paths: *go-inputs
