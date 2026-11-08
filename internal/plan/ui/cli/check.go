@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jorge07/harness/internal/plan/application/command/renderview"
 	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
 	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
 	"github.com/jorge07/harness/internal/plan/domain"
@@ -23,14 +24,16 @@ var ErrNoPlanFile = errors.New("no plan file: give --file or start a run")
 type Handlers struct {
 	Check       checkplan.Handler
 	Submit      submitplan.Handler
+	View        renderview.Handler
 	DefaultPlan func(ctx context.Context) (checkplan.Query, error)
+	DefaultView func(ctx context.Context) (renderview.Command, error)
 }
 
 type Connect func(ctx context.Context) (Handlers, func() error, error)
 
 func NewCommand(connect Connect) *cobra.Command {
 	cmd := &cobra.Command{Use: commandPlan, Short: "Work with the plan"}
-	cmd.AddCommand(checkCommand(connect))
+	cmd.AddCommand(checkCommand(connect), viewCommand(connect))
 	return cmd
 }
 

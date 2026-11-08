@@ -543,6 +543,16 @@ The `ui` layer: a `ui` package imports its own `application` and `domain` packag
 - Without `--file` and with no active run, it exits 2 and prints the usage.
 - The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.
 
+`harness plan view [--file path] [--out path]` writes the plan as one self-contained HTML page, `plan.html` beside the plan by default. It works in every phase, prints the page path, and writes the page also for a plan with problems.
+
+- Without `--file`, it reads the plan of the active run, with its branch and its proofs. With no active run, it needs `--file`, else it exits 2 and prints the usage. With `--file`, it reads no proof, so each proof shows `not run`.
+- The view plugin reads the live round of the active run, so the page lists the same problems as `harness plan check`.
+- The branch base is the `## PR sequence` base of this run, else the default branch. A branch or proof read error gives no evidence and one page problem. The page still renders.
+- The page embeds mermaid, the fonts and rough.js. The renderer draws each Excalidraw sketch to SVG in Go.
+- A view plugin on `run.transition.after` writes the page when the new phase is `awaiting_approval`. A render error never denies.
+- The rule `diagram-required` refuses a plan with a missing diagram or sketch file.
+- The render records the span `plan.view` with `harness.plan.problems` and `harness.view.bytes`.
+
 An agent writes each diagram through `harness diagram`. It reads plain mermaid on stdin, with a `+`, `*` or `-` at the end of each new, changed or removed line. It prints the fenced block with the fixed `classDef` and `class` lines. It needs no git repo, and exits 2 with the reason on a refused input. The plan `diagram` rule refuses an unmarked or restyled diagram.
 
 ## Gates and lint packs

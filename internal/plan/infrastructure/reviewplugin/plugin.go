@@ -79,10 +79,8 @@ func deny(problems []domain.Problem) shareddomain.Verdict {
 }
 
 func (p Plugin) base(ctx context.Context, doc domain.Document) (string, error) {
-	for _, pr := range doc.PRs {
-		if pr.ThisRun && pr.Base != "" {
-			return pr.Base, nil
-		}
+	if base := doc.Base(); base != "" {
+		return base, nil
 	}
 	return p.defaultBranch(ctx)
 }

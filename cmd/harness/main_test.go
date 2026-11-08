@@ -767,6 +767,30 @@ func TestPlanCheckValidFixture(t *testing.T) {
 	}
 }
 
+func TestPlanViewWiring(t *testing.T) {
+	clearHarnessEnv(t)
+	body := validPlan(t)
+	dir := initRepo(t)
+	plan := filepath.Join(dir, "plan.md")
+	if err := os.WriteFile(plan, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := execute(t, commandPlan, "view", "--file", plan)
+
+	page := filepath.Join(dir, "plan.html")
+	if code != exitOK || strings.TrimSpace(stdout) != page || stderr != "" {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, page)
+	}
+	html, err := os.ReadFile(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(html), "<!doctype html>") || !strings.Contains(string(html), "ping") {
+		t.Errorf("the page is not the plan page: %.80q", html)
+	}
+}
+
 func TestHookGuardEndToEnd(t *testing.T) {
 	clearHarnessEnv(t)
 	dir := initRepo(t)
