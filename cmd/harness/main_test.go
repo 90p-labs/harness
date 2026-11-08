@@ -31,13 +31,62 @@ func clearOTLPEnv(t *testing.T) {
 
 func execute(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
+	return executeWithStdin(t, "", args...)
+}
+
+func executeWithStdin(t *testing.T, stdin string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
 	previous := version
 	version = testBuildVersion
 	t.Cleanup(func() { version = previous })
 
 	var out, errOut bytes.Buffer
-	code = run(context.Background(), args, &out, &errOut)
+	code = run(context.Background(), args, strings.NewReader(stdin), &out, &errOut)
 	return code, out.String(), errOut.String()
+}
+
+func TestDiagramCommand(t *testing.T) {
+	const (
+		defNew   = "    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n"
+		unmarked = "flowchart TD\n    a --> b\n"
+	)
+	clearOTLPEnv(t)
+	clearHarnessEnv(t)
+	t.Chdir(t.TempDir())
+
+	for _, tc := range []struct{ name, input, fenced string }{
+		{
+			"flowchart",
+			"flowchart TD\n    a[start] --> b[end] +\n",
+			"```mermaid\nflowchart TD\n" + defNew + "    a[start] -->|\"(new)\"| b[end]\n```\n",
+		},
+		{
+			"state diagram through the parser",
+			"stateDiagram-v2\n    [*] --> Ready\n    Ready --> Done: ping +\n    state Done +\n",
+			"```mermaid\nstateDiagram-v2\n" + defNew + "    [*] --> Ready\n    Ready --> Done: ping (new)\n    state Done\n    class Done new\n```\n",
+		},
+		{
+			"class diagram through the parser",
+			"classDiagram\n    class Pong +\n    Handler --> Pong +\n",
+			"```mermaid\nclassDiagram\n" + defNew + "    class Pong\n    Handler --> Pong : (new)\n    cssClass \"Pong\" new\n```\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := executeWithStdin(t, tc.input, commandDiagram)
+
+			if code != exitOK || stdout != tc.fenced || stderr != "" {
+				t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and %q", code, stdout, stderr, exitOK, tc.fenced)
+			}
+		})
+	}
+
+	t.Run("refuses an unmarked diagram", func(t *testing.T) {
+		code, stdout, stderr := executeWithStdin(t, unmarked, commandDiagram)
+
+		if code != exitUsage || stdout != "" || !strings.Contains(stderr, "error: diagram refused: line 1: no mark") {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and the refusal reason", code, stdout, stderr, exitUsage)
+		}
+	})
 }
 
 func TestVersion(t *testing.T) {
@@ -190,6 +239,7 @@ const (
 	validPlanFixture = "../../internal/plan/domain/testdata/valid.md"
 	brokenPlan       = "# Plan\n"
 	commandPlan      = "plan"
+	commandDiagram   = "diagram"
 	commandCheck     = "check"
 )
 

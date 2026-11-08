@@ -514,6 +514,8 @@ The `ui` layer: a `ui` package imports its own `application` and `domain` packag
 - Without `--file` and with no active run, it exits 2 and prints the usage.
 - The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.
 
+An agent writes each diagram through `harness diagram`. It reads plain mermaid on stdin, with a `+`, `*` or `-` at the end of each new, changed or removed line. It prints the fenced block with the fixed `classDef` and `class` lines. It needs no git repo, and exits 2 with the reason on a refused input. The plan `diagram` rule refuses an unmarked or restyled diagram.
+
 ## Gates and lint packs
 
 ### Gates

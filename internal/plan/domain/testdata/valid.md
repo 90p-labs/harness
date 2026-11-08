@@ -58,13 +58,13 @@ The domain holds the word that the query returns.
 
 ```mermaid
 classDiagram
-    class Pong {
-        Word string
-    }
-    class Handler {
-        Handle() Pong
-    }
+    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e
+    classDef changed stroke:#e0a84a,stroke-width:3px,color:#e0a84a
+    class Pong
+    class Handler
     Handler --> Pong
+    cssClass "Pong" new
+    cssClass "Handler" changed
 ```
 
 ### Ping query
@@ -77,7 +77,7 @@ The handler returns the pong and records the span.
 ```mermaid
 stateDiagram-v2
     [*] --> Ready
-    Ready --> Answered : ping
+    Ready --> Answered : ping (new)
     Answered --> [*]
 ```
 

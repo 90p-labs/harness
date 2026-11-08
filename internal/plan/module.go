@@ -7,6 +7,7 @@ import (
 
 	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
 	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
+	"github.com/jorge07/harness/internal/plan/application/query/markdiagram"
 	"github.com/jorge07/harness/internal/plan/domain"
 	"github.com/jorge07/harness/internal/plan/infrastructure/mermaid"
 	"github.com/jorge07/harness/internal/plan/ui/cli"
@@ -14,6 +15,10 @@ import (
 )
 
 const tracerName = "github.com/jorge07/harness/internal/plan"
+
+func NewDiagram() markdiagram.Handler {
+	return markdiagram.NewHandler(mermaid.Parser{}, otel.Tracer(tracerName))
+}
 
 func NewModule(bus shareddomain.Dispatcher, worktree string) cli.Handlers {
 	check := checkplan.NewHandler(mermaid.Parser{}, otel.Tracer(tracerName))

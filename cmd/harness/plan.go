@@ -13,6 +13,7 @@ import (
 	plancli "github.com/jorge07/harness/internal/plan/ui/cli"
 	"github.com/jorge07/harness/internal/run/application/query/status"
 	"github.com/jorge07/harness/internal/run/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
@@ -28,6 +29,19 @@ func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
 		return handlers, func() error { return nil }, nil
 	})
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
+	return cmd
+}
+
+func newDiagramCommand() *cobra.Command {
+	cmd := plancli.NewDiagramCommand(planmodule.NewDiagram())
+	runDiagram := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		err := runDiagram(cmd, args)
+		if errors.Is(err, shareddomain.ErrDiagramRefused) {
+			return usageError{err}
+		}
+		return err
+	}
 	return cmd
 }
 

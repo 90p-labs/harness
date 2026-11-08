@@ -45,10 +45,10 @@ func usageArgs(check cobra.PositionalArgs) cobra.PositionalArgs {
 var version = "dev"
 
 func main() {
-	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(context.Background(), os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	shutdown, err := telemetry.Setup(ctx, version)
 	reportTelemetry(stderr, err)
 	defer func() { reportTelemetry(stderr, shutdown(ctx)) }()
@@ -56,6 +56,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	root := newRootCommand()
 	// cobra reads os.Args[1:] when the args slice is nil.
 	root.SetArgs(append([]string{}, args...))
+	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	if failed, err := root.ExecuteContextC(ctx); err != nil {
@@ -88,7 +89,7 @@ func newRootCommand() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
 	root.PersistentFlags().String(config.FlagConfig, "", "path of the config file")
 	root.PersistentFlags().String(config.FlagStateDSN, "", "state database DSN")
-	root.AddCommand(newConfigCommand(), newRunCommand(root.PersistentFlags()), newPlanCommand(root.PersistentFlags()))
+	root.AddCommand(newConfigCommand(), newRunCommand(root.PersistentFlags()), newPlanCommand(root.PersistentFlags()), newDiagramCommand())
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",

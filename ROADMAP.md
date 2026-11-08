@@ -1,6 +1,6 @@
 # Roadmap
 
-Ten pull requests follow the skeleton (PR 0). Each PR branches from the one before it. Each later run copies its PR block into its own plan.
+Eleven pull requests follow the skeleton (PR 0). Each PR branches from the one before it. Each later run copies its PR block into its own plan.
 
 | PR | Branch | Scope | Fixes |
 |---|---|---|---|
@@ -9,6 +9,7 @@ Ten pull requests follow the skeleton (PR 0). Each PR branches from the one befo
 | 2 | `feat/config-viper` | viper config, role table for each host | K5 |
 | 3 | `feat/run-commands` | `harness run` commands on the store, spans for each transition | none |
 | 4 | `feat/plan-module` | plan parse and checks in any phase, persisted track, diagram check in Go, waves, trace | K7, K10, K13 |
+| 4b | `feat/marked-diagram` | `harness diagram` with `+ * -` marks, diagram mark rule | none |
 | 5 | `feat/host-adapters` | Claude Code and Codex hook codecs, declared capabilities | K8 |
 | 6 | `feat/guard-plugins` | built-in guard rules as in-process plugins | K2 |
 | 7 | `feat/gates-evidence` | YAML and criterion gates, baseline ratchet, evidence for each gate input hash, `commits-checked` rule, trace veto on review | K4, K6, K16 |
@@ -313,7 +314,7 @@ harness/
             └── run.go                      changed
 ```
 
-## PR 5: `feat/host-adapters`, based on `feat/plan-module`
+## PR 5: `feat/host-adapters`, based on `feat/marked-diagram`
 
 - Scope: Claude Code and Codex hook codecs, the `harness hook` and `harness host` commands, declared capabilities and fallbacks.
 - Fixes: K8.
@@ -864,10 +865,10 @@ harness/
 
 | # | Criterion | Test |
 |---|---|---|
-| 10.1 | `ParseMarks` binds each `%% change:` line to the next diagram line. An unknown change or a mark with no target is a `change-mark` problem with its line. | `go test ./internal/plan/domain -run TestParseMarks -count=1` |
+| 10.1 | `ParseMarks` in the shared domain reads the `class` and `cssClass` lines that `harness diagram` writes, with the line patterns of `CheckMarks`. It returns the mark of each node, and `CheckMarks` already refuses any other class name. | `go test ./internal/shared/domain -run TestParseMarks -count=1` |
 | 10.2 | The rule `diagram-required` refuses each row of the spec table when its diagram or its `.excalidraw` file is missing. | `go test ./internal/plan/domain -run TestDiagramRequiredRule -count=1` |
-| 10.3 | `StateChart` gives the golden flowchart for the marked fixture. It keeps the states and edges, and colors each marked state and edge. | `go test ./internal/plan/infrastructure/mermaid -run TestStateChart -count=1` |
-| 10.4 | `ApplyMarks` gives the golden class, ER and sequence diagrams, and leaves an unmarked block unchanged. | `go test ./internal/plan/infrastructure/mermaid -run TestApplyMarks -count=1` |
+| 10.3 | `StateChart` gives the golden flowchart for a state diagram with `class` lines. It keeps the states and edges, and colors each state and edge by its mark. | `go test ./internal/plan/infrastructure/mermaid -run TestStateChart -count=1` |
+| 10.4 | `StateChart` keeps the `classDef` and `class` lines of a diagram. A class, ER or sequence diagram passes to the page unchanged, because `harness diagram` already marks it. | `go test ./internal/plan/infrastructure/mermaid -run TestStateChartKeepsMarks -count=1` |
 | 10.5 | `RenderSVG` gives the golden SVG for a scene with each element kind. Two renders of the same scene are equal byte for byte. | `go test ./internal/plan/infrastructure/excalidraw -run TestRenderSVG -count=1` |
 | 10.6 | An element with `customData.change` gets the change stroke. An unknown element kind returns `ErrUnknownElement` with the element id. | `go test ./internal/plan/infrastructure/excalidraw -run TestRenderSVGChange -count=1` |
 | 10.7 | The page has no `src`, `href`, `url(` or `import` that points outside the page. | `go test ./internal/plan/infrastructure/view -run TestPageSelfContained -count=1` |
@@ -884,16 +885,16 @@ harness/
 
 Tasks:
 
-1. **Change marks and diagram rule.** Owned: `internal/plan/domain/change.go`, `internal/plan/domain/rule.go`, `internal/plan/domain/check.go` and their tests, `internal/plan/domain/testdata/`. Test first: `change_test.go` with `TestParseMarks`, which fails because `ParseMarks` does not exist. DoD: criteria 10.1 and 10.2. Depends on: none.
-2. **Diagram marks.** Owned: `internal/plan/infrastructure/mermaid/`. Test first: `flowchart_test.go` with `TestStateChart`, which fails because `StateChart` does not exist. DoD: criteria 10.3 and 10.4. Depends on: task 1.
+1. **Diagram marks and diagram rule.** Owned: `internal/shared/domain/diagram_marks.go`, `internal/plan/domain/rule.go`, `internal/plan/domain/check.go` and their tests, `internal/plan/domain/testdata/`. Test first: `diagram_marks_test.go` with `TestParseMarks`, which fails because `ParseMarks` does not exist. DoD: criteria 10.1 and 10.2. Depends on: none.
+2. **State flowchart.** Owned: `internal/plan/infrastructure/mermaid/`. Test first: `flowchart_test.go` with `TestStateChart`, which fails because `StateChart` does not exist. DoD: criteria 10.3 and 10.4. Depends on: task 1.
 3. **Excalidraw renderer.** Owned: `internal/plan/infrastructure/excalidraw/`, `./go.mod`, `./go.sum`. Test first: `render_test.go` with `TestRenderSVG`, which fails because the package does not exist. DoD: criteria 10.5 and 10.6. Depends on: task 1.
 4. **Page renderer.** Owned: `internal/plan/domain/view.go`, `internal/plan/infrastructure/view/`. Test first: `page_test.go` with `TestPageSelfContained`, which fails because the renderer does not exist. DoD: criteria 10.7 to 10.12. Depends on: tasks 2 and 3.
 5. **Command, plugin, CLI and decision record.** Owned: `internal/plan/application/command/renderview/`, `internal/plan/ui/cli/view.go`, `internal/plan/ui/cli/view_test.go`, `internal/plan/ui/viewplugin/`, `internal/plan/module.go`, `docs/adr/0010-plan-view-self-contained-html.md`, `./adr_test.go`, `./DESIGN.md`. Test first: `view_test.go` with `TestPlanViewCommand`, which fails because the command does not exist. DoD: criteria 10.13 to 10.17. Depends on: task 4.
 
 Commits:
 
-1. `feat: parse the change marks and check the required diagrams` (task 1)
-2. `feat: color the changed states, classes, entities and messages` (task 2)
+1. `feat: read the diagram marks and check the required diagrams` (task 1)
+2. `feat: draw the marked states as a flowchart` (task 2)
 3. `feat: render excalidraw scenes to SVG in Go` (task 3)
 4. `feat: render the plan as a self-contained page` (task 4)
 5. `feat: add harness plan view and render it for each approval` (task 5)
@@ -910,18 +911,19 @@ harness/
 │   └── adr/
 │       └── 0010-plan-view-self-contained-html.md   new
 └── internal/
+    ├── shared/
+    │   └── domain/
+    │       ├── diagram_marks.go                    changed
+    │       └── diagram_marks_test.go               changed
     └── plan/
         ├── module.go                               changed
         ├── domain/
-        │   ├── change.go                           new
-        │   ├── change_test.go                      new
         │   ├── check.go                            changed
         │   ├── check_test.go                       changed
         │   ├── rule.go                             changed
         │   ├── view.go                             new
         │   └── testdata/
-        │       ├── diagrams-missing.md             new
-        │       └── marked.md                       new
+        │       └── diagrams-missing.md             new
         ├── application/
         │   └── command/
         │       └── renderview/
@@ -939,13 +941,9 @@ harness/
         │   ├── mermaid/
         │   │   ├── flowchart.go                    new
         │   │   ├── flowchart_test.go               new
-        │   │   ├── marks.go                        new
-        │   │   ├── marks_test.go                   new
         │   │   └── testdata/
         │   │       ├── marked-state.mmd            new
-        │   │       ├── marked-state.golden         new
-        │   │       ├── marked-models.mmd           new
-        │   │       └── marked-models.golden        new
+        │   │       └── marked-state.golden         new
         │   └── view/
         │       ├── page.go                         new
         │       ├── page_test.go                    new
