@@ -38,6 +38,34 @@ func TestEnvelopeJSON(t *testing.T) {
 	}
 }
 
+func TestTransitionPhaseNames(t *testing.T) {
+	wire := map[string]string{
+		domain.PhasePlanning:         "planning",
+		domain.PhaseAwaitingApproval: "awaiting_approval",
+		domain.PhaseWorking:          "working",
+		domain.PhaseReviewing:        "reviewing",
+		domain.PhaseShipping:         "shipping",
+		domain.PhaseReleasing:        "releasing",
+		domain.PhaseObserving:        "observing",
+		domain.PhaseBlocked:          "blocked",
+		domain.PhaseDone:             "done",
+		domain.PhaseAbandoned:        "abandoned",
+	}
+	for phase, name := range wire {
+		encoded, err := json.Marshal(domain.TransitionPayload{To: phase})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(encoded, &decoded); err != nil {
+			t.Fatalf("unmarshal %s: %v", encoded, err)
+		}
+		if decoded["to"] != name {
+			t.Errorf("encoded %s, want to %q", encoded, name)
+		}
+	}
+}
+
 func TestVerdictJSON(t *testing.T) {
 	var verdict domain.Verdict
 	if err := json.Unmarshal([]byte(`{"verdict":"deny","reason":"no push","context":"c"}`), &verdict); err != nil {

@@ -1,19 +1,21 @@
 package domain
 
+import shareddomain "github.com/jorge07/harness/internal/shared/domain"
+
 type Phase string
 
 const (
 	PhaseNone             Phase = ""
-	PhasePlanning         Phase = "planning"
-	PhaseAwaitingApproval Phase = "awaiting_approval"
-	PhaseWorking          Phase = "working"
-	PhaseReviewing        Phase = "reviewing"
-	PhaseShipping         Phase = "shipping"
-	PhaseReleasing        Phase = "releasing"
-	PhaseObserving        Phase = "observing"
-	PhaseBlocked          Phase = "blocked"
-	PhaseDone             Phase = "done"
-	PhaseAbandoned        Phase = "abandoned"
+	PhasePlanning         Phase = shareddomain.PhasePlanning
+	PhaseAwaitingApproval Phase = shareddomain.PhaseAwaitingApproval
+	PhaseWorking          Phase = shareddomain.PhaseWorking
+	PhaseReviewing        Phase = shareddomain.PhaseReviewing
+	PhaseShipping         Phase = shareddomain.PhaseShipping
+	PhaseReleasing        Phase = shareddomain.PhaseReleasing
+	PhaseObserving        Phase = shareddomain.PhaseObserving
+	PhaseBlocked          Phase = shareddomain.PhaseBlocked
+	PhaseDone             Phase = shareddomain.PhaseDone
+	PhaseAbandoned        Phase = shareddomain.PhaseAbandoned
 )
 
 func (p Phase) HoldsTheTurn() bool {
