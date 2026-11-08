@@ -16,6 +16,8 @@ const (
 	eventPreToolUse    = "PreToolUse"
 	eventPostToolUse   = "PostToolUse"
 	eventSubagentStart = "SubagentStart"
+	eventStop          = "Stop"
+	eventSubagentStop  = "SubagentStop"
 
 	decisionBlock      = "block"
 	permissionDecision = "deny"
@@ -29,6 +31,8 @@ var eventNames = map[domain.HookName]string{
 	domain.HookPreToolUse:    eventPreToolUse,
 	domain.HookPostToolUse:   eventPostToolUse,
 	domain.HookSubagentStart: eventSubagentStart,
+	domain.HookStop:          eventStop,
+	domain.HookSubagentStop:  eventSubagentStop,
 }
 
 var ErrNoToolName = errors.New("no tool name")
