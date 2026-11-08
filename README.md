@@ -118,13 +118,37 @@ roles:
     claude: opus          # the guard denies an agent call on another model
 lint:
   packs: [ddd]
+verify:
+  parallel: 3             # at most 3 gates at the same time; the default 1 runs them in file order
 gates:
-  - id: go-test
-    run: go test ./...
-    paths: ["**/*.go", go.mod, go.sum]   # a docs change does not run the gate again
+  - id: go-fmt
+    run: test -z "$(gofmt -l .)"
+    paths: ["**/*.go"]
+  - id: go-vet
+    run: go vet ./...
   - id: lint
     run: harness lint --json
     baseline: .harness-baseline/lint.json
+  - id: go-test
+    run: go test ./...
+    paths: ["**/*.go", go.mod, go.sum]   # a docs change does not run the gate again
+    needs: [go-fmt, go-vet, lint]        # starts only when each need is PASS or CACHED
+  - id: e2e
+    run: make e2e
+    needs: [go-test]
+```
+
+`go-fmt`, `go-vet` and `lint` run in parallel. When `lint` fails, `go-test` and `e2e` do not run, and `harness verify` exits 1:
+
+```text
+PASS go-fmt 61ms
+PASS go-vet 1.4s
+FAIL lint 812ms
+SKIPPED go-test needs lint
+SKIPPED e2e needs go-test
+
+lint:
+<the last 4 KiB of the lint output>
 ```
 
 `DESIGN.md` lists every config key, every event and every guard rule.

@@ -77,6 +77,25 @@ func TestVerifyCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("a failed need skips the gates after it", func(t *testing.T) {
+		var closed bool
+		skipped := verify.Result{Failed: true, Lines: []verify.Line{
+			{Gate: "lint", Status: domain.StatusFail, Duration: time.Second, Tail: failedTail},
+			{Gate: "test", Status: domain.StatusSkipped, Need: "lint"},
+			{Gate: "e2e", Status: domain.StatusSkipped, Need: "test"},
+		}}
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+			Verify: func(context.Context) (verify.Result, error) { return skipped, nil },
+		}, &closed))
+
+		stdout, err := run(t, cmd)
+
+		want := "FAIL lint 1s\nSKIPPED test needs lint\nSKIPPED e2e needs test\n\nlint:\n" + failedTail + "\n"
+		if !errors.Is(err, cli.ErrGatesFailed) || stdout != want {
+			t.Fatalf("err = %v, stdout = %q, want ErrGatesFailed and %q", err, stdout, want)
+		}
+	})
+
 	t.Run("no gate is set", func(t *testing.T) {
 		var closed bool
 		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{

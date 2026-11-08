@@ -38,6 +38,7 @@ const (
 	keyGuardDisabled   = "guard.disabled"
 	keyDeployDisabled  = "deploy.disabled"
 	keyGitBranch       = "git.default_branch"
+	keyVerifyParallel  = "verify.parallel"
 
 	keyLiveEnvironment = "live.environment"
 	keyLiveRollback    = "live.rollback"
@@ -58,6 +59,7 @@ const (
 
 	defaultStateDSN = "sqlite:.harness/state.db"
 	defaultRounds   = 3
+	defaultParallel = 1
 )
 
 type Config struct {
@@ -69,6 +71,7 @@ type Config struct {
 	Deploy  Deploy              `mapstructure:"deploy"`
 	Git     Git                 `mapstructure:"git"`
 	Gates   []Gate              `mapstructure:"gates"`
+	Verify  Verify              `mapstructure:"verify"`
 	Lint    Lint                `mapstructure:"lint"`
 	Live    Live                `mapstructure:"live"`
 }
@@ -108,6 +111,11 @@ type Gate struct {
 	Paths    []string      `mapstructure:"paths"`
 	Timeout  time.Duration `mapstructure:"timeout"`
 	Baseline string        `mapstructure:"baseline"`
+	Needs    []string      `mapstructure:"needs"`
+}
+
+type Verify struct {
+	Parallel int `mapstructure:"parallel"`
 }
 
 type Guard struct {
@@ -201,6 +209,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyGuardDisabled, []any{})
 	v.SetDefault(keyDeployDisabled, []any{})
 	v.SetDefault(keyGitBranch, "")
+	v.SetDefault(keyVerifyParallel, defaultParallel)
 	v.SetDefault(keyLiveEnvironment, defaultLiveEnvironment)
 	v.SetDefault(keyLiveRollback, "")
 	v.SetDefault(keyLintDisabled, []any{})
@@ -230,6 +239,7 @@ func (c *Config) validate() error {
 		keyMaxReviewRounds: c.Run.MaxReviewRounds,
 		keyMaxLiveRounds:   c.Run.MaxLiveRounds,
 		keyMaxStopBlocks:   c.Run.MaxStopBlocks,
+		keyVerifyParallel:  c.Verify.Parallel,
 	} {
 		if value < 1 {
 			return fmt.Errorf("%s is %d, want 1 or more", key, value)

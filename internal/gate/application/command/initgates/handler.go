@@ -104,6 +104,7 @@ func (h Handler) propose(ctx context.Context, dir string) ([]domain.Gate, error)
 		if err != nil {
 			return nil, err
 		}
+		gate.Needs = proposal.Needs
 		gates = append(gates, gate)
 	}
 	return gates, nil

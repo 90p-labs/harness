@@ -33,7 +33,10 @@ const (
 	attrCached = attribute.Key("harness.gate.cached")
 )
 
-var errUnknownReportVersion = errors.New("unknown findings report version")
+var (
+	errUnknownReportVersion = errors.New("unknown findings report version")
+	errStopped              = errors.New("another gate failed with an error")
+)
 
 type GateBeforePayload struct {
 	Gate      string `json:"gate"`
@@ -48,9 +51,10 @@ type GateAfterPayload struct {
 }
 
 type Command struct {
-	Repo  string
-	Dir   string
-	Gates []domain.Gate
+	Repo     string
+	Dir      string
+	Gates    []domain.Gate
+	Parallel int
 }
 
 type Line struct {
@@ -58,6 +62,7 @@ type Line struct {
 	Status   domain.Status
 	Duration time.Duration
 	Tail     string
+	Need     string
 }
 
 type Result struct {
@@ -102,34 +107,104 @@ func NewHandler(
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) (Result, error) {
-	gates := cmd.Gates
 	if h.criteria != nil {
 		criterionGates, err := h.criteria.Gates(ctx)
 		if err != nil {
 			return Result{}, err
 		}
-		gates = slices.Concat(cmd.Gates, criterionGates)
+		cmd.Gates = slices.Concat(cmd.Gates, criterionGates)
 	}
-	return h.run(ctx, cmd.Repo, cmd.Dir, gates)
+	return h.HandleConfigured(ctx, cmd)
 }
 
 func (h Handler) HandleConfigured(ctx context.Context, cmd Command) (Result, error) {
-	return h.run(ctx, cmd.Repo, cmd.Dir, cmd.Gates)
-}
-
-func (h Handler) run(ctx context.Context, repo, dir string, gates []domain.Gate) (Result, error) {
-	var result Result
-	for _, gate := range gates {
-		line, err := h.runGate(ctx, repo, dir, gate)
-		if err != nil {
-			return Result{}, err
-		}
-		result.Lines = append(result.Lines, line)
-		if line.Status == domain.StatusFail || line.Status == domain.StatusVetoed {
-			result.Failed = true
-		}
+	lines, err := h.schedule(ctx, cmd)
+	if err != nil {
+		return Result{}, err
+	}
+	result := Result{Lines: lines}
+	for _, line := range lines {
+		result.Failed = result.Failed || !line.Status.Passed()
 	}
 	return result, nil
+}
+
+type finished struct {
+	index int
+	line  Line
+	err   error
+}
+
+func (h Handler) schedule(ctx context.Context, cmd Command) ([]Line, error) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+
+	gates := cmd.Gates
+	index := make(map[string]int, len(gates))
+	for i, gate := range gates {
+		index[gate.ID] = i
+	}
+	lines := make([]Line, len(gates))
+	done := make([]bool, len(gates))
+	started := make([]bool, len(gates))
+	results := make(chan finished)
+	slots := max(cmd.Parallel, 1)
+	running, remaining := 0, len(gates)
+	var firstErr error
+
+	for remaining > 0 {
+		for progress := true; progress; {
+			progress = false
+			for i, gate := range gates {
+				if started[i] || done[i] {
+					continue
+				}
+				need, blocked, ready := needState(gate, index, lines, done)
+				if blocked {
+					lines[i] = Line{Gate: gate.ID, Status: domain.StatusSkipped, Need: need}
+					done[i], progress = true, true
+					remaining--
+					continue
+				}
+				if !ready || running == slots || firstErr != nil {
+					continue
+				}
+				started[i] = true
+				running++
+				go func() {
+					line, err := h.runGate(ctx, cmd.Repo, cmd.Dir, gate)
+					results <- finished{index: i, line: line, err: err}
+				}()
+			}
+		}
+		if running == 0 {
+			break
+		}
+		f := <-results
+		running--
+		remaining--
+		done[f.index] = true
+		lines[f.index] = f.line
+		if f.err != nil && firstErr == nil {
+			firstErr = f.err
+			cancel(errStopped)
+		}
+	}
+	return lines, firstErr
+}
+
+func needState(gate domain.Gate, index map[string]int, lines []Line, done []bool) (need string, blocked, ready bool) {
+	ready = true
+	for _, need := range gate.Needs {
+		i := index[need]
+		switch {
+		case !done[i]:
+			ready = false
+		case !lines[i].Status.Passed():
+			return need, true, false
+		}
+	}
+	return "", false, ready
 }
 
 func (h Handler) runGate(ctx context.Context, repo, dir string, gate domain.Gate) (line Line, err error) {
@@ -168,6 +243,9 @@ func (h Handler) runGate(ctx context.Context, repo, dir string, gate domain.Gate
 
 	outcome, err := h.runner.Run(ctx, dir, gate)
 	if err != nil {
+		return Line{}, err
+	}
+	if err := context.Cause(ctx); errors.Is(err, errStopped) {
 		return Line{}, err
 	}
 	if gate.Baseline != "" {

@@ -227,6 +227,41 @@ func TestLoadGates(t *testing.T) {
 	}
 }
 
+func TestLoadGateConfig(t *testing.T) {
+	defaults, err := config.Load(flagSet(t), t.TempDir())
+	if err != nil {
+		t.Fatalf("load defaults: %v", err)
+	}
+	if defaults.Verify.Parallel != 1 {
+		t.Errorf("default verify.parallel = %d, want 1", defaults.Verify.Parallel)
+	}
+
+	got, err := load(t, `verify:
+  parallel: 3
+gates:
+  - id: lint
+    run: pnpm lint
+  - id: test
+    run: pnpm test
+    needs: [lint]
+`)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	want := []config.Gate{
+		{ID: "lint", Run: "pnpm lint"},
+		{ID: "test", Run: "pnpm test", Needs: []string{"lint"}},
+	}
+	if got.Verify.Parallel != 3 || !reflect.DeepEqual(got.Gates, want) {
+		t.Errorf("verify = %+v, gates = %+v, want parallel 3 and %+v", got.Verify, got.Gates, want)
+	}
+
+	_, err = load(t, "verify:\n  parallel: 0\n")
+	if err == nil || !strings.Contains(err.Error(), "verify.parallel") {
+		t.Errorf("parallel 0 error = %v, want one that names verify.parallel", err)
+	}
+}
+
 func TestLoadLint(t *testing.T) {
 	defaults := config.Lint{
 		Disabled:      []string{},

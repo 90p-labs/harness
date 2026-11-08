@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -65,12 +66,15 @@ func (fakeHasher) InputHash(_ context.Context, dir string, _ domain.Gate) (strin
 }
 
 type fakeRunner struct {
+	mu       sync.Mutex
 	passDirs map[string]bool
 	err      error
 	ranDirs  []string
 }
 
 func (f *fakeRunner) Run(_ context.Context, dir string, g domain.Gate) (domain.Outcome, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.ranDirs = append(f.ranDirs, dir+"#"+g.ID)
 	if f.err != nil {
 		return domain.Outcome{}, f.err
@@ -170,6 +174,23 @@ func TestVerifyCommits(t *testing.T) {
 	wantCheck := domain.CommitCheck{Repo: repo, HeadSHA: headSHA, Base: baseRef, Passed: true, At: fixedNow}
 	if !slices.Equal(f.checks.saved, []domain.CommitCheck{wantCheck}) {
 		t.Fatalf("saved = %+v, want %+v", f.checks.saved, wantCheck)
+	}
+}
+
+func TestHandleSharedSchedulerSkips(t *testing.T) {
+	const lintGate = "lint"
+	f := newFixture(nil, "/tmp/wt-b2b2b2", "/tmp/wt-"+headSHA)
+	cmd := command()
+	cmd.Gates = []domain.Gate{{ID: lintGate, Run: "lint"}, {ID: testGate, Run: "go test", Needs: []string{lintGate}}}
+	cmd.Parallel = 2
+
+	result, err := f.handler.Handle(context.Background(), cmd)
+
+	if err != nil || result.Commits[0].Passed || !result.Commits[1].Passed {
+		t.Fatalf("result = %+v, err = %v, want the test commit to fail and the fix to pass", result, err)
+	}
+	if slices.Contains(f.runner.ranDirs, "/tmp/wt-a1a1a1#"+testGate) {
+		t.Fatalf("ran = %q, want %s skipped after the failed lint", f.runner.ranDirs, testGate)
 	}
 }
 

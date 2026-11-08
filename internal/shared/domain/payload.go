@@ -72,6 +72,7 @@ type ProposedGate struct {
 	ID    string   `json:"id"`
 	Run   string   `json:"run"`
 	Paths []string `json:"paths,omitempty"`
+	Needs []string `json:"needs,omitempty"`
 }
 
 type ChartRenderPayload struct {

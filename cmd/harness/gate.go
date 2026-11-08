@@ -65,10 +65,12 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	initializer := gatemodule.NewInit(toolchain.Lint{Packs: env.cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus)
 	return gatecli.Handlers{
 		Verify: func(ctx context.Context) (verify.Result, error) {
-			return verifier.Handle(ctx, verify.Command{Repo: env.key.Repo, Dir: env.key.Worktree, Gates: gates})
+			return verifier.Handle(ctx, verify.Command{Repo: env.key.Repo, Dir: env.key.Worktree, Gates: gates, Parallel: env.cfg.Verify.Parallel})
 		},
 		VerifyCommits: func(ctx context.Context, base string) (verifycommits.Result, error) {
-			return commits.Handle(ctx, verifycommits.Command{Repo: env.key.Repo, Dir: env.key.Worktree, Base: base, Gates: gates})
+			return commits.Handle(ctx, verifycommits.Command{
+				Repo: env.key.Repo, Dir: env.key.Worktree, Base: base, Gates: gates, Parallel: env.cfg.Verify.Parallel,
+			})
 		},
 		Init: func(ctx context.Context) ([]gatedomain.Gate, error) {
 			return initializer.Handle(ctx, initgates.Command{Dir: env.key.Worktree})

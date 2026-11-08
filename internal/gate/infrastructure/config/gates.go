@@ -37,6 +37,7 @@ func Decode(cfg []sharedconfig.Gate) ([]domain.Gate, error) {
 		if err != nil {
 			return nil, err
 		}
+		gate.Needs = c.Needs
 		gates = append(gates, gate)
 	}
 	if err := domain.ValidateGates(gates); err != nil {
@@ -53,6 +54,7 @@ type gateEntry struct {
 	Paths    []string `yaml:"paths,omitempty"`
 	Timeout  string   `yaml:"timeout,omitempty"`
 	Baseline string   `yaml:"baseline,omitempty"`
+	Needs    []string `yaml:"needs,omitempty"`
 }
 
 func (Writer) HasGates(dir string) (bool, error) {
@@ -75,7 +77,7 @@ func (Writer) WriteGates(dir string, gates []domain.Gate) error {
 
 	entries := make([]gateEntry, len(gates))
 	for i, gate := range gates {
-		entries[i] = gateEntry{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Baseline: gate.Baseline}
+		entries[i] = gateEntry{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Baseline: gate.Baseline, Needs: gate.Needs}
 		if gate.Timeout != domain.DefaultTimeout {
 			entries[i].Timeout = gate.Timeout.Round(time.Millisecond).String()
 		}

@@ -93,6 +93,57 @@ func TestWriterKeepsExistingKeys(t *testing.T) {
 	}
 }
 
+func TestDecodeGateConfig(t *testing.T) {
+	got, err := gateconfig.Decode([]sharedconfig.Gate{
+		{ID: "format", Run: "pnpm format"},
+		{ID: "lint", Run: "pnpm lint"},
+		{ID: "test", Run: "pnpm test", Needs: []string{"format", "lint"}},
+	})
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	want := []domain.Gate{
+		{ID: "format", Run: "pnpm format", Timeout: domain.DefaultTimeout},
+		{ID: "lint", Run: "pnpm lint", Timeout: domain.DefaultTimeout},
+		{ID: "test", Run: "pnpm test", Timeout: domain.DefaultTimeout, Needs: []string{"format", "lint"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("gates = %+v, want %+v", got, want)
+	}
+
+	_, err = gateconfig.Decode([]sharedconfig.Gate{{ID: "test", Run: "x", Needs: []string{"lint"}}})
+	if !errors.Is(err, domain.ErrInvalidGate) || !strings.Contains(err.Error(), `gate "test"`) {
+		t.Errorf("unknown need error = %v, want invalid gate naming test", err)
+	}
+}
+
+func TestWriteGateConfig(t *testing.T) {
+	dir := t.TempDir()
+	gates := []domain.Gate{
+		{ID: "lint", Run: "pnpm lint", Timeout: domain.DefaultTimeout},
+		{ID: "test", Run: "pnpm test", Timeout: domain.DefaultTimeout, Needs: []string{"lint"}},
+	}
+	var w gateconfig.Writer
+	if err := w.WriteGates(dir, gates); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, configFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := string(raw); strings.Count(text, "needs:") != 1 {
+		t.Errorf("want one needs key:\n%s", text)
+	}
+	loaded, err := sharedconfig.Load(pflag.NewFlagSet("test", pflag.ContinueOnError), dir)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	decoded, err := gateconfig.Decode(loaded.Gates)
+	if err != nil || !reflect.DeepEqual(decoded, gates) {
+		t.Errorf("round trip = %+v, %v, want %+v", decoded, err, gates)
+	}
+}
+
 func TestWriterMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	var w gateconfig.Writer

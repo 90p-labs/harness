@@ -97,6 +97,30 @@ func TestInitGatesAppendsTheProposedGates(t *testing.T) {
 	}
 }
 
+func TestHandleProposedNeeds(t *testing.T) {
+	store := &fakeStore{}
+	bus := answer(`{"id":"cs","run":"make cs"}` + "\n" + `{"id":"unit","run":"make unit","needs":["cs","go-test"]}`)
+
+	_, err := handler(store, bus).Handle(context.Background(), initgates.Command{Dir: repoDir})
+
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	cs := newGate(t, "cs", "make cs", nil)
+	unit := newGate(t, "unit", "make unit", nil)
+	unit.Needs = []string{"cs", "go-test"}
+	toolchain, _ := detected(repoDir)
+	if want := append(toolchain, cs, unit); !reflect.DeepEqual(store.written, want) {
+		t.Errorf("written %+v, want %+v", store.written, want)
+	}
+
+	store = &fakeStore{}
+	_, err = handler(store, answer(`{"id":"unit","run":"make unit","needs":["missing"]}`)).Handle(context.Background(), initgates.Command{Dir: repoDir})
+	if !errors.Is(err, domain.ErrInvalidGate) || store.written != nil {
+		t.Errorf("err = %v, written = %+v, want an unknown need refused before the write", err, store.written)
+	}
+}
+
 func TestInitGatesRefusesOverwrite(t *testing.T) {
 	store := &fakeStore{exists: true}
 	_, err := handler(store, answer("")).Handle(context.Background(), initgates.Command{Dir: repoDir})

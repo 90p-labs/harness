@@ -248,7 +248,7 @@ A deploy tool plugin works on `gates.detect`, and optionally on `chart.render`. 
 
 | Event | Payload | Answer in `context` |
 |---|---|---|
-| `gates.detect` | `{"files": [...]}`, the tracked and untracked files of the repo | one JSON gate on each line: `{"id":"...","run":"...","paths":[...]}`, `paths` optional |
+| `gates.detect` | `{"files": [...]}`, the tracked and untracked files of the repo | one JSON gate on each line: `{"id":"...","run":"...","paths":[...],"needs":[...]}`, `paths` and `needs` optional |
 | `chart.render` | `{"chart": "deploy/chart"}`, with `cwd` the folder to render in | the rendered manifest in the `helm template` format: each document starts with a `# Source: <chart name>/<file>` comment, and the lint puts the chart folder in place of the chart name |
 
 The deploy module builds the default plugins `helm` and `promtool`, except the names in `deploy.disabled`. They propose nothing without their files:
@@ -494,6 +494,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `lint.observability.rules` | `deploy/**/*.rules.yaml` | A glob of the alert rule files |
 | `lint.observability.dashboards` | `deploy/**/dashboards/*.json` | A glob of the dashboard files |
 | `gates` | empty list | A list of gates; each gate is valid and its id is unique, and an error names the gate |
+| `verify.parallel` | `1` | 1 or more; the most gates that `harness verify` runs at the same time |
 
 `execplugin.FromConfig` checks the plugin event names and builds the exec plugins. The host constants live in `internal/shared/domain`, so the envelope and the role table use one set.
 
@@ -601,6 +602,7 @@ The gates are the `gates` key of `.harness.yaml`:
 | `paths` | list of globs | optional, the files that the gate reads, empty means the whole tree |
 | `timeout` | duration | optional, default `10m` |
 | `baseline` | string | optional, the path of a committed baseline file |
+| `needs` | list of gate ids | optional, the gates that must be `PASS` or `CACHED` before this gate starts |
 
 ```yaml
 gates:
@@ -610,6 +612,48 @@ gates:
   - id: lint
     run: harness lint --json
     baseline: .harness-baseline/lint.json
+```
+
+Needs and parallel runs:
+
+- `verify.parallel` is the most gates that run at the same time. The default 1 runs one gate at a time, in file order.
+- A gate starts when each gate in its `needs` has `PASS` or `CACHED` and a slot is free. Ready gates start in file order. Gates with no `needs` between them run in parallel, and a chain of `needs` runs in sequence.
+- When a need is `FAIL`, `VETOED` or `SKIPPED`, the gate does not run. It is `SKIPPED` with the id of that need. It gets no input hash, no event and no evidence, and `harness verify` exits 1.
+- A gate with no path to the failed gate still runs. `harness verify` returns when each started gate ends.
+- An error that is not a gate result, such as a failed evidence write, stops new starts and cancels the running gates. A cancelled gate writes no evidence and dispatches no `gate.after`. The command returns the first error.
+- The config check refuses an unknown id in `needs`, a gate that needs itself and a cycle, and the error names the gate. A `criterion-N` gate has no `needs`, and no gate can need it. A configured gate id cannot start with `criterion-`.
+- Each gate hashes its inputs when it starts. A gate output that git does not ignore can go into the hash of a gate that runs at the same time, so ignore the gate outputs or set `paths`.
+- Each gate keeps its own output tail, and the result lines print in file order after the last gate ends.
+
+The usual case: the fast checks run in parallel, the tests need them, and the end-to-end tests need the tests. When lint fails, the tests do not start:
+
+```yaml
+verify:
+  parallel: 3
+gates:
+  - id: format
+    run: pnpm exec biome format .
+  - id: lint
+    run: pnpm run lint
+  - id: typecheck
+    run: pnpm exec tsc --noEmit
+  - id: test
+    run: pnpm run test
+    needs: [format, lint, typecheck]
+  - id: e2e
+    run: pnpm run e2e
+    needs: [test]
+```
+
+```text
+PASS format 412ms
+FAIL lint 1.02s
+PASS typecheck 2.3s
+SKIPPED test needs lint
+SKIPPED e2e needs test
+
+lint:
+<the last 4 KiB of the lint output>
 ```
 
 Input hash and evidence:
@@ -628,14 +672,14 @@ Baseline ratchet:
 
 Commands:
 
-- `harness verify` runs the gates in file order. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate. It exits 1 when one gate fails.
-- `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
-- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A plugin failure, a deny, a bad line or a duplicate id stops it before it writes.
+- `harness verify` runs the gates by their `needs`, at most `verify.parallel` at the same time. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate, in file order. A skipped gate prints `SKIPPED <id> needs <need>`. It exits 1 when one gate fails, is vetoed or is skipped.
+- `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree, with the same `needs` and `verify.parallel`. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
+- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. The built-in detection writes no `needs`. A plugin failure, a deny, a bad line, a duplicate id or a bad `needs` stops it before it writes.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
 - A veto stops at the first deny, and `guard.commits-checked` sorts first. A test of another rule disables `commits-checked`.
-- The `GateSource` port adds one gate for each criterion of the active plan, with the id `criterion-N`. Each criterion gets its own evidence record.
+- The `GateSource` port adds one gate for each criterion of the active plan, with the id `criterion-N`. Each criterion gets its own evidence record. The criterion gates go through the same scheduler as the configured gates.
 - `harness init --host H` sets up a repository in one step and prints one line for each step. First it keeps `lint.packs`, or it writes the packs that the repository files show: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it runs `gates init` with these packs, `lint init`, `lint baseline` and `host install`. With no pack, it skips the baseline, so a later pack gets a full first baseline. When it chooses packs but the `gates` key exists, it stops before the first write, because the kept gates have no `lint` gate. A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. When a lint engine is missing, it stops at the baseline step, and the steps before it stay.
 
 Before the review, an in-process plugin on `run.transition.before` verifies the trace of the plan against the branch. The pure function `VerifyTrace` checks these rules:

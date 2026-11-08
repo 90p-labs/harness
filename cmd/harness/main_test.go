@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/jorge07/harness/internal/run/domain"
@@ -429,6 +431,71 @@ func TestVerifyExitCodes(t *testing.T) {
 	})
 }
 
+func TestVerifySkipsTheGatesThatNeedAFailedGate(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	cfg := `verify:
+  parallel: 3
+gates:
+  - id: format
+    run: "true"
+  - id: lint
+    run: "echo lint broke; exit 1"
+  - id: typecheck
+    run: "true"
+  - id: test
+    run: "echo test ran > test.ran"
+    needs: [format, lint, typecheck]
+  - id: e2e
+    run: "echo e2e ran > e2e.ran"
+    needs: [test]
+`
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := execute(t, commandVerify)
+
+	lines := strings.Split(stdout, "\n")
+	if code != exitRuntime || len(lines) < 5 || !strings.HasPrefix(lines[1], "FAIL lint ") ||
+		lines[3] != "SKIPPED test needs lint" || lines[4] != "SKIPPED e2e needs test" || !strings.Contains(stdout, "lint broke") {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want exit %d and the SKIPPED lines", code, stdout, stderr, exitRuntime)
+	}
+	for _, marker := range []string{"test.ran", "e2e.ran"} {
+		if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
+			t.Errorf("%s exists, want the skipped gate not to run", marker)
+		}
+	}
+}
+
+func TestVerifyReadsTheParallelKey(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	pipe := filepath.Join(t.TempDir(), "rendezvous")
+	if err := syscall.Mkfifo(pipe, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := fmt.Sprintf(`verify:
+  parallel: 2
+gates:
+  - id: writer
+    run: echo hello > %[1]s
+    timeout: 5s
+  - id: reader
+    run: cat %[1]s
+    timeout: 5s
+`, strconv.Quote(pipe))
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := execute(t, commandVerify)
+
+	if code != exitOK || !strings.Contains(stdout, "PASS writer ") || !strings.Contains(stdout, "PASS reader ") {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want both gates to meet on the pipe", code, stdout, stderr)
+	}
+}
+
 func TestVerifyCommitsAllowsAPush(t *testing.T) {
 	clearHarnessEnv(t)
 	dir, _ := tracedRepo(t)
@@ -528,6 +595,20 @@ func TestGatesInitWritesAPluginGate(t *testing.T) {
 	written := gatesInitConfig(t, dir, "plugins:\n  - name: kubeconform\n    command: [sh, "+strconv.Quote(script)+"]\n    events: [gates.detect]\n")
 
 	for _, want := range []string{"id: kubeconform", "run: kubeconform -summary deploy"} {
+		if !strings.Contains(written, want) {
+			t.Errorf(".harness.yaml = %q, want it to contain %q", written, want)
+		}
+	}
+}
+
+func TestGatesInitWritesProposedNeeds(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	script := `cat > /dev/null; printf '%s\n' '{"verdict":"allow","context":"{\"id\":\"cs\",\"run\":\"make cs\"}\n{\"id\":\"unit\",\"run\":\"make unit\",\"needs\":[\"cs\"]}"}'`
+
+	written := gatesInitConfig(t, dir, "plugins:\n  - name: make-gates\n    command: [sh, -c, "+strconv.Quote(script)+"]\n    events: [gates.detect]\n")
+
+	for _, want := range []string{"id: cs", "id: unit", "needs:\n      - cs"} {
 		if !strings.Contains(written, want) {
 			t.Errorf(".harness.yaml = %q, want it to contain %q", written, want)
 		}

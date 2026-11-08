@@ -19,6 +19,7 @@ const (
 	flagCommits   = "commits"
 
 	lineFormat     = "%s %s %s\n"
+	skipFormat     = "%s %s needs %s\n"
 	tailFormat     = "\n%s:\n%s\n"
 	noGateMessage  = "no gate is set\n"
 	shortSHALength = 12
@@ -63,7 +64,13 @@ func verifyGates(ctx context.Context, out io.Writer, h Handlers) error {
 		return err
 	}
 	for _, line := range result.Lines {
-		if _, err := fmt.Fprintf(out, lineFormat, line.Status, line.Gate, line.Duration.Round(time.Millisecond)); err != nil {
+		var err error
+		if line.Status == domain.StatusSkipped {
+			_, err = fmt.Fprintf(out, skipFormat, line.Status, line.Gate, line.Need)
+		} else {
+			_, err = fmt.Fprintf(out, lineFormat, line.Status, line.Gate, line.Duration.Round(time.Millisecond))
+		}
+		if err != nil {
 			return err
 		}
 	}
