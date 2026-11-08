@@ -1,0 +1,16 @@
+name: my-next-app
+
+services:
+  node:
+    build: .
+    pull_policy: build
+    working_dir: /app
+    environment:
+      npm_config_store_dir: /app/node_modules/.pnpm-store
+      npm_config_update_notifier: "false"
+    volumes:
+      - .:/app
+      - node-modules:/app/node_modules
+
+volumes:
+  node-modules:
