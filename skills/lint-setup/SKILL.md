@@ -33,7 +33,7 @@ Language: `$ARGUMENTS`. When it is empty, the `linter` agent finds the languages
 | PHP | deptrac | the layer and context rules, from its layers and its ruleset. `--report-uncovered` gives the unplaced classes and dependencies |
 | Python | import-linter | the layer and context rules. Exhaustive `layers` contracts give `ddd/src-roots`, an `independence` contract gives `ddd/cross-context`, and a custom contract type with an allow list gives `ddd/domain-purity`, because a `forbidden` contract cannot hold an allow list |
 | Go | go-arch-lint or depguard | the layer and context rules, from the allowed imports of each component. go-arch-lint reports an unplaced file |
-| TypeScript | the built-in `ddd` pack | each rule. Add `ddd` to `lint.packs` and stop: the binary tests prove this pack, so the canary is optional. With no `lint/rules.yaml`, `harness lint canaries` prints one line and passes |
+| TypeScript | the built-in `ddd` pack | each rule. Add `ddd` to `lint.packs` and stop: the binary tests prove this pack, so the canary is optional. With no `lint/rules.yaml`, `harness lint canaries` prints one line and passes. Next to another language, the manifest gives the engine `harness` a TypeScript canary or a waiver for each rule |
 
 For a language that is not in the table, the agent searches for a tool and proposes it. The user chooses.
 
@@ -48,6 +48,8 @@ A tool that checks only imports cannot catch `ddd/file-suffix`. Then the rule is
    - the wrapper plugin `.harness/plugins/<tool>.sh` on `lint.check`, and its `plugins` entry in `.harness.yaml`.
    - the custom pack `lint/architecture/pack.yaml` with the catalogue ids and the wrapper as engine, and its entry in `lint.packs`.
    - one canary folder for each rule under `lint/canaries/`, and the manifest `lint/rules.yaml`.
+
+   For a second language, the agent keeps the first setup. It adds the new pack next to the first, in its own folder such as `lint/architecture-go`, and adds its entries to the same `lint/rules.yaml`. A rule that two packs hold gets an entry for each engine under `engines`.
 4. The agent runs `harness lint init`, `harness lint canaries` and `harness lint`. `harness lint` must give no finding in `lint/canaries/`.
 5. A rule that the tool cannot catch comes back as a waiver question. Ask it. On a yes, the agent writes `waived: <reason>` for the rule, with a reason of 3 words or more. On a no, the agent tunes the tool config and runs the check again. A manifest that waives each rule fails: at least one rule needs a canary.
 6. Run `harness gates init` to add the `lint-canaries` gate. When `.harness.yaml` has a `gates` key with a gate, the command refuses and names the key: add `{id: lint-canaries, run: harness lint canaries}` to it by hand. An empty `gates: []` counts as absent.
@@ -90,6 +92,23 @@ rules:
     waived: deptrac checks the dependencies, not the file names.
 ```
 
+When two active packs hold a rule on two engines, for example the built-in `ddd` pack (engine `harness`) and a deptrac pack, the rule gives one canary or one waiver for each engine under `engines`. A rule on one engine keeps the single form. `harness lint canaries` names the engine on each line of an `engines` entry:
+
+```yaml
+pack: ddd
+rules:
+  - id: ddd/domain-purity
+    engines:
+      harness:
+        canary: lint/canaries/ts-domain-purity
+      deptrac:
+        canary: lint/canaries/ddd-domain-purity
+  - id: ddd/file-suffix
+    engines:
+      harness:
+        waived: the binary fixtures prove the built-in rule.
+```
+
 A canary folder mirrors the source layout, for example `lint/canaries/ddd-layer-direction/src/Order/Application/PlaceOrder.php`. It breaks its one rule on purpose and breaks no other rule. The tool config and the pack scopes must not include `lint/canaries/`.
 
 ## Wrapper contract
@@ -110,5 +129,6 @@ wait $!
 
 ## Limits
 
-- A repository has one manifest for one catalogue pack, so its canaries prove one language only. When `lint/rules.yaml` exists for another language, stop and tell the user. `harness init` prints a `next:` line with this limit for each language that no plugin rule covers.
-- A custom pack cannot use the catalogue ids while the built-in `ddd` pack is in `lint.packs`. When both are needed, stop and tell the user.
+- Two packs can hold one catalogue id only on two different engines. A pack on the same engine as another pack with that id is an error: then extend the first pack, or stop and tell the user.
+- The scopes of two packs that share an id must not hold one file. For the engine `harness`, only TypeScript and JavaScript files count. A file in both scopes is an error that names both packs and the file: end each scope with the extension of the language.
+- A canary proves the rule on the canary folder only. A source folder that a pack scope misses still passes the canary.
