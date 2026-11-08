@@ -14,6 +14,9 @@ const (
 	defNew     = "classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e"
 	defChanged = "classDef changed stroke:#e0a84a,stroke-width:3px,color:#e0a84a"
 	defRemoved = "classDef removed stroke:#e2001f,stroke-width:3px,color:#e2001f,stroke-dasharray:5 5"
+
+	noMarkReason       = "no mark: end a line with + (new), * (changed) or - (removed)"
+	noMarkInPlanReason = "no mark: draw the marks with harness diagram"
 )
 
 func lines(s ...string) string { return strings.Join(s, "\n") }
@@ -226,19 +229,23 @@ func TestMarkDiagramEdges(t *testing.T) {
 }
 
 func TestMarkDiagramRefuses(t *testing.T) {
-	cases := []struct{ name, input, wantLine string }{
-		{"empty input", "", "line 1:"},
-		{"unknown kind", lines("foo", "    a +"), "line 1:"},
-		{"unmarkable kind", lines("sequenceDiagram", "    A->>B: hi +"), "line 1:"},
-		{"no mark", lines("flowchart TD", "    a --> b"), "line 1:"},
-		{"unknown mark", lines("flowchart TD", "    a[start] +", "    d[Plain] ?"), "line 3:"},
-		{"er entity block", lines("erDiagram", "    CUSTOMER { +", "    }"), "line 2:"},
-		{"er bare entity", lines("erDiagram", "    CUSTOMER +"), "line 2:"},
-		{"er block end", lines("erDiagram", "    A {", "        string name", "    } +"), "line 4:"},
-		{"flowchart block end", lines("flowchart TD", "    subgraph X", "    a --> b", "    end +"), "line 4:"},
-		{"no accepted form", lines("flowchart TD", "    a[ok] *", "    subgraph X +"), "line 3:"},
-		{"chain edge", lines("flowchart TD", "    a --> b --> c +"), "line 2:"},
-		{"two marks on one node", lines("flowchart TD", "    a[x] +", "    a[y] *"), "line 3:"},
+	const (
+		noKindReason = "kind sequenceDiagram takes no mark; marked kinds: classDiagram, classDiagram-v2, erDiagram, flowchart, graph, stateDiagram, stateDiagram-v2; paste another kind as it is"
+		typoReason   = "kind flowchrt takes no mark; marked kinds: classDiagram, classDiagram-v2, erDiagram, flowchart, graph, stateDiagram, stateDiagram-v2; paste another kind as it is"
+	)
+	cases := []struct{ name, input, wantLine, wantReason string }{
+		{"empty input", "", "line 1:", "no diagram header"},
+		{"unknown kind", lines("flowchrt", "    a +"), "line 1:", typoReason},
+		{"unmarkable kind", lines("sequenceDiagram", "    A->>B: hi +"), "line 1:", noKindReason},
+		{"no mark", lines("flowchart TD", "    a --> b"), "line 1:", noMarkReason},
+		{"unknown mark", lines("flowchart TD", "    a[start] +", "    d[Plain] ?"), "line 3:", "unknown mark ?"},
+		{"er entity block", lines("erDiagram", "    CUSTOMER { +", "    }"), "line 2:", "an entity takes no mark"},
+		{"er bare entity", lines("erDiagram", "    CUSTOMER +"), "line 2:", "an entity takes no mark"},
+		{"er block end", lines("erDiagram", "    A {", "        string name", "    } +"), "line 4:", "a block end takes no mark"},
+		{"flowchart block end", lines("flowchart TD", "    subgraph X", "    a --> b", "    end +"), "line 4:", "a block end takes no mark"},
+		{"no accepted form", lines("flowchart TD", "    a[ok] *", "    subgraph X +"), "line 3:", "line has no accepted form"},
+		{"chain edge", lines("flowchart TD", "    a --> b --> c +"), "line 2:", "a chain edge takes no mark"},
+		{"two marks on one node", lines("flowchart TD", "    a[x] +", "    a[y] *"), "line 3:", "a has a second mark"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -248,6 +255,9 @@ func TestMarkDiagramRefuses(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), c.wantLine) {
 				t.Fatalf("err = %q, want it to hold %q", err, c.wantLine)
+			}
+			if !strings.HasSuffix(err.Error(), c.wantReason) {
+				t.Fatalf("err = %q, want it to end with %q", err, c.wantReason)
 			}
 			if got != "" {
 				t.Fatalf("body = %q, want empty", got)
@@ -364,10 +374,10 @@ func TestCheckMarks(t *testing.T) {
 			lines("flowchart TD", "    "+defNew, "    a:::new --> b"),
 			nil,
 		},
-		{"no mark", lines("flowchart TD", "    a --> b"), []string{"no mark"}},
-		{"er no mark", lines("erDiagram", "    A ||--o{ B : x"), []string{"no mark"}},
-		{"class v2 no mark", lines("classDiagram-v2", "    class A"), []string{"no mark"}},
-		{"node label is no mark", lines("flowchart TD", "    a[x (new)]"), []string{"no mark"}},
+		{"no mark", lines("flowchart TD", "    a --> b"), []string{noMarkInPlanReason}},
+		{"er no mark", lines("erDiagram", "    A ||--o{ B : x"), []string{noMarkInPlanReason}},
+		{"class v2 no mark", lines("classDiagram-v2", "    class A"), []string{noMarkInPlanReason}},
+		{"node label is no mark", lines("flowchart TD", "    a[x (new)]"), []string{noMarkInPlanReason}},
 		{"unmarkable kind", lines("sequenceDiagram", "    A->>B: hi"), nil},
 		{
 			"raw mark left",

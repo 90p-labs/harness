@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -52,6 +53,13 @@ var markableKinds = map[string]grammar{
 	"erDiagram": grammarER,
 }
 
+var MarkableKindNames = slices.Sorted(maps.Keys(markableKinds))
+
+const (
+	reasonNoMark       = "no mark: end a line with + (new), * (changed) or - (removed)"
+	reasonNoMarkInPlan = "no mark: draw the marks with harness diagram"
+)
+
 var blockEnds = map[string]bool{"}": true, "end": true}
 
 var (
@@ -96,7 +104,7 @@ func MarkDiagram(input string) (string, error) {
 	kind := firstWord(lines[h])
 	g, ok := markableKinds[kind]
 	if !ok {
-		return "", refuse(h+1, "kind "+kind+" takes no mark")
+		return "", refuse(h+1, "kind "+kind+" takes no mark; marked kinds: "+strings.Join(MarkableKindNames, ", ")+"; paste another kind as it is")
 	}
 
 	type markedID struct {
@@ -142,7 +150,7 @@ func MarkDiagram(input string) (string, error) {
 		body = append(body, marked)
 	}
 	if len(used) == 0 {
-		return "", refuse(h+1, "no mark")
+		return "", refuse(h+1, reasonNoMark)
 	}
 
 	out := make([]string, 0, len(lines)+len(markOrder)+len(ids))
@@ -230,7 +238,7 @@ func CheckMarks(body string) []string {
 		}
 	}
 	if !marked {
-		add("no mark")
+		add(reasonNoMarkInPlan)
 	}
 	return problems
 }

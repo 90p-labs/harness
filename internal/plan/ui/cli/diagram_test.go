@@ -33,6 +33,46 @@ func executeDiagram(t *testing.T, input string) (string, error) {
 	return out.String(), err
 }
 
+func TestDiagramHelp(t *testing.T) {
+	t.Run("the example marks with no refusal", func(t *testing.T) {
+		out, err := executeDiagram(t, cli.DiagramExample)
+
+		if err != nil {
+			t.Fatalf("diagram: %v", err)
+		}
+		if !strings.HasPrefix(out, "```mermaid\n") {
+			t.Errorf("stdout = %q, want a mermaid fence", out)
+		}
+		for mark, style := range shareddomain.MarkStyles {
+			if !strings.Contains(out, style) {
+				t.Errorf("stdout = %q, want the %s mark drawn", out, mark)
+			}
+		}
+	})
+
+	t.Run("the printed help names each marked kind and the example", func(t *testing.T) {
+		cmd := cli.NewDiagramCommand(markdiagram.NewHandler(nil, noop.NewTracerProvider().Tracer("test")))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"--help"})
+
+		if err := cmd.ExecuteContext(t.Context()); err != nil {
+			t.Fatalf("help: %v", err)
+		}
+		for _, kind := range shareddomain.MarkableKindNames {
+			if !strings.Contains(out.String(), kind) {
+				t.Errorf("help does not name the marked kind %q", kind)
+			}
+		}
+		if !strings.Contains(out.String(), cli.DiagramExample) {
+			t.Errorf("help does not hold the example %q", cli.DiagramExample)
+		}
+		if lines := strings.Count(out.String(), "\n"); lines >= maxHelpLines {
+			t.Errorf("help has %d lines, want fewer than %d", lines, maxHelpLines)
+		}
+	})
+}
+
 func TestDiagramCommand(t *testing.T) {
 	t.Run("prints the marked block in a fence", func(t *testing.T) {
 		out, err := executeDiagram(t, markedInput)

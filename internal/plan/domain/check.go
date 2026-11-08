@@ -28,27 +28,29 @@ const (
 )
 
 const (
-	diagramER       = "erDiagram"
-	diagramSequence = "sequenceDiagram"
+	DiagramER       = "erDiagram"
+	DiagramSequence = "sequenceDiagram"
 
-	folderMigrations = "migrations/"
-	suffixSQL        = ".sql"
-	prefixOpenAPI    = "openapi."
-	prefixAsyncAPI   = "asyncapi."
-	infixOpenAPI     = ".openapi."
-	suffixProto      = ".proto"
-	suffixGraphQL    = ".graphql"
+	prefixOpenAPI  = "openapi."
+	prefixAsyncAPI = "asyncapi."
+	infixOpenAPI   = ".openapi."
+	suffixProto    = ".proto"
+	suffixGraphQL  = ".graphql"
 
-	newDomainFilesForClass = 3
+	ContractNames = prefixOpenAPI + "*, " + prefixAsyncAPI + "*, *" + infixOpenAPI + "*, *" + suffixProto + ", *" + suffixGraphQL
+
+	NewDomainFilesForClass = 3
+	MaxSentenceWords       = maxSentenceWords
 )
 
 var (
-	criteriaHeader = []string{"#", "Criterion", "Proof"}
-	signalsHeader  = []string{"Criterion", "Signal", "Source", "Query", "Breach", "Window", "Panel"}
-	taskSides      = []string{SideBackend, SideFrontend, SideOther}
-	taskFields     = []string{FieldSide, FieldOwned, FieldTestFirst, FieldDoD, FieldDependsOn}
-	topHeadings    = []string{HeadingGoal, HeadingCriteria, HeadingTasks, HeadingDecisions, HeadingSpecs}
-	finalHeadings  = []string{HeadingCodeTree, HeadingTestTree, HeadingCommits, HeadingPRs}
+	CriteriaHeader = []string{"#", "Criterion", "Proof"}
+	SignalsHeader  = []string{"Criterion", "Signal", "Source", "Query", "Breach", "Window", "Panel"}
+	TaskSides      = []string{SideBackend, SideFrontend, SideOther}
+	TaskFields     = []string{FieldSide, FieldOwned, FieldTestFirst, FieldDoD, FieldDependsOn}
+	TopHeadings    = []string{HeadingGoal, HeadingCriteria, HeadingTasks, HeadingDecisions, HeadingSpecs}
+	FinalHeadings  = []string{HeadingCodeTree, HeadingTestTree, HeadingCommits, HeadingPRs}
+	SignalFolders  = []string{FolderCommand, FolderQuery, FolderHTTP, FolderConsumer}
 
 	proofCommand     = regexp.MustCompile("^`[^`]+`$")
 	proofPlaceholder = regexp.MustCompile(`(?i)\b(tbd|todo|fixme|xxx)\b|<[a-z](?:[^<>]*[^\s<>])?>|` + "^`\\.\\.\\.`$")
@@ -114,10 +116,10 @@ func checkHeadings(doc Document, add report) {
 			add(1, RuleHeadingMissing, "heading %s is missing", strings.Repeat("#", level)+" "+text)
 		}
 	}
-	for _, text := range topHeadings {
+	for _, text := range TopHeadings {
 		require(2, text)
 	}
-	for _, text := range finalHeadings {
+	for _, text := range FinalHeadings {
 		require(3, text)
 	}
 	specs := headingLine(doc, 2, HeadingSpecs)
@@ -130,20 +132,20 @@ func checkHeadings(doc Document, add report) {
 			subs = append(subs, h)
 		}
 	}
-	tail := subs[max(0, len(subs)-len(finalHeadings)):]
-	inOrder := slices.EqualFunc(tail, finalHeadings, func(h Heading, text string) bool { return h.Text == text })
+	tail := subs[max(0, len(subs)-len(FinalHeadings)):]
+	inOrder := slices.EqualFunc(tail, FinalHeadings, func(h Heading, text string) bool { return h.Text == text })
 	if !inOrder {
 		line := specs
 		if len(tail) > 0 {
 			line = tail[0].Line
 		}
-		add(line, RuleHeadingMissing, "the tech specs must end with %s, in this order", strings.Join(finalHeadings, ", "))
+		add(line, RuleHeadingMissing, "the tech specs must end with %s, in this order", strings.Join(FinalHeadings, ", "))
 	}
 }
 
 func checkCriteria(doc Document, add report) {
-	if doc.CriteriaTable.Header != nil && !slices.Equal(doc.CriteriaTable.Header, criteriaHeader) {
-		add(doc.CriteriaTable.Line, RuleCriteriaTable, "header must be | %s |", strings.Join(criteriaHeader, " | "))
+	if doc.CriteriaTable.Header != nil && !slices.Equal(doc.CriteriaTable.Header, CriteriaHeader) {
+		add(doc.CriteriaTable.Line, RuleCriteriaTable, "header must be | %s |", strings.Join(CriteriaHeader, " | "))
 	}
 	for i, c := range doc.Criteria {
 		if c.Number != i+1 {
@@ -172,13 +174,13 @@ func checkTasks(doc Document, add report) {
 	}
 	owned := map[int]bool{}
 	for _, t := range doc.Tasks {
-		for _, f := range taskFields {
+		for _, f := range TaskFields {
 			if _, ok := t.FieldLines[f]; !ok {
 				add(t.Line, RuleTaskField, "task %d has no %s: line", t.Number, f)
 			}
 		}
-		if _, ok := t.FieldLines[FieldSide]; ok && !slices.Contains(taskSides, t.Side) {
-			add(t.FieldLines[FieldSide], RuleTaskField, "Side must be %s", strings.Join(taskSides, ", "))
+		if _, ok := t.FieldLines[FieldSide]; ok && !slices.Contains(TaskSides, t.Side) {
+			add(t.FieldLines[FieldSide], RuleTaskField, "Side must be %s", strings.Join(TaskSides, ", "))
 		}
 		for _, n := range t.DoD {
 			owned[n] = true
@@ -263,7 +265,7 @@ func checkPRs(doc Document, add report) {
 func checkSignals(doc Document, add report) {
 	heading := headingLine(doc, 2, HeadingSignals)
 	if heading == 0 {
-		if doc.CodeTree.Touches(FolderCommand, FolderQuery, FolderHTTP, FolderConsumer) {
+		if doc.CodeTree.Touches(SignalFolders...) {
 			add(lineOr(headingLine(doc, 3, HeadingCodeTree), 1), RuleSignalsMissing, "the code tree adds a command, query, endpoint or consumer, so the plan needs ## Signals")
 		}
 		return
@@ -271,8 +273,8 @@ func checkSignals(doc Document, add report) {
 	if len(doc.Signals) == 0 {
 		add(heading, RuleSignalsTable, "## Signals needs a table with one row or more")
 	}
-	if doc.SignalsTable.Header != nil && !slices.Equal(doc.SignalsTable.Header, signalsHeader) {
-		add(doc.SignalsTable.Line, RuleSignalsTable, "header must be | %s |", strings.Join(signalsHeader, " | "))
+	if doc.SignalsTable.Header != nil && !slices.Equal(doc.SignalsTable.Header, SignalsHeader) {
+		add(doc.SignalsTable.Line, RuleSignalsTable, "header must be | %s |", strings.Join(SignalsHeader, " | "))
 	}
 	for _, row := range doc.Signals {
 		if _, err := shareddomain.ParseBreach(row.Breach); err != nil {
@@ -318,14 +320,14 @@ func isContract(name string) bool {
 func requiredDiagrams(e TreeEntry) []string {
 	name := path.Base(e.Path)
 	var kinds []string
-	if strings.Contains(e.Path, folderMigrations) || strings.HasSuffix(name, suffixSQL) {
-		kinds = append(kinds, diagramER)
+	if strings.Contains(e.Path, FolderMigrations) || strings.HasSuffix(name, SuffixSQL) {
+		kinds = append(kinds, DiagramER)
 	}
 	if isContract(name) {
 		kinds = append(kinds, DiagramClass)
 	}
 	if e.Mark == MarkNew && (strings.Contains(e.Path, FolderHTTP) || strings.Contains(e.Path, FolderConsumer)) {
-		kinds = append(kinds, diagramSequence)
+		kinds = append(kinds, DiagramSequence)
 	}
 	return kinds
 }
@@ -343,7 +345,7 @@ func checkRequiredDiagrams(doc Document, in CheckInput, add report) {
 		}
 		if e.Mark == MarkNew && strings.Contains(e.Path, FolderDomain) {
 			newDomainFiles++
-			if newDomainFiles == newDomainFilesForClass && !hasDiagram(doc, DiagramClass) {
+			if newDomainFiles == NewDomainFilesForClass && !hasDiagram(doc, DiagramClass) {
 				add(e.Line, RuleDiagramRequired, "%d new files in %s need a %s", newDomainFiles, FolderDomain, DiagramClass)
 			}
 		}
