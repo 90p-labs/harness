@@ -302,6 +302,11 @@ func TestPRBodyShape(t *testing.T) {
 		{name: "old sections", call: withBody("## Summary\nShort.\n\n## What\n- one\n\n## Why\nBecause."), deny: true, want: "the body has no ## How line"},
 		{name: "what before why", call: withBody("## What\n- one\n\n## Why\nBecause.\n\n## How\nShort."), deny: true, want: "## What is before ## Why"},
 		{name: "how before what", call: withBody("## Why\nBecause.\n\n## How\nShort.\n\n## What\n- one"), deny: true, want: "## How is before ## What"},
+		{name: "plan diagram copied as it is", call: withBody(sections + "\n```mermaid\nflowchart TD\n" +
+			"    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n" +
+			"    a[plan] --> b[skill]\n    class b new\n```")},
+		{name: "heading in a code fence", call: withBody("## Why\nBecause.\n```\n## How\n```\n## What\n- one\n\n## How\nShort.")},
+		{name: "heading only in a code fence", call: withBody("## Why\nBecause.\n\n## What\n- one\n```\n## How\n```"), deny: true, want: "the body has no ## How line"},
 		{name: "41 word line", call: withBody(sections + "\n\n" + long), deny: true, want: "40 words"},
 		{name: "long line in a code fence", call: withBody(sections + "\n```\n" + long + "\n```")},
 		{name: "40 word line", call: withBody(sections + "\n\n" + strings.TrimSpace(strings.Repeat("word ", 40)))},

@@ -122,9 +122,19 @@ func checkBody(body string) (string, bool) {
 }
 
 func checkSections(lines []string) (string, bool) {
+	var outside []string
+	inFence := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, fenceMarker) {
+			inFence = !inFence
+		} else if !inFence {
+			outside = append(outside, trimmed)
+		}
+	}
 	at := make([]int, len(bodySections))
 	for i, section := range bodySections {
-		at[i] = slices.IndexFunc(lines, func(l string) bool { return strings.TrimSpace(l) == section })
+		at[i] = slices.Index(outside, section)
 		if at[i] < 0 {
 			return deny(fmt.Sprintf("the body has no %s line", section), nextStepShape)
 		}
