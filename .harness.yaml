@@ -1,0 +1,15 @@
+git:
+  default_branch: main
+verify:
+  parallel: 3
+gates:
+  - id: go-fmt
+    run: test -z "$(gofmt -l .)"
+    paths:
+      - '**/*.go'
+  - id: go-vet
+    run: go vet ./...
+  # No paths: the root tests read the docs, the examples and the plugin files.
+  - id: go-test
+    run: go test ./...
+    needs: [go-fmt, go-vet]
