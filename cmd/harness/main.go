@@ -89,7 +89,7 @@ func newRootCommand() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
 	root.PersistentFlags().String(config.FlagConfig, "", "path of the config file")
 	root.PersistentFlags().String(config.FlagStateDSN, "", "state database DSN")
-	root.AddCommand(newConfigCommand(), newRunCommand(root.PersistentFlags()), newPlanCommand(root.PersistentFlags()), newDiagramCommand())
+	root.AddCommand(newConfigCommand(), newRunCommand(root.PersistentFlags()), newPlanCommand(root.PersistentFlags()), newDiagramCommand(), newHostCommand(root.PersistentFlags()))
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",
@@ -98,5 +98,7 @@ func newRootCommand() *cobra.Command {
 		},
 	})
 	wrapArgs(root)
+	// Claude Code reads exit status 2 of a hook as a block, so no hook error is a usage error.
+	root.AddCommand(newHookCommand(root.PersistentFlags()))
 	return root
 }

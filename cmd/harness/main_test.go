@@ -455,6 +455,57 @@ func TestPlanCheckRefusesABadDiagram(t *testing.T) {
 	}
 }
 
+func TestHookFailsClosedOutsideGit(t *testing.T) {
+	clearHarnessEnv(t)
+	t.Chdir(t.TempDir())
+	const input = `{"cwd":"/work","tool_name":"Bash","tool_input":{"command":"ls"}}`
+
+	code, stdout, stderr := executeWithStdin(t, input, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q, want %d", code, stderr, exitOK)
+	}
+	for _, want := range []string{`"permissionDecision":"deny"`, "harness error"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout = %q, want %q", stdout, want)
+		}
+	}
+}
+
+func TestHookRefusalIsNotABlock(t *testing.T) {
+	clearHarnessEnv(t)
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"unknown host", []string{"hook", "--host", "vim", "pre-tool-use"}},
+		{"unknown hook", []string{"hook", "--host", "claude", "PreToolUse"}},
+		{"no host", []string{"hook", "pre-tool-use"}},
+		{"two hooks", []string{"hook", "--host", "claude", "stop", "stop"}},
+		{"unknown flag", []string{"hook", "--hots", "claude", "stop"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := executeWithStdin(t, "{}", tc.args...)
+
+			if code != exitRuntime || stdout != "" || !strings.HasPrefix(stderr, "error: ") || strings.Contains(stderr, "Usage:") {
+				t.Fatalf("code = %d, stdout = %q, stderr = %q, want exit %d with one error line", code, stdout, stderr, exitRuntime)
+			}
+		})
+	}
+}
+
+func TestHostCapabilitiesOutsideGit(t *testing.T) {
+	clearHarnessEnv(t)
+	t.Chdir(t.TempDir())
+
+	code, stdout, stderr := executeWithStdin(t, "", "host", "capabilities", "--host", "codex")
+
+	if code != exitOK || strings.Count(stdout, " yes\n") != 7 {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+}
+
 func TestPlanCheckValidFixture(t *testing.T) {
 	clearHarnessEnv(t)
 	file := validPlanFile(t)
