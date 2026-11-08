@@ -19,7 +19,7 @@ const (
 	flagJSON        = "json"
 
 	findingFormat = "%s %s %s:%d %s\n"
-	noPacksLine   = "no lint pack is set\n"
+	noPacksLine   = "no lint pack is set: set lint.packs in .harness.yaml\n"
 )
 
 var ErrFindings = errors.New("lint found error findings")
@@ -58,23 +58,32 @@ func NewLintCommand(connect Connect) *cobra.Command {
 	}
 	cmd.Flags().Bool(flagJSON, false, "print the report as JSON")
 	cmd.AddCommand(
-		subcommand(commandInit, "Write the engine files of the active packs", connect, func(h Handlers) func(context.Context) error { return h.Init }),
-		subcommand(commandBaseline, "Keep the lint baseline ratchet", connect, func(h Handlers) func(context.Context) error { return h.Baseline }),
+		&cobra.Command{
+			Use:   commandInit,
+			Short: "Write the engine files of the active packs",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
+					if err := h.Init(ctx); err != nil || !h.NoPacks {
+						return err
+					}
+					_, err := fmt.Fprint(cmd.OutOrStdout(), noPacksLine)
+					return err
+				})
+			},
+		},
+		&cobra.Command{
+			Use:   commandBaseline,
+			Short: "Keep the lint baseline ratchet",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
+					return h.Baseline(ctx)
+				})
+			},
+		},
 	)
 	return cmd
-}
-
-func subcommand(use, short string, connect Connect, pick func(Handlers) func(context.Context) error) *cobra.Command {
-	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
-				return pick(h)(ctx)
-			})
-		},
-	}
 }
 
 func printFindings(out io.Writer, report shareddomain.Report) error {
