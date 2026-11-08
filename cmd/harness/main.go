@@ -10,20 +10,36 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (
-	exitOK    = 0
-	exitUsage = 2
+	exitOK      = 0
+	exitRuntime = 1
+	exitUsage   = 2
 )
 
 const (
 	commandName    = "harness"
 	commandVersion = "version"
+	commandConfig  = "config"
 )
 
 var errNoCommand = errors.New("no command given")
+
+type usageError struct{ error }
+
+func (e usageError) Unwrap() error { return e.error }
+
+func usageArgs(check cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := check(cmd, args); err != nil {
+			return usageError{err}
+		}
+		return nil
+	}
+}
 
 // version is set at build time with -ldflags "-X main.version=<tag>".
 var version = "dev"
@@ -44,6 +60,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	root.SetErr(stderr)
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
+		if !errors.As(err, new(usageError)) {
+			return exitRuntime
+		}
 		fmt.Fprint(stderr, root.UsageString())
 		return exitUsage
 	}
@@ -59,17 +78,22 @@ func reportTelemetry(stderr io.Writer, err error) {
 func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           commandName,
-		Args:          cobra.NoArgs,
+		Args:          usageArgs(cobra.NoArgs),
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(*cobra.Command, []string) error {
-			return errNoCommand
+			return usageError{errNoCommand}
 		},
 	}
+	root.CompletionOptions.DisableDefaultCmd = true
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
+	root.PersistentFlags().String(config.FlagConfig, "", "path of the config file")
+	root.PersistentFlags().String(config.FlagStateDSN, "", "state database DSN")
+	root.AddCommand(newConfigCommand())
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",
-		Args:  cobra.NoArgs,
+		Args:  usageArgs(cobra.NoArgs),
 		Run: func(cmd *cobra.Command, _ []string) {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", commandName, version)
 		},
