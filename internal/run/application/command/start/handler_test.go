@@ -38,6 +38,10 @@ func (f *fakeRepository) Get(context.Context, string) (domain.Run, error) {
 	return domain.Run{}, domain.ErrRunNotFound
 }
 
+func (f *fakeRepository) ListByPhase(context.Context, string, []domain.Phase) ([]domain.Run, error) {
+	return nil, nil
+}
+
 func (f *fakeRepository) Save(_ context.Context, run domain.Run) (domain.Run, error) {
 	if f.saveErr != nil {
 		return domain.Run{}, f.saveErr

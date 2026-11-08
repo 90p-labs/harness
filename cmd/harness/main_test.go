@@ -557,7 +557,7 @@ func TestRunLifecycle(t *testing.T) {
 		{[]string{"approve"}, domain.PhaseWorking},
 		{[]string{"review"}, domain.PhaseReviewing},
 		{[]string{"ship"}, domain.PhaseShipping},
-		{[]string{"done"}, domain.PhaseDone},
+		{[]string{"done", "--pr", "https://github.com/o/r/pull/1"}, domain.PhaseDone},
 	}
 	for _, step := range steps {
 		if step.args[0] == "review" {
@@ -614,6 +614,8 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "extra argument", args: []string{commandRun, "plan", "extra"}, wantCode: exitUsage, wantError: "error: ", wantUsage: "harness run plan"},
 		{name: "missing findings", args: []string{commandRun, "rework"}, wantCode: exitUsage, wantError: "error: ", wantUsage: "--findings"},
 		{name: "missing reason", args: []string{commandRun, "block"}, wantCode: exitUsage, wantError: "error: ", wantUsage: "--reason"},
+		{name: "missing pr", args: []string{commandRun, "done"}, wantCode: exitUsage, wantError: "error: ", wantUsage: "--pr"},
+		{name: "bad pr url", args: []string{commandRun, "done", "--pr", "https://example.com/1"}, wantCode: exitUsage, wantError: "error: "},
 		{name: "no subcommand", args: []string{commandRun}, wantCode: exitUsage, wantError: "error: no command given\n", wantUsage: "harness run [command]"},
 		{name: "no active run", args: []string{commandRun, "plan"}, wantCode: exitRuntime, wantError: "error: run not found\n"},
 	}

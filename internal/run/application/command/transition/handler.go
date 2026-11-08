@@ -2,6 +2,7 @@ package transition
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -26,9 +27,12 @@ var gatedEvents = map[domain.Event]bool{
 }
 
 type Command struct {
-	Key    domain.RunKey
-	Event  domain.Event
-	Reason string
+	Key     domain.RunKey
+	Event   domain.Event
+	Reason  string
+	PRURL   string
+	RunID   string
+	Version int
 }
 
 type Flow struct {
@@ -92,9 +96,23 @@ func NewHandler(repo domain.RunRepository, flow Flow) Handler {
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) error {
-	run, err := h.repo.Active(ctx, cmd.Key)
+	run, err := h.load(ctx, cmd)
 	if err != nil {
 		return err
 	}
-	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason})
+	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, PRURL: cmd.PRURL})
+}
+
+func (h Handler) load(ctx context.Context, cmd Command) (domain.Run, error) {
+	if cmd.RunID == "" {
+		return h.repo.Active(ctx, cmd.Key)
+	}
+	run, err := h.repo.Get(ctx, cmd.RunID)
+	if err != nil {
+		return domain.Run{}, err
+	}
+	if run.Version != cmd.Version {
+		return domain.Run{}, fmt.Errorf("%w: %s at version %d, want %d", domain.ErrStaleRun, run.ID, run.Version, cmd.Version)
+	}
+	return run, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/jorge07/harness/internal/run/application/query/status"
 	"github.com/jorge07/harness/internal/run/domain"
 	"github.com/jorge07/harness/internal/run/ui/cli"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
@@ -35,6 +36,10 @@ func (m *memoryRepository) Get(context.Context, string) (domain.Run, error) {
 		return m.saved[len(m.saved)-1], nil
 	}
 	return m.stored, nil
+}
+
+func (m *memoryRepository) ListByPhase(context.Context, string, []domain.Phase) ([]domain.Run, error) {
+	return nil, nil
 }
 
 func (m *memoryRepository) Save(_ context.Context, run domain.Run) (domain.Run, error) {
@@ -81,6 +86,36 @@ func TestTransitionCommand(t *testing.T) {
 			}
 			if len(repo.saved) != tc.wantSaved || !strings.Contains(out.String(), tc.wantOut) {
 				t.Errorf("saves = %d, output = %q, want %d and %q", len(repo.saved), out.String(), tc.wantSaved, tc.wantOut)
+			}
+		})
+	}
+}
+
+func TestDoneChecksThePRFlag(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr error
+		wantMsg string
+	}{
+		{"missing flag", []string{"done"}, nil, `required flag "pr" not set`},
+		{"not a pull request url", []string{"done", "--pr", "https://example.com/1"}, shareddomain.ErrInvalidPRURL, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			connect := func(context.Context) (cli.Handlers, func() error, error) {
+				t.Fatal("the command connected before the check of the flag")
+				return cli.Handlers{}, nil, nil
+			}
+			cmd := cli.NewCommand(connect)
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SetArgs(tc.args)
+
+			err := cmd.ExecuteContext(t.Context())
+
+			if err == nil || (tc.wantErr != nil && !errors.Is(err, tc.wantErr)) || !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Fatalf("err = %v, want %v and %q", err, tc.wantErr, tc.wantMsg)
 			}
 		})
 	}

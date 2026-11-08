@@ -208,6 +208,47 @@ func TestGoLiveRounds(t *testing.T) {
 	}
 }
 
+func TestCompleteRecordsPR(t *testing.T) {
+	const first, second = "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
+	run := domain.Run{Phase: domain.PhaseShipping, PRs: []string{first}}
+
+	next, err := run.Apply(domain.Command{Event: domain.EventComplete, PRURL: second}, domain.Policy{GoLive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if next.PRURL != second || !reflect.DeepEqual(next.PRs, []string{first, second}) {
+		t.Fatalf("got PRURL %q, PRs %v", next.PRURL, next.PRs)
+	}
+	if run.PRURL != "" || !reflect.DeepEqual(run.PRs, []string{first}) {
+		t.Fatalf("old run changed: %+v", run)
+	}
+}
+
+func TestRegressClearsIteration(t *testing.T) {
+	const url = "https://github.com/o/r/pull/1"
+	run := domain.Run{Phase: domain.PhaseObserving, PRURL: url, PRs: []string{url}}
+
+	cases := []struct {
+		name      string
+		maxRounds int
+		wantPhase domain.Phase
+		wantPRURL string
+	}{
+		{name: "rounds left", maxRounds: 2, wantPhase: domain.PhasePlanning},
+		{name: "last round keeps the PR for a resume", maxRounds: 1, wantPhase: domain.PhaseBlocked, wantPRURL: url},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			next := apply(t, run, domain.Policy{GoLive: true, MaxLiveRounds: tc.maxRounds}, domain.EventRegress, "p99 breach")
+
+			if next.Phase != tc.wantPhase || next.PRURL != tc.wantPRURL || !reflect.DeepEqual(next.PRs, []string{url}) || next.LiveRound != 1 || next.Reason != "p99 breach" {
+				t.Fatalf("got phase %s, PRURL %q, PRs %v, live round %d, reason %q", next.Phase, next.PRURL, next.PRs, next.LiveRound, next.Reason)
+			}
+		})
+	}
+}
+
 func TestTransitionResetsStopBlocks(t *testing.T) {
 	run := domain.Run{Phase: domain.PhasePlanning, StopBlocks: 2}
 	if got := apply(t, run, domain.Policy{}, domain.EventAbandon, "").StopBlocks; got != 0 {
