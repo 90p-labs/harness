@@ -110,7 +110,7 @@ func ruleCases() map[string][]ruleCase {
 		},
 		RulePRBodyShape: {
 			{name: "no body", call: bash("gh pr create --draft --title t")},
-			{name: "inline body without sections", call: bash("gh pr edit 3 --body 'fix it'"), deny: true, step: "## Summary"},
+			{name: "inline body without sections", call: bash("gh pr edit 3 --body 'fix it'"), deny: true, step: "## How"},
 			{name: "other command", call: bash("gh pr view 3 --body x")},
 		},
 		RuleGitNoForce: {
@@ -278,7 +278,7 @@ func ruleByID(t *testing.T, id string) Rule {
 func TestPRBodyShape(t *testing.T) {
 	const marked = "```mermaid\nstateDiagram-v2\n    A --> B: go (new)\n```"
 	const unmarked = "```mermaid\nstateDiagram-v2\n    A --> B\n```"
-	sections := "## Summary\nShort.\n\n## What\n- one\n\n## Why\nBecause."
+	sections := "## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."
 	long := strings.TrimSpace(strings.Repeat("word ", 41))
 	create := bash("gh pr create --draft --title t --body-file body.md")
 	withBody := func(body string) ToolCall {
@@ -298,7 +298,10 @@ func TestPRBodyShape(t *testing.T) {
 		{name: "good inline body", call: bash("gh pr edit 3 --body '" + strings.ReplaceAll(sections, "'", "") + "'")},
 		{name: "good heredoc body", call: bash("gh pr create --draft -F - <<EOF\n" + sections + "\nEOF")},
 		{name: "heredoc without text", call: bash("gh pr create --draft --body-file -")},
-		{name: "missing section", call: withBody("## Summary\nShort.\n\n## What\n- one"), deny: true, want: "## Why"},
+		{name: "missing section", call: withBody("## Why\nBecause.\n\n## What\n- one"), deny: true, want: "the body has no ## How line"},
+		{name: "old sections", call: withBody("## Summary\nShort.\n\n## What\n- one\n\n## Why\nBecause."), deny: true, want: "the body has no ## How line"},
+		{name: "what before why", call: withBody("## What\n- one\n\n## Why\nBecause.\n\n## How\nShort."), deny: true, want: "## What is before ## Why"},
+		{name: "how before what", call: withBody("## Why\nBecause.\n\n## How\nShort.\n\n## What\n- one"), deny: true, want: "## How is before ## What"},
 		{name: "41 word line", call: withBody(sections + "\n\n" + long), deny: true, want: "40 words"},
 		{name: "long line in a code fence", call: withBody(sections + "\n```\n" + long + "\n```")},
 		{name: "40 word line", call: withBody(sections + "\n\n" + strings.TrimSpace(strings.Repeat("word ", 40)))},
@@ -331,7 +334,7 @@ func TestPRBodyShape(t *testing.T) {
 
 func TestPRBodyShapeDiagramNextStep(t *testing.T) {
 	call := bash("gh pr create --draft --body-file body.md")
-	call.Texts = [][]string{{"## Summary\nx\n## What\nx\n## Why\nx\n```mermaid\nflowchart TD\n    a --> b\n```"}}
+	call.Texts = [][]string{{"## Why\nx\n## What\nx\n## How\nx\n```mermaid\nflowchart TD\n    a --> b\n```"}}
 	reason, denied := ruleByID(t, RulePRBodyShape).Denies(call, RuleContext{})
 	if !denied || !strings.HasSuffix(reason, "draw it with `harness diagram`") {
 		t.Fatalf("reason = %q, denied = %v", reason, denied)
