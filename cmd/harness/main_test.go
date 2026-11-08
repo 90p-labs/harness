@@ -431,6 +431,64 @@ func TestVerifyExitCodes(t *testing.T) {
 	})
 }
 
+func TestVerifyRunsTheSetupFirst(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	cfg := `setup:
+  - id: deps
+    run: "mkdir -p vendor && echo ran >> deps.log && touch vendor/ok"
+    paths: [deps.lock]
+    creates: vendor/ok
+gates:
+  - id: test
+    run: "test -f vendor/ok"
+`
+	for name, content := range map[string]string{configFile: cfg, ".gitignore": "vendor/\ndeps.log\n", "deps.lock": "v1\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runs := []struct {
+		name    string
+		prepare func() error
+		setup   bool
+	}{
+		{name: "first run", setup: true},
+		{name: "no change"},
+		{name: "creates path removed", prepare: func() error { return os.RemoveAll(filepath.Join(dir, "vendor")) }, setup: true},
+		{name: "lockfile changed", prepare: func() error { return os.WriteFile(filepath.Join(dir, "deps.lock"), []byte("v2\n"), 0o600) }, setup: true},
+	}
+	for _, r := range runs {
+		if r.prepare != nil {
+			if err := r.prepare(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		code, stdout, stderr := execute(t, commandVerify)
+		if code != exitOK || strings.HasPrefix(stdout, "setup deps ") != r.setup || !strings.Contains(stdout, " test ") {
+			t.Fatalf("%s: code = %d, stdout = %q, stderr = %q, want exit 0 and a setup line %v", r.name, code, stdout, stderr, r.setup)
+		}
+	}
+	log, err := os.ReadFile(filepath.Join(dir, "deps.log"))
+	if err != nil || strings.Count(string(log), "ran") != 3 {
+		t.Errorf("deps.log = %q, %v, want 3 runs", log, err)
+	}
+}
+
+func TestGatesInitWritesProposedSetup(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	script := `cat > /dev/null; printf '%s\n' '{"verdict":"allow","context":"{\"id\":\"install\",\"run\":\"make install\",\"paths\":[\"composer.lock\"],\"creates\":\"vendor/autoload.php\",\"setup\":true}\n{\"id\":\"cs\",\"run\":\"make cs\"}"}'`
+
+	written := gatesInitConfig(t, dir, "plugins:\n  - name: make-gates\n    command: [sh, -c, "+strconv.Quote(script)+"]\n    events: [gates.detect]\n")
+
+	for _, want := range []string{"setup:\n  - id: install", "creates: vendor/autoload.php", "gates:\n  - id: cs"} {
+		if !strings.Contains(written, want) {
+			t.Errorf(".harness.yaml = %q, want it to contain %q", written, want)
+		}
+	}
+}
+
 func TestVerifySkipsTheGatesThatNeedAFailedGate(t *testing.T) {
 	clearHarnessEnv(t)
 	dir := initRepo(t)

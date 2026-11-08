@@ -14,6 +14,7 @@ type Command struct {
 	Repo     string
 	Dir      string
 	Base     string
+	Setup    []domain.Setup
 	Gates    []domain.Gate
 	Parallel int
 }
@@ -72,6 +73,6 @@ func (h Handler) passes(ctx context.Context, cmd Command, sha string) (passed bo
 	defer func() {
 		err = errors.Join(err, h.commits.RemoveWorktree(context.WithoutCancel(ctx), cmd.Dir, path))
 	}()
-	result, err := h.verify.HandleConfigured(ctx, verify.Command{Repo: cmd.Repo, Dir: path, Gates: cmd.Gates, Parallel: cmd.Parallel})
+	result, err := h.verify.HandleConfigured(ctx, verify.Command{Repo: cmd.Repo, Dir: path, Setup: cmd.Setup, Gates: cmd.Gates, Parallel: cmd.Parallel})
 	return !result.Failed, err
 }

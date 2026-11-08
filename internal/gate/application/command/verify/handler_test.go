@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -144,6 +146,27 @@ func (f *fakeDispatcher) Dispatch(_ context.Context, e shareddomain.Envelope) (s
 	return shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}, nil
 }
 
+type fakeSetups struct {
+	mu    sync.Mutex
+	last  map[string]string
+	saved []string
+}
+
+func (f *fakeSetups) LastPass(_ context.Context, _, stepID string) (string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	hash, ok := f.last[stepID]
+	return hash, ok, nil
+}
+
+func (f *fakeSetups) SavePass(_ context.Context, _, stepID, hash string, _ time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.saved = append(f.saved, stepID+"@"+hash)
+	f.last[stepID] = hash
+	return nil
+}
+
 type fakeSource struct {
 	gates []domain.Gate
 	err   error
@@ -158,6 +181,8 @@ type fixture struct {
 	spans      *tracetest.SpanRecorder
 	reader     *sdkmetric.ManualReader
 	files      map[string]string
+	setups     *fakeSetups
+	created    map[string]bool
 	handler    verify.Handler
 	readErr    error
 }
@@ -174,6 +199,8 @@ func newFixtureWith(source domain.GateSource, hasher fakeHasher, runner domain.R
 		spans:      tracetest.NewSpanRecorder(),
 		reader:     sdkmetric.NewManualReader(),
 		files:      map[string]string{},
+		setups:     &fakeSetups{last: map[string]string{}},
+		created:    map[string]bool{},
 	}
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(f.spans)).Tracer("test")
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(f.reader)).Meter("test")
@@ -190,9 +217,10 @@ func newFixtureWith(source domain.GateSource, hasher fakeHasher, runner domain.R
 	if runner == nil {
 		runner = f.runner
 	}
+	exists := func(path string) (bool, error) { return f.created[path], nil }
 	f.handler = verify.NewHandler(
-		hasher, runner, f.evidence, f.dispatcher, source,
-		readFile, tracer, meter, func() time.Time { return fixedNow },
+		hasher, runner, f.evidence, f.setups, f.dispatcher, source,
+		readFile, exists, tracer, meter, func() time.Time { return fixedNow },
 	)
 	return f
 }
@@ -807,5 +835,98 @@ func TestHandleSharedSchedulerCriteria(t *testing.T) {
 	runner.release[criterion] <- passStep
 	if h := <-done; h.err != nil || len(h.result.Lines) != 2 {
 		t.Fatalf("result = %+v, err = %v", h.result, h.err)
+	}
+}
+
+const (
+	depsStep   = "deps"
+	toolsStep  = "tools"
+	vendorFile = "vendor/autoload.php"
+)
+
+func setupStep(id, creates string) domain.Setup {
+	return domain.Setup{Gate: gate(id), Creates: creates}
+}
+
+func withSetup(cmd verify.Command, steps ...domain.Setup) verify.Command {
+	cmd.Setup = steps
+	return cmd
+}
+
+func TestHandleSetup(t *testing.T) {
+	t.Run("runs the steps in file order before the gates and records the hash", func(t *testing.T) {
+		f := newFixture(nil)
+		for _, id := range []string{depsStep, toolsStep, testGate} {
+			f.runner.outcomes[id] = passOutcome()
+		}
+
+		result, err := f.handler.Handle(context.Background(), withSetup(command(gate(testGate)), setupStep(depsStep, ""), setupStep(toolsStep, "")))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []ran{{workDir, depsStep}, {workDir, toolsStep}, {workDir, testGate}}; !slices.Equal(f.runner.ran, want) {
+			t.Errorf("ran = %+v, want %+v", f.runner.ran, want)
+		}
+		if want := []verify.SetupLine{{Step: depsStep, Duration: 2 * time.Second}, {Step: toolsStep, Duration: 2 * time.Second}}; !slices.Equal(result.Setup, want) {
+			t.Errorf("setup lines = %+v, want %+v", result.Setup, want)
+		}
+		if want := []string{depsStep + "@" + inputHash, toolsStep + "@" + inputHash}; !slices.Equal(f.setups.saved, want) {
+			t.Errorf("saved setup = %q, want %q", f.setups.saved, want)
+		}
+		if len(f.evidence.saved) != 1 || len(f.dispatcher.envelopes) != 2 || len(result.Lines) != 1 {
+			t.Errorf("evidence = %+v, events = %d, lines = %+v, want only the gate in them", f.evidence.saved, len(f.dispatcher.envelopes), result.Lines)
+		}
+	})
+
+	cases := map[string]struct {
+		last    string
+		created bool
+		creates string
+		runs    bool
+	}{
+		"skips a step with the same hash and its creates path": {last: inputHash, created: true, creates: vendorFile},
+		"skips a step with the same hash and no creates path":  {last: inputHash},
+		"runs a step whose creates path is missing":            {last: inputHash, creates: vendorFile, runs: true},
+		"runs a step whose hash changed":                       {last: "tree-0", created: true, creates: vendorFile, runs: true},
+		"runs a step with no pass":                             {runs: true},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(nil)
+			f.runner.outcomes[depsStep] = passOutcome()
+			f.runner.outcomes[testGate] = passOutcome()
+			if c.last != "" {
+				f.setups.last[depsStep] = c.last
+			}
+			f.created[filepath.Join(workDir, vendorFile)] = c.created
+
+			result, err := f.handler.Handle(context.Background(), withSetup(command(gate(testGate)), setupStep(depsStep, c.creates)))
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ran := slices.Contains(f.runner.ran, ran{workDir, depsStep}); ran != c.runs || len(result.Setup) == 0 == c.runs {
+				t.Errorf("step ran = %v, setup lines = %+v, want ran %v", ran, result.Setup, c.runs)
+			}
+		})
+	}
+}
+
+func TestHandleSetupFails(t *testing.T) {
+	f := newFixture(nil)
+	f.runner.outcomes[depsStep] = failOutcome()
+	f.runner.outcomes[testGate] = passOutcome()
+
+	_, err := f.handler.Handle(context.Background(), withSetup(command(gate(testGate)), setupStep(depsStep, ""), setupStep(toolsStep, "")))
+
+	if !errors.Is(err, domain.ErrSetupFailed) || !strings.Contains(err.Error(), depsStep) || !strings.Contains(err.Error(), failTail) {
+		t.Fatalf("err = %v, want a setup failure that names %s and holds its tail", err, depsStep)
+	}
+	if want := []ran{{workDir, depsStep}}; !slices.Equal(f.runner.ran, want) {
+		t.Errorf("ran = %+v, want only the failed step", f.runner.ran)
+	}
+	if len(f.setups.saved) != 0 || len(f.evidence.saved) != 0 || len(f.dispatcher.envelopes) != 0 {
+		t.Errorf("setup saved = %q, evidence = %+v, events = %d, want nothing", f.setups.saved, f.evidence.saved, len(f.dispatcher.envelopes))
 	}
 }

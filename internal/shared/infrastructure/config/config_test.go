@@ -346,6 +346,20 @@ func TestLoadLive(t *testing.T) {
 	}
 }
 
+func TestLoadSetupConfig(t *testing.T) {
+	got, err := load(t, "setup:\n  - id: deps\n    run: composer install\n    paths: [composer.lock]\n    creates: vendor/autoload.php\n")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	want := []config.Setup{{ID: "deps", Run: "composer install", Paths: []string{"composer.lock"}, Creates: "vendor/autoload.php"}}
+	if !reflect.DeepEqual(got.Setup, want) {
+		t.Errorf("setup = %+v, want %+v", got.Setup, want)
+	}
+	if _, err := load(t, "setup:\n  - {id: deps, run: x, needs: [lint]}\n"); err == nil || !strings.Contains(err.Error(), "needs") {
+		t.Errorf("needs err = %v, want the unknown key needs refused", err)
+	}
+}
+
 func TestLoadGateUnknownKey(t *testing.T) {
 	if _, err := load(t, "gates:\n  - {id: a, run: x, cmd: y}\n"); err == nil {
 		t.Fatal("want an error for the unknown gate key")

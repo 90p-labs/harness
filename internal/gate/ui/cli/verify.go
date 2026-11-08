@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jorge07/harness/internal/gate/application/command/initgates"
 	"github.com/jorge07/harness/internal/gate/application/command/verify"
 	"github.com/jorge07/harness/internal/gate/application/command/verifycommits"
 	"github.com/jorge07/harness/internal/gate/domain"
@@ -20,6 +21,7 @@ const (
 
 	lineFormat     = "%s %s %s\n"
 	skipFormat     = "%s %s needs %s\n"
+	setupFormat    = "setup %s %s\n"
 	tailFormat     = "\n%s:\n%s\n"
 	noGateMessage  = "no gate is set\n"
 	shortSHALength = 12
@@ -30,7 +32,7 @@ var ErrGatesFailed = errors.New("gates failed")
 type Handlers struct {
 	Verify        func(ctx context.Context) (verify.Result, error)
 	VerifyCommits func(ctx context.Context, base string) (verifycommits.Result, error)
-	Init          func(ctx context.Context) ([]domain.Gate, error)
+	Init          func(ctx context.Context) (initgates.Result, error)
 }
 
 type Connect func(ctx context.Context) (Handlers, func() error, error)
@@ -58,6 +60,11 @@ func verifyGates(ctx context.Context, out io.Writer, h Handlers) error {
 	result, err := h.Verify(ctx)
 	if err != nil {
 		return err
+	}
+	for _, step := range result.Setup {
+		if _, err := fmt.Fprintf(out, setupFormat, step.Step, step.Duration.Round(time.Millisecond)); err != nil {
+			return err
+		}
 	}
 	if len(result.Lines) == 0 {
 		_, err = fmt.Fprint(out, noGateMessage)

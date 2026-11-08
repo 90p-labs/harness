@@ -69,10 +69,12 @@ type GatesDetectPayload struct {
 }
 
 type ProposedGate struct {
-	ID    string   `json:"id"`
-	Run   string   `json:"run"`
-	Paths []string `json:"paths,omitempty"`
-	Needs []string `json:"needs,omitempty"`
+	ID      string   `json:"id"`
+	Run     string   `json:"run"`
+	Paths   []string `json:"paths,omitempty"`
+	Needs   []string `json:"needs,omitempty"`
+	Setup   bool     `json:"setup,omitempty"`
+	Creates string   `json:"creates,omitempty"`
 }
 
 type ChartRenderPayload struct {

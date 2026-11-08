@@ -120,6 +120,10 @@ lint:
   packs: [ddd]
 verify:
   parallel: 3             # at most 3 gates at the same time; the default 1 runs them in file order
+setup:
+  - id: go-mod
+    run: go mod download
+    paths: [go.mod, go.sum]  # runs again only when these files change
 gates:
   - id: go-fmt
     run: test -z "$(gofmt -l .)"
@@ -138,7 +142,7 @@ gates:
     needs: [go-test]
 ```
 
-`go-fmt`, `go-vet` and `lint` run in parallel. When `lint` fails, `go-test` and `e2e` do not run, and `harness verify` exits 1:
+`harness verify` runs `go-mod` before the gates, and only when `go.mod` or `go.sum` changed since its last pass. A setup step has no evidence and no `needs`, and a failed step stops `harness verify` before any gate. `go-fmt`, `go-vet` and `lint` run in parallel. When `lint` fails, `go-test` and `e2e` do not run, and `harness verify` exits 1:
 
 ```text
 PASS go-fmt 61ms

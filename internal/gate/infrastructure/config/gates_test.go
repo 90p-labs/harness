@@ -66,7 +66,7 @@ func TestWriterKeepsExistingKeys(t *testing.T) {
 		{ID: "go-test", Run: "go test ./...", Paths: []string{"**/*.go"}, Timeout: domain.DefaultTimeout},
 		{ID: "slow", Run: "make e2e", Timeout: 90 * time.Second, Baseline: "b.json"},
 	}
-	if err := w.WriteGates(dir, gates); err != nil {
+	if err := w.WriteGates(dir, nil, gates); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, configFile))
@@ -124,7 +124,7 @@ func TestWriteGateConfig(t *testing.T) {
 		{ID: "test", Run: "pnpm test", Timeout: domain.DefaultTimeout, Needs: []string{"lint"}},
 	}
 	var w gateconfig.Writer
-	if err := w.WriteGates(dir, gates); err != nil {
+	if err := w.WriteGates(dir, nil, gates); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, configFile))
@@ -144,13 +144,64 @@ func TestWriteGateConfig(t *testing.T) {
 	}
 }
 
+func TestDecodeSetupConfig(t *testing.T) {
+	got, err := gateconfig.DecodeSetup([]sharedconfig.Setup{
+		{ID: "deps", Run: "composer install", Paths: []string{"composer.lock"}, Creates: "vendor/autoload.php"},
+	})
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	want, _ := domain.NewSetup("deps", "composer install", []string{"composer.lock"}, "vendor/autoload.php")
+	if !reflect.DeepEqual(got, []domain.Setup{want}) {
+		t.Errorf("setup = %+v, want %+v", got, want)
+	}
+
+	_, err = gateconfig.DecodeSetup([]sharedconfig.Setup{{ID: "deps", Run: "x"}, {ID: "deps", Run: "y"}})
+	if !errors.Is(err, domain.ErrInvalidSetup) {
+		t.Errorf("duplicate err = %v, want an invalid setup error", err)
+	}
+}
+
+func TestWriteSetupConfig(t *testing.T) {
+	dir := t.TempDir()
+	deps, _ := domain.NewSetup("deps", "make install", []string{"composer.lock"}, "vendor/autoload.php")
+	gates := []domain.Gate{{ID: "test", Run: "make test", Timeout: domain.DefaultTimeout}}
+	var w gateconfig.Writer
+	if err := w.WriteGates(dir, []domain.Setup{deps}, gates); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, configFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := string(raw); strings.Index(text, "setup:") > strings.Index(text, "gates:") || strings.Contains(text, "timeout:") {
+		t.Errorf("want the setup key before the gates key and no timeout:\n%s", text)
+	}
+	loaded, err := sharedconfig.Load(pflag.NewFlagSet("test", pflag.ContinueOnError), dir)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	decoded, err := gateconfig.DecodeSetup(loaded.Setup)
+	if err != nil || !reflect.DeepEqual(decoded, []domain.Setup{deps}) {
+		t.Errorf("round trip = %+v, %v, want %+v", decoded, err, deps)
+	}
+
+	setupOnly := t.TempDir()
+	if err := os.WriteFile(filepath.Join(setupOnly, configFile), []byte("setup:\n  - {id: deps, run: x}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if has, err := w.HasGates(setupOnly); err != nil || !has {
+		t.Errorf("HasGates with a setup key = %v, %v, want true", has, err)
+	}
+}
+
 func TestWriterMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	var w gateconfig.Writer
 	if has, err := w.HasGates(dir); err != nil || has {
 		t.Fatalf("HasGates = %v, %v, want false", has, err)
 	}
-	if err := w.WriteGates(dir, []domain.Gate{{ID: "a", Run: "x", Timeout: domain.DefaultTimeout}}); err != nil {
+	if err := w.WriteGates(dir, nil, []domain.Gate{{ID: "a", Run: "x", Timeout: domain.DefaultTimeout}}); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	if has, err := w.HasGates(dir); err != nil || !has {

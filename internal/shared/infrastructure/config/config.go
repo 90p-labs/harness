@@ -70,6 +70,7 @@ type Config struct {
 	Guard   Guard               `mapstructure:"guard"`
 	Deploy  Deploy              `mapstructure:"deploy"`
 	Git     Git                 `mapstructure:"git"`
+	Setup   []Setup             `mapstructure:"setup"`
 	Gates   []Gate              `mapstructure:"gates"`
 	Verify  Verify              `mapstructure:"verify"`
 	Lint    Lint                `mapstructure:"lint"`
@@ -112,6 +113,13 @@ type Gate struct {
 	Timeout  time.Duration `mapstructure:"timeout"`
 	Baseline string        `mapstructure:"baseline"`
 	Needs    []string      `mapstructure:"needs"`
+}
+
+type Setup struct {
+	ID      string   `mapstructure:"id"`
+	Run     string   `mapstructure:"run"`
+	Paths   []string `mapstructure:"paths"`
+	Creates string   `mapstructure:"creates"`
 }
 
 type Verify struct {

@@ -2,6 +2,8 @@ package gate
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"time"
 
@@ -24,13 +26,24 @@ import (
 
 const instrumentationName = "github.com/jorge07/harness/internal/gate"
 
-var DecodeGates = gateconfig.Decode
+var (
+	DecodeGates = gateconfig.Decode
+	DecodeSetup = gateconfig.DecodeSetup
+)
 
 func NewVerify(db *dbal.DB, bus shareddomain.Dispatcher, criteria domain.GateSource, now func() time.Time) verify.Handler {
 	return verify.NewHandler(
-		gittree.Tree{}, runner.Shell{}, persistence.NewSQLEvidenceRepository(db), bus, criteria,
-		os.ReadFile, otel.Tracer(instrumentationName), otel.Meter(instrumentationName), now,
+		gittree.Tree{}, runner.Shell{}, persistence.NewSQLEvidenceRepository(db), persistence.NewSQLSetupRepository(db), bus, criteria,
+		os.ReadFile, exists, otel.Tracer(instrumentationName), otel.Meter(instrumentationName), now,
 	)
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func NewVerifyCommits(db *dbal.DB, bus shareddomain.Dispatcher, now func() time.Time) verifycommits.Handler {

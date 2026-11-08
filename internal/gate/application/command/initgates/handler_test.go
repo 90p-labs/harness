@@ -27,13 +27,14 @@ var (
 type fakeStore struct {
 	exists  bool
 	written []domain.Gate
+	setup   []domain.Setup
 	dir     string
 }
 
 func (f *fakeStore) has(string) (bool, error) { return f.exists, nil }
 
-func (f *fakeStore) write(dir string, gates []domain.Gate) error {
-	f.dir, f.written = dir, gates
+func (f *fakeStore) write(dir string, setup []domain.Setup, gates []domain.Gate) error {
+	f.dir, f.setup, f.written = dir, setup, gates
 	return nil
 }
 
@@ -85,7 +86,7 @@ func TestInitGatesAppendsTheProposedGates(t *testing.T) {
 		newGate(t, "helm-render", "helm template deploy/chart > /dev/null", nil),
 		newGate(t, "kubeconform", "kubeconform deploy", []string{"deploy/**"}),
 	)
-	if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(store.written, want) || store.dir != repoDir {
+	if !reflect.DeepEqual(got.Gates, want) || !reflect.DeepEqual(store.written, want) || store.dir != repoDir {
 		t.Errorf("got %+v, written %+v in %q, want %+v in %q", got, store.written, store.dir, want, repoDir)
 	}
 	var payload shareddomain.GatesDetectPayload
@@ -118,6 +119,36 @@ func TestHandleProposedNeeds(t *testing.T) {
 	_, err = handler(store, answer(`{"id":"unit","run":"make unit","needs":["missing"]}`)).Handle(context.Background(), initgates.Command{Dir: repoDir})
 	if !errors.Is(err, domain.ErrInvalidGate) || store.written != nil {
 		t.Errorf("err = %v, written = %+v, want an unknown need refused before the write", err, store.written)
+	}
+}
+
+func TestHandleProposedSetup(t *testing.T) {
+	store := &fakeStore{}
+	bus := answer(`{"id":"install","run":"make install","paths":["composer.lock"],"creates":"vendor/autoload.php","setup":true}` + "\n" + `{"id":"cs","run":"make cs"}`)
+
+	got, err := handler(store, bus).Handle(context.Background(), initgates.Command{Dir: repoDir})
+
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	install, _ := domain.NewSetup("install", "make install", []string{"composer.lock"}, "vendor/autoload.php")
+	toolchain, _ := detected(repoDir)
+	wantGates := append(toolchain, newGate(t, "cs", "make cs", nil))
+	if !reflect.DeepEqual(store.setup, []domain.Setup{install}) || !reflect.DeepEqual(got.Setup, store.setup) || !reflect.DeepEqual(store.written, wantGates) {
+		t.Errorf("setup = %+v, gates = %+v, want %+v and %+v", store.setup, store.written, install, wantGates)
+	}
+
+	for name, line := range map[string]string{
+		"setup with needs":  `{"id":"install","run":"make install","setup":true,"needs":["cs"]}`,
+		"gate with creates": `{"id":"cs","run":"make cs","creates":"out"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &fakeStore{}
+			_, err := handler(store, answer(line)).Handle(context.Background(), initgates.Command{Dir: repoDir})
+			if err == nil || store.written != nil {
+				t.Errorf("err = %v, written = %+v, want the line refused before the write", err, store.written)
+			}
+		})
 	}
 }
 
@@ -167,14 +198,14 @@ func TestInitGatesProposalFailures(t *testing.T) {
 }
 
 func TestInitGatesPortFailures(t *testing.T) {
-	ok := func(string, []domain.Gate) error { return nil }
+	ok := func(string, []domain.Setup, []domain.Gate) error { return nil }
 	none := func(string) (bool, error) { return false, nil }
 	tests := map[string]initgates.Handler{
 		"detect": initgates.NewHandler(func(string) ([]domain.Gate, error) { return nil, boom }, listFiles, answer(""), none, ok),
 		"files":  initgates.NewHandler(detected, func(context.Context, string) ([]string, error) { return nil, boom }, answer(""), none, ok),
 		"bus":    initgates.NewHandler(detected, listFiles, &fakeBus{err: boom}, none, ok),
 		"has":    initgates.NewHandler(detected, listFiles, answer(""), func(string) (bool, error) { return false, boom }, ok),
-		"write":  initgates.NewHandler(detected, listFiles, answer(""), none, func(string, []domain.Gate) error { return boom }),
+		"write":  initgates.NewHandler(detected, listFiles, answer(""), none, func(string, []domain.Setup, []domain.Gate) error { return boom }),
 	}
 	for name, h := range tests {
 		t.Run(name, func(t *testing.T) {

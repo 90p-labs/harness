@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	commandGates   = "gates"
-	commandInit    = "init"
-	gateInitFormat = "%s: %s\n"
+	commandGates    = "gates"
+	commandInit     = "init"
+	gateInitFormat  = "%s: %s\n"
+	setupInitFormat = "setup %s: %s\n"
 )
 
 func NewGatesCommand(connect Connect) *cobra.Command {
@@ -21,11 +22,16 @@ func NewGatesCommand(connect Connect) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
-				gates, err := h.Init(ctx)
+				written, err := h.Init(ctx)
 				if err != nil {
 					return err
 				}
-				for _, gate := range gates {
+				for _, step := range written.Setup {
+					if _, err := fmt.Fprintf(cmd.OutOrStdout(), setupInitFormat, step.ID, step.Run); err != nil {
+						return err
+					}
+				}
+				for _, gate := range written.Gates {
 					if _, err := fmt.Fprintf(cmd.OutOrStdout(), gateInitFormat, gate.ID, gate.Run); err != nil {
 						return err
 					}

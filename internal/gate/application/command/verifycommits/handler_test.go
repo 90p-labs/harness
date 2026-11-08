@@ -93,6 +93,14 @@ func (fakeEvidence) Find(context.Context, string, string, string) (domain.Eviden
 
 func (fakeEvidence) Save(context.Context, domain.Evidence) error { return nil }
 
+type noSetups struct{}
+
+func (noSetups) LastPass(context.Context, string, string) (string, bool, error) {
+	return "", false, nil
+}
+
+func (noSetups) SavePass(context.Context, string, string, string, time.Time) error { return nil }
+
 type allowAll struct{}
 
 func (allowAll) Dispatch(context.Context, shareddomain.Envelope) (shareddomain.DispatchResult, error) {
@@ -137,9 +145,10 @@ func newFixture(source domain.GateSource, passDirs ...string) *fixture {
 	}
 	tracer := sdktrace.NewTracerProvider().Tracer("test")
 	readFile := func(string) ([]byte, error) { return nil, fs.ErrNotExist }
+	exists := func(string) (bool, error) { return false, nil }
 	inner := verify.NewHandler(
-		fakeHasher{}, f.runner, fakeEvidence{}, allowAll{}, source,
-		readFile, tracer, noop.NewMeterProvider().Meter("test"), func() time.Time { return fixedNow },
+		fakeHasher{}, f.runner, fakeEvidence{}, noSetups{}, allowAll{}, source,
+		readFile, exists, tracer, noop.NewMeterProvider().Meter("test"), func() time.Time { return fixedNow },
 	)
 	f.handler = verifycommits.NewHandler(f.commits, inner, f.checks, func() time.Time { return fixedNow })
 	return f
@@ -191,6 +200,27 @@ func TestHandleSharedSchedulerSkips(t *testing.T) {
 	}
 	if slices.Contains(f.runner.ranDirs, "/tmp/wt-a1a1a1#"+testGate) {
 		t.Fatalf("ran = %q, want %s skipped after the failed lint", f.runner.ranDirs, testGate)
+	}
+}
+
+func TestHandleSetupInEachWorktree(t *testing.T) {
+	const depsStep = "deps"
+	shas := []string{"a1a1a1", "b2b2b2", headSHA}
+	var dirs []string
+	for _, sha := range shas {
+		dirs = append(dirs, "/tmp/wt-"+sha)
+	}
+	f := newFixture(nil, dirs...)
+	cmd := command()
+	cmd.Setup = []domain.Setup{{Gate: domain.Gate{ID: depsStep, Run: "make install"}, Creates: "vendor/autoload.php"}}
+
+	_, _ = f.handler.Handle(context.Background(), cmd)
+
+	for _, dir := range dirs {
+		step, gate := slices.Index(f.runner.ranDirs, dir+"#"+depsStep), slices.Index(f.runner.ranDirs, dir+"#"+testGate)
+		if step < 0 || gate < step {
+			t.Errorf("ran = %q, want %s before %s in %s", f.runner.ranDirs, depsStep, testGate, dir)
+		}
 	}
 }
 

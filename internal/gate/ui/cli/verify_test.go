@@ -77,6 +77,21 @@ func TestVerifyCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("the setup steps that ran print before the gates", func(t *testing.T) {
+		var closed bool
+		withSetup := passing
+		withSetup.Setup = []verify.SetupLine{{Step: "deps", Duration: 3200 * time.Millisecond}}
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+			Verify: func(context.Context) (verify.Result, error) { return withSetup, nil },
+		}, &closed))
+
+		stdout, err := run(t, cmd)
+
+		if err != nil || stdout != "setup deps 3.2s\nPASS vet 1.5s\nCACHED test 20s\n" {
+			t.Fatalf("err = %v, stdout = %q", err, stdout)
+		}
+	})
+
 	t.Run("a failed need skips the gates after it", func(t *testing.T) {
 		var closed bool
 		skipped := verify.Result{Failed: true, Lines: []verify.Line{

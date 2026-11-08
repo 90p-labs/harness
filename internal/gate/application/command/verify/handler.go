@@ -53,8 +53,14 @@ type GateAfterPayload struct {
 type Command struct {
 	Repo     string
 	Dir      string
+	Setup    []domain.Setup
 	Gates    []domain.Gate
 	Parallel int
+}
+
+type SetupLine struct {
+	Step     string
+	Duration time.Duration
 }
 
 type Line struct {
@@ -66,19 +72,24 @@ type Line struct {
 }
 
 type Result struct {
+	Setup  []SetupLine
 	Lines  []Line
 	Failed bool
 }
 
 type ReadFile func(path string) ([]byte, error)
 
+type Exists func(path string) (bool, error)
+
 type Handler struct {
 	hasher     domain.Hasher
 	runner     domain.Runner
 	evidence   domain.EvidenceRepository
+	setups     domain.SetupRepository
 	dispatcher shareddomain.Dispatcher
 	criteria   domain.GateSource
 	readFile   ReadFile
+	exists     Exists
 	tracer     trace.Tracer
 	duration   metric.Float64Histogram
 	now        func() time.Time
@@ -88,9 +99,11 @@ func NewHandler(
 	hasher domain.Hasher,
 	runner domain.Runner,
 	evidence domain.EvidenceRepository,
+	setups domain.SetupRepository,
 	dispatcher shareddomain.Dispatcher,
 	criteria domain.GateSource,
 	readFile ReadFile,
+	exists Exists,
 	tracer trace.Tracer,
 	meter metric.Meter,
 	now func() time.Time,
@@ -101,8 +114,8 @@ func NewHandler(
 		metric.WithExplicitBucketBoundaries(eventbus.DurationBuckets()...),
 	)
 	return Handler{
-		hasher: hasher, runner: runner, evidence: evidence, dispatcher: dispatcher,
-		criteria: criteria, readFile: readFile, tracer: tracer, duration: duration, now: now,
+		hasher: hasher, runner: runner, evidence: evidence, setups: setups, dispatcher: dispatcher,
+		criteria: criteria, readFile: readFile, exists: exists, tracer: tracer, duration: duration, now: now,
 	}
 }
 
@@ -118,15 +131,59 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (Result, error) {
 }
 
 func (h Handler) HandleConfigured(ctx context.Context, cmd Command) (Result, error) {
+	setup, err := h.runSetup(ctx, cmd)
+	if err != nil {
+		return Result{}, err
+	}
 	lines, err := h.schedule(ctx, cmd)
 	if err != nil {
 		return Result{}, err
 	}
-	result := Result{Lines: lines}
+	result := Result{Setup: setup, Lines: lines}
 	for _, line := range lines {
 		result.Failed = result.Failed || !line.Status.Passed()
 	}
 	return result, nil
+}
+
+func (h Handler) runSetup(ctx context.Context, cmd Command) ([]SetupLine, error) {
+	var lines []SetupLine
+	for _, step := range cmd.Setup {
+		hash, err := h.hasher.InputHash(ctx, cmd.Dir, step.Gate)
+		if err != nil {
+			return nil, err
+		}
+		current, err := h.setupCurrent(ctx, cmd, step, hash)
+		if err != nil {
+			return nil, err
+		}
+		if current {
+			continue
+		}
+		outcome, err := h.runner.Run(ctx, cmd.Dir, step.Gate)
+		if err != nil {
+			return nil, err
+		}
+		if outcome.Result != domain.ResultPass {
+			return nil, fmt.Errorf("%w: %s\n%s", domain.ErrSetupFailed, step.ID, outcome.Tail)
+		}
+		if err := h.setups.SavePass(ctx, cmd.Repo, step.ID, hash, h.now()); err != nil {
+			return nil, err
+		}
+		lines = append(lines, SetupLine{Step: step.ID, Duration: outcome.Duration})
+	}
+	return lines, nil
+}
+
+func (h Handler) setupCurrent(ctx context.Context, cmd Command, step domain.Setup, hash string) (bool, error) {
+	if step.Creates != "" {
+		created, err := h.exists(filepath.Join(cmd.Dir, step.Creates))
+		if err != nil || !created {
+			return false, err
+		}
+	}
+	last, ok, err := h.setups.LastPass(ctx, cmd.Repo, step.ID)
+	return ok && last == hash, err
 }
 
 type finished struct {

@@ -248,7 +248,7 @@ A deploy tool plugin works on `gates.detect`, and optionally on `chart.render`. 
 
 | Event | Payload | Answer in `context` |
 |---|---|---|
-| `gates.detect` | `{"files": [...]}`, the tracked and untracked files of the repo | one JSON gate on each line: `{"id":"...","run":"...","paths":[...],"needs":[...]}`, `paths` and `needs` optional |
+| `gates.detect` | `{"files": [...]}`, the tracked and untracked files of the repo | one JSON gate on each line: `{"id":"...","run":"...","paths":[...],"needs":[...]}`, `paths` and `needs` optional; a line with `"setup":true` is a setup step, with an optional `"creates":"..."` and no `needs` |
 | `chart.render` | `{"chart": "deploy/chart"}`, with `cwd` the folder to render in | the rendered manifest in the `helm template` format: each document starts with a `# Source: <chart name>/<file>` comment, and the lint puts the chart folder in place of the chart name |
 
 The deploy module builds the default plugins `helm` and `promtool`, except the names in `deploy.disabled`. They propose nothing without their files:
@@ -493,6 +493,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `lint.observability.chart` | `deploy/chart` | The Helm chart folder |
 | `lint.observability.rules` | `deploy/**/*.rules.yaml` | A glob of the alert rule files |
 | `lint.observability.dashboards` | `deploy/**/dashboards/*.json` | A glob of the dashboard files |
+| `setup` | empty list | A list of setup steps that `harness verify` runs before the gates; each step is valid and its id is unique, and an error names the step |
 | `gates` | empty list | A list of gates; each gate is valid and its id is unique, and an error names the gate |
 | `verify.parallel` | `1` | 1 or more; the most gates that `harness verify` runs at the same time |
 
@@ -656,6 +657,32 @@ lint:
 <the last 4 KiB of the lint output>
 ```
 
+Setup steps:
+
+An install, such as `composer install` or `pnpm install`, is not a gate: it proves nothing about the repo. It goes in the `setup` key:
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | string | required, unique in `setup`, matches `^[a-z][a-z0-9-]*$` |
+| `run` | string | required, runs with `sh -c` in the repo root |
+| `paths` | list of globs | optional, the files that the step reads, empty means the whole tree |
+| `creates` | path | optional, a file in the repo that the step makes, such as `vendor/autoload.php` |
+
+```yaml
+setup:
+  - id: deps
+    run: docker compose run --rm -T php composer install
+    paths: [composer.json, composer.lock, compose.yaml]
+    creates: vendor/autoload.php
+```
+
+- `harness verify` runs the steps before the gates, one at a time, in file order.
+- A step runs when the hash of its `paths` differs from the hash of its last pass, or when its `creates` file is missing. Else it does nothing and prints nothing.
+- A step that runs prints `setup <id> <duration>` before the gate lines. It has no evidence, no `PASS` or `CACHED` line, no events and no `needs`.
+- A failed step stops `harness verify` before any gate starts. The error names the step and holds the output tail.
+- The table `setup_runs` keeps one row for each repo and step: the input hash and the time of the last pass. Thus a second checkout that shares a volume with the first runs the step again when its hash differs.
+- `harness verify --commits` runs the steps in each worktree. A new worktree has no `creates` file, so a step with `creates` runs there.
+
 Input hash and evidence:
 
 - `harness verify` writes the working tree into a temporary git index. The real index does not change.
@@ -672,9 +699,9 @@ Baseline ratchet:
 
 Commands:
 
-- `harness verify` runs the gates by their `needs`, at most `verify.parallel` at the same time. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate, in file order. A skipped gate prints `SKIPPED <id> needs <need>`. It exits 1 when one gate fails, is vetoed or is skipped.
-- `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree, with the same `needs` and `verify.parallel`. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
-- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. The built-in detection writes no `needs`. A plugin failure, a deny, a bad line, a duplicate id or a bad `needs` stops it before it writes.
+- `harness verify` runs the setup steps first, then the gates by their `needs`, at most `verify.parallel` at the same time. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate, in file order. A skipped gate prints `SKIPPED <id> needs <need>`. It exits 1 when one gate fails, is vetoed or is skipped.
+- `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree, with the same setup steps, `needs` and `verify.parallel`. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
+- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing `gates` or `setup` key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. A line with `"setup":true` goes to the `setup` key, with its `creates`, before the `gates` key. The built-in detection writes no `needs` and no setup step. A plugin failure, a deny, a bad line, a duplicate id, a bad `needs`, a setup line with `needs` or a gate line with `creates` stops it before it writes.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
