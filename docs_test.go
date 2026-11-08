@@ -79,7 +79,7 @@ func TestHarnessSkillGrill(t *testing.T) {
 		}
 		last = at
 	}
-	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer} {
+	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer, prOpenSkill: readDoc(t, prOpenSkill)} {
 		if strings.Contains(text, emDash) || strings.ContainsFunc(text, isEmoji) {
 			t.Errorf("%s has an em dash or an emoji", path)
 		}

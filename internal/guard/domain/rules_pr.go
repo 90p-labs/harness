@@ -25,14 +25,14 @@ const (
 	nextStepDraft      = "open the pull request with --draft"
 	nextStepDiagram    = "draw it with `harness diagram`"
 	nextStepBody       = "pass the text inline, or write the file in a separate call"
-	nextStepShape      = "write the body with the lines ## Summary, ## What and ## Why"
+	nextStepShape      = "write the body with the lines ## Why, ## What and ## How, in this order"
 	reasonBodyFileRead = "cannot read the body file: "
 	nextStepWords      = "split the line into lines of 40 words or fewer"
 )
 
 var (
 	mergePath      = regexp.MustCompile(`pulls/\d+/merge`)
-	bodySections   = []string{"## Summary", "## What", "## Why"}
+	bodySections   = []string{"## Why", "## What", "## How"}
 	bodyFlags      = []string{"--body", "-b"}
 	bodyFileFlags  = []string{"--body-file", "-F"}
 	prBodyCommands = []string{subCreate, subEdit}
@@ -92,10 +92,8 @@ func checkBody(body string) (string, bool) {
 		return "", false
 	}
 	lines := strings.Split(body, "\n")
-	for _, section := range bodySections {
-		if !slices.ContainsFunc(lines, func(l string) bool { return strings.TrimSpace(l) == section }) {
-			return deny(fmt.Sprintf("the body has no %s line", section), nextStepShape)
-		}
+	if reason, denied := checkSections(lines); denied {
+		return reason, true
 	}
 	var diagram []string
 	inFence, inMermaid := false, false
@@ -118,6 +116,32 @@ func checkBody(body string) (string, bool) {
 			diagram = append(diagram, line)
 		case len(strings.Fields(line)) > maxBodyWords:
 			return deny(fmt.Sprintf("a body line has more than %d words", maxBodyWords), nextStepWords)
+		}
+	}
+	return "", false
+}
+
+func checkSections(lines []string) (string, bool) {
+	var outside []string
+	inFence := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, fenceMarker) {
+			inFence = !inFence
+		} else if !inFence {
+			outside = append(outside, trimmed)
+		}
+	}
+	at := make([]int, len(bodySections))
+	for i, section := range bodySections {
+		at[i] = slices.Index(outside, section)
+		if at[i] < 0 {
+			return deny(fmt.Sprintf("the body has no %s line", section), nextStepShape)
+		}
+	}
+	for i := 1; i < len(at); i++ {
+		if at[i] < at[i-1] {
+			return deny(fmt.Sprintf("%s is before %s", bodySections[i], bodySections[i-1]), nextStepShape)
 		}
 	}
 	return "", false

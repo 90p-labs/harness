@@ -37,7 +37,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step.
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
 4. `working`: for each task, write the failing test first, then the code. Run `harness verify` until each gate and each criterion passes. Commit, run `harness verify --commits <default branch>`, then `harness run review`.
 5. `reviewing`: start the `reviewer` agent on the diff, on the model of the `reviewer` role in `.harness.yaml`. With findings, run `harness run rework --findings "<summary>"` and go back to `working`. With none, run `harness run ship`.
-6. `shipping`: push and open the pull request as a draft. The user merges it. Then run `harness run done --pr <url>`.
+6. `shipping`: start the `pr-open` skill. It pushes the branch and opens the pull request as a draft, with the body Why, What and How. The user merges it. Then run `harness run done --pr <url>`.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
 
