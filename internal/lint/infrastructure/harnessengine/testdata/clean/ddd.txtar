@@ -82,3 +82,7 @@ export class OrderMemoryRepository implements OrderRepository {
 <?php
 
 final class Order {}
+-- src/Kernel.php --
+<?php
+
+final class Kernel {}
