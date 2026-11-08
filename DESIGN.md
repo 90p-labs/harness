@@ -480,13 +480,39 @@ next: implement test first, run harness verify, then harness run review
 - An illegal transition, a veto, a stale run or an active run on `start` writes `error:` and the cause on stderr, and exits 1.
 - A transition goes through `Flow.Move`: the span `run.transition`, `run.transition.before` (a deny vetoes), `Apply`, `Save`, then `run.transition.after`.
 
+The `plan` and `amend` events go through the `PlanGate` port of the run domain. `Flow.Move` calls it after the legality check:
+
+1. `Flow.Move` applies the event once to check that it is legal. An illegal event returns `ErrIllegalTransition` and never reaches the gate.
+2. `PlanGate.Submit` checks `plan.md` of the run folder. A problem returns `ErrPlanHasProblems` with the problem lines, and the run stays in its phase.
+3. It sends `plan.submitted`. A deny or a plugin failure returns `ErrPlanRejected` with the reasons, and the run stays in its phase.
+4. It returns the plan track. `Apply` keeps the stricter of the run track and the plan track, so the track never goes down.
+
+`cmd/harness` gives `run.NewModule` an adapter of the plan module as the `PlanGate`. The run context and the plan context never import each other.
+
+The run folder is `.harness/runs/<run id>/` in the worktree top level. A human edits `plan.md` there. `start` does not create the folder.
+
+The `plan.submitted` payload is `{"path": "<plan.md>", "track": "light|full"}`. The envelope `cwd` is the worktree and `run` holds the id and the phase.
+
+The track comes from `Classify`. It is `full` when the code tree touches 3 or more folders, a `domain/` folder, a schema file, or a command or query folder. A `Track: full` line in `## Goal` raises it. A declared `light` never lowers it.
+
 The state file is `.harness/state.db` in the git common dir, so each linked worktree shares it. The DBAL base dir is the common dir, and the default DSN `sqlite:.harness/state.db` is relative to it.
 
-Only a `run` command loads the config and opens the store. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
+Only a `run` command and `plan check` load the config. Only a `run` command, and `plan check` without `--file`, open the store. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
 
 `cmd/harness` wraps the `Args` of every command in a usage error, and a command with no `Args` takes none. A `run` command checks its required flag in its `Args` function, because cobra checks `MarkFlagRequired` after the `Args` step.
 
 The `ui` layer: a `ui` package imports its own `application` and `domain` packages, and never an `infrastructure` package. `TestLayerImports` checks it.
+
+## Plan commands
+
+`harness plan check [--file path]` checks a plan in any phase, with or without a run.
+
+- With `--file`, it checks that file with live round 0.
+- Without `--file`, it checks `plan.md` in the run folder of the active run, with the live round of the run.
+- It prints one problem on each stdout line, as `plan.md:12: rule: text`. A diagram of an unchecked kind prints `plan.md:30: note: diagram kind flowchart is not checked`.
+- It exits 0 on a clean plan, and 1 when there is a problem or the file is unreadable.
+- Without `--file` and with no active run, it exits 2 and prints the usage.
+- The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.
 
 ## Gates and lint packs
 

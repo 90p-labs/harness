@@ -14,6 +14,7 @@ import (
 
 	"github.com/jorge07/harness/internal/run/application/command/transition"
 	"github.com/jorge07/harness/internal/run/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 	callBefore = "before"
 	callSave   = "save"
 	callAfter  = "after"
+	callGate   = "gate"
 
 	spanName      = "run.transition"
 	attrRunID     = "harness.run.id"
@@ -82,10 +84,24 @@ func (f *fakeHooks) After(_ context.Context, from domain.Run, to domain.Run) {
 	f.afterFrom, f.afterTo = from, to
 }
 
+type fakeGate struct {
+	journal *journal
+	track   shareddomain.Track
+	err     error
+	runs    []domain.Run
+}
+
+func (f *fakeGate) Submit(_ context.Context, run domain.Run) (shareddomain.Track, error) {
+	f.journal.calls = append(f.journal.calls, callGate)
+	f.runs = append(f.runs, run)
+	return f.track, f.err
+}
+
 type fixture struct {
 	journal *journal
 	repo    *fakeRepository
 	hooks   *fakeHooks
+	gate    *fakeGate
 	spans   *tracetest.SpanRecorder
 	handler transition.Handler
 }
@@ -96,8 +112,13 @@ func newFixture(stored domain.Run) fixture {
 	hooks := &fakeHooks{journal: j}
 	spans := tracetest.NewSpanRecorder()
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)).Tracer("test")
-	flow := transition.NewFlow(repo, hooks, domain.Policy{MaxReviewRounds: 3}, func() time.Time { return now }, tracer)
-	return fixture{journal: j, repo: repo, hooks: hooks, spans: spans, handler: transition.NewHandler(repo, flow)}
+	gate := &fakeGate{journal: j, track: shareddomain.TrackFull}
+	flow := transition.NewFlow(repo, hooks, gate, domain.Policy{MaxReviewRounds: 3}, func() time.Time { return now }, tracer)
+	return fixture{journal: j, repo: repo, hooks: hooks, gate: gate, spans: spans, handler: transition.NewHandler(repo, flow)}
+}
+
+func planningRun() domain.Run {
+	return domain.Run{ID: runID, Key: key, Phase: domain.PhasePlanning, Version: startedAt}
 }
 
 func workingRun() domain.Run {
@@ -137,6 +158,56 @@ func TestTransitionOrder(t *testing.T) {
 	}
 	if got := f.repo.saved[0].Events()[0].At; !got.Equal(now) {
 		t.Errorf("transition At = %v, want %v", got, now)
+	}
+}
+
+func TestFlowPlanGate(t *testing.T) {
+	errGate := errors.New("plan has problems")
+	cases := []struct {
+		name      string
+		run       domain.Run
+		event     domain.Event
+		gateErr   error
+		wantCalls []string
+		wantErr   error
+		wantSaved bool
+	}{
+		{"submit-plan calls the gate before Before and saves its track", planningRun(), domain.EventSubmitPlan, nil,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}, nil, true},
+		{"amend calls the gate", workingRun(), domain.EventAmend, nil,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}, nil, true},
+		{"submit-plan in the wrong phase skips the gate", workingRun(), domain.EventSubmitPlan, nil,
+			[]string{callActive}, domain.ErrIllegalTransition, false},
+		{"amend in the wrong phase skips the gate", planningRun(), domain.EventAmend, nil,
+			[]string{callActive}, domain.ErrIllegalTransition, false},
+		{"a gate error stops before Before", planningRun(), domain.EventSubmitPlan, errGate,
+			[]string{callActive, callGate}, errGate, false},
+		{"a non-plan event skips the gate", workingRun(), domain.EventSubmitForReview, nil,
+			[]string{callActive, callBefore, callSave, callAfter}, nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(tc.run)
+			f.gate.err = tc.gateErr
+
+			err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: tc.event})
+
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tc.wantErr)
+			}
+			assertCalls(t, f, tc.wantCalls...)
+			if saved := len(f.repo.saved) == 1; saved != tc.wantSaved {
+				t.Fatalf("saved = %+v, want saved %v", f.repo.saved, tc.wantSaved)
+			}
+			if tc.event == domain.EventSubmitPlan && tc.wantSaved {
+				if f.repo.saved[0].Track != shareddomain.TrackFull || f.hooks.beforeCmd.Track != shareddomain.TrackFull {
+					t.Errorf("saved track = %q, Before track = %q, want %q", f.repo.saved[0].Track, f.hooks.beforeCmd.Track, shareddomain.TrackFull)
+				}
+				if len(f.gate.runs) != 1 || f.gate.runs[0].ID != runID {
+					t.Errorf("gate runs = %+v, want the current run", f.gate.runs)
+				}
+			}
+		})
 	}
 }
 

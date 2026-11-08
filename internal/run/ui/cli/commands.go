@@ -27,10 +27,10 @@ const (
 	nextPrefix     = "next: "
 	noActiveRun    = "active: no"
 	missingFlagMsg = "required flag %q not set"
+	planningHint   = "write the plan in %s, then harness run plan"
 )
 
 var phaseHints = map[domain.Phase]string{
-	domain.PhasePlanning:         "write the plan, then harness run plan",
 	domain.PhaseAwaitingApproval: "wait for the approval, then harness run approve",
 	domain.PhaseWorking:          "implement test first, run harness verify, then harness run review",
 	domain.PhaseReviewing:        "review the change, then harness run ship, or harness run rework --findings",
@@ -85,7 +85,14 @@ func Lines(s status.Status) []string {
 	if s.Reason != "" {
 		lines = append(lines, reasonPrefix+s.Reason)
 	}
-	return append(lines, nextPrefix+phaseHints[s.Phase])
+	return append(lines, nextPrefix+hint(s))
+}
+
+func hint(s status.Status) string {
+	if s.Phase == domain.PhasePlanning {
+		return fmt.Sprintf(planningHint, domain.PlanFile(s.ID))
+	}
+	return phaseHints[s.Phase]
 }
 
 func startCommand(connect Connect) *cobra.Command {

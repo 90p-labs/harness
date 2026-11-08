@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jorge07/harness/internal/run/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 func apply(t *testing.T, run domain.Run, policy domain.Policy, event domain.Event, reason string) domain.Run {
@@ -74,6 +75,42 @@ func TestApplyRecordsTransition(t *testing.T) {
 		}
 		if got := right.Events()[3].Reason; got != "right" {
 			t.Fatalf("right event reason = %q, want right", got)
+		}
+	})
+}
+
+func TestRunTrackNeverLowers(t *testing.T) {
+	cases := []struct {
+		name  string
+		event domain.Event
+		phase domain.Phase
+		run   shareddomain.Track
+		cmd   shareddomain.Track
+		want  shareddomain.Track
+	}{
+		{"submit sets the first track", domain.EventSubmitPlan, domain.PhasePlanning, "", shareddomain.TrackLight, shareddomain.TrackLight},
+		{"submit raises light to full", domain.EventSubmitPlan, domain.PhasePlanning, shareddomain.TrackLight, shareddomain.TrackFull, shareddomain.TrackFull},
+		{"amend keeps full against light", domain.EventAmend, domain.PhaseWorking, shareddomain.TrackFull, shareddomain.TrackLight, shareddomain.TrackFull},
+		{"amend keeps full against empty", domain.EventAmend, domain.PhaseWorking, shareddomain.TrackFull, "", shareddomain.TrackFull},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			run := domain.Run{Phase: c.phase, Track: c.run}
+			next, err := run.Apply(domain.Command{Event: c.event, Track: c.cmd}, domain.Policy{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if next.Track != c.want {
+				t.Fatalf("track = %q, want %q", next.Track, c.want)
+			}
+		})
+	}
+
+	t.Run("other events keep the track", func(t *testing.T) {
+		run := domain.Run{Phase: domain.PhaseWorking, Track: shareddomain.TrackFull}
+		next := apply(t, run, domain.Policy{}, domain.EventBlock, "stuck")
+		if next.Track != shareddomain.TrackFull {
+			t.Fatalf("track = %q", next.Track)
 		}
 	})
 }

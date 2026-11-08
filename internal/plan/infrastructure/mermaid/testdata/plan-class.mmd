@@ -1,0 +1,49 @@
+classDiagram
+    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e
+    class Document {
+        Criteria []Criterion
+        Tasks []Task
+        CodeTree Tree
+        TestTree Tree
+        Commits []Commit
+        PRs []PR
+        Diagrams []Diagram
+    }
+    class Task {
+        Number int
+        Side string
+        Owned []string
+        DoD []int
+        DependsOn []int
+        Line int
+    }
+    class Problem {
+        Line int
+        Rule RuleID
+        Message string
+    }
+    class CheckInput {
+        LiveRound int
+        ArchivedPlans []string
+        Diagrams DiagramParser
+    }
+    class DiagramParser {
+        <<interface>>
+        Parse(kind, body) error
+    }
+    class Links {
+        Criteria map[int]CriterionLinks
+        Tasks map[int]TaskLinks
+        Unlinked []string
+    }
+    class Track {
+        <<enumeration>>
+        light
+        full
+    }
+    Document --> Task
+    Document ..> Problem : Check
+    Document ..> Track : Classify
+    Document ..> Links : Trace
+    CheckInput --> DiagramParser
+    cssClass "Document,Task,Problem,CheckInput,DiagramParser,Links,Track" new

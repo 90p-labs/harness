@@ -1,0 +1,122 @@
+package submitplan_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
+	"github.com/jorge07/harness/internal/plan/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+)
+
+const (
+	validPlan   = "plan.md"
+	brokenPlan  = "broken.md"
+	problemLine = "plan.md:1: heading-missing: no ## Goal"
+	testCwd     = "/work/tree"
+	testRunID   = "20261108-011805-add-the-login-page"
+	testPhase   = "planning"
+	pluginName  = "advisor"
+	denyReason  = "the plan misses a rollback"
+	failureText = "exit status 2"
+)
+
+type fakeBus struct {
+	result    shareddomain.DispatchResult
+	envelopes []shareddomain.Envelope
+}
+
+func (f *fakeBus) Dispatch(_ context.Context, e shareddomain.Envelope) (shareddomain.DispatchResult, error) {
+	f.envelopes = append(f.envelopes, e)
+	return f.result, nil
+}
+
+func fakeCheck(_ context.Context, path string, _ int) (domain.Report, error) {
+	if path == brokenPlan {
+		return domain.Report{Problems: []domain.Problem{{Line: 1, Rule: domain.RuleHeadingMissing, Message: "no ## Goal"}}}, nil
+	}
+	return domain.Report{Track: shareddomain.TrackFull}, nil
+}
+
+func newHandler(bus *fakeBus) submitplan.Handler {
+	return submitplan.NewHandler(fakeCheck, bus, testCwd)
+}
+
+func command(path string) submitplan.Command {
+	return submitplan.Command{RunID: testRunID, Phase: testPhase, Path: path}
+}
+
+func TestSubmitPlanCollect(t *testing.T) {
+	t.Run("allow returns the track and sends the envelope", func(t *testing.T) {
+		bus := &fakeBus{result: shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}}
+
+		track, err := newHandler(bus).Handle(t.Context(), command(validPlan))
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if track != shareddomain.TrackFull {
+			t.Errorf("track = %q, want %q", track, shareddomain.TrackFull)
+		}
+		if len(bus.envelopes) != 1 {
+			t.Fatalf("dispatches = %d, want 1", len(bus.envelopes))
+		}
+		got := bus.envelopes[0]
+		if got.Version != shareddomain.EnvelopeVersion || got.Event != shareddomain.EventPlanSubmitted || got.Cwd != testCwd {
+			t.Errorf("envelope = %+v", got)
+		}
+		if got.Run != (shareddomain.RunRef{ID: testRunID, Phase: testPhase}) {
+			t.Errorf("run = %+v", got.Run)
+		}
+		var payload map[string]string
+		if err := json.Unmarshal(got.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		want := map[string]string{"path": validPlan, "track": string(shareddomain.TrackFull)}
+		if payload["path"] != want["path"] || payload["track"] != want["track"] || len(payload) != len(want) {
+			t.Errorf("payload = %v, want %v", payload, want)
+		}
+	})
+
+	t.Run("deny stops the submit with the reason", func(t *testing.T) {
+		bus := &fakeBus{result: shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictDeny, Reason: denyReason}}}
+
+		track, err := newHandler(bus).Handle(t.Context(), command(validPlan))
+
+		if !errors.Is(err, submitplan.ErrPlanRejected) || !strings.Contains(err.Error(), denyReason) {
+			t.Fatalf("err = %v, want ErrPlanRejected with %q", err, denyReason)
+		}
+		if track != "" {
+			t.Errorf("track = %q, want empty", track)
+		}
+	})
+
+	t.Run("a failure with an allow verdict stops the submit", func(t *testing.T) {
+		bus := &fakeBus{result: shareddomain.DispatchResult{
+			Verdict:  shareddomain.Verdict{Kind: shareddomain.VerdictAllow},
+			Failures: []shareddomain.DispatchFailure{{Plugin: pluginName, Err: errors.New(failureText)}},
+		}}
+
+		_, err := newHandler(bus).Handle(t.Context(), command(validPlan))
+
+		if !errors.Is(err, submitplan.ErrPlanRejected) || !strings.Contains(err.Error(), pluginName+": "+failureText) {
+			t.Fatalf("err = %v, want ErrPlanRejected with the failure line", err)
+		}
+	})
+
+	t.Run("problems stop the submit before any dispatch", func(t *testing.T) {
+		bus := &fakeBus{}
+
+		_, err := newHandler(bus).Handle(t.Context(), command(brokenPlan))
+
+		if !errors.Is(err, domain.ErrPlanHasProblems) || !strings.Contains(err.Error(), problemLine) {
+			t.Fatalf("err = %v, want ErrPlanHasProblems with the problem lines", err)
+		}
+		if len(bus.envelopes) != 0 {
+			t.Errorf("dispatches = %d, want 0", len(bus.envelopes))
+		}
+	})
+}
