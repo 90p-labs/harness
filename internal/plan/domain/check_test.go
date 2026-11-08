@@ -323,6 +323,74 @@ func TestDiagramRequiredRule(t *testing.T) {
 	}
 }
 
+func TestOpenQuestions(t *testing.T) {
+	valid := readValid(t)
+	const noneSection = "## Open questions\n\n- none\n"
+	section := func(body string) edit {
+		return edit{noneSection, "## Open questions\n\n" + body}
+	}
+	tests := []struct {
+		name  string
+		edits []edit
+		want  []string
+	}{
+		{"none alone", nil, nil},
+		{"two questions", []edit{section("- Does the word change?\n- Who owns the span?\n")}, nil},
+		{"heading missing", []edit{{"\n" + noneSection, ""}}, []string{"plan.md:1: heading-missing:"}},
+		{"non bullet line", []edit{section("- Who owns the span?\nDoes the word change?\n")}, []string{"plan.md:126: open-questions:"}},
+		{"none beside a question", []edit{section("- none\n- Does the word change?\n")}, []string{"plan.md:123: open-questions:"}},
+		{"empty section", []edit{section("")}, []string{"plan.md:123: open-questions:"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := checkText(mutate(t, valid, tc.edits...), domain.CheckInput{Diagrams: &fakeDiagrams{}})
+			var lines []string
+			for _, p := range got {
+				lines = append(lines, p.String())
+			}
+			if len(lines) != len(tc.want) {
+				t.Fatalf("problems = %q, want prefixes %q", lines, tc.want)
+			}
+			for i, prefix := range tc.want {
+				if !strings.HasPrefix(lines[i], prefix) {
+					t.Errorf("problem %d = %q, want prefix %q", i, lines[i], prefix)
+				}
+			}
+		})
+	}
+}
+
+func TestWaiverDocsOnly(t *testing.T) {
+	const (
+		noneSection = "## Open questions\n\n- none\n"
+		docsCommits = "\n## Tech specs\n\n### Commits\n\n1. `docs: add the notes` (task 1)\n2. `docs(plan): add more` (task 2)\n"
+	)
+	tests := []struct {
+		name string
+		text string
+		want bool
+		open bool
+	}{
+		{"docs only and none", noneSection + docsCommits, true, false},
+		{"docs only and none on two lines", "## Open questions\n\n- none\n- none\n" + docsCommits, true, false},
+		{"docs only and a question", "## Open questions\n\n- Who owns it?\n" + docsCommits, false, true},
+		{"one feat commit", noneSection + docsCommits + "3. `feat: add the word` (task 3)\n", false, false},
+		{"no commits", noneSection, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, _ := domain.Parse(tc.text)
+
+			if got := doc.ApprovalWaived(); got != tc.want {
+				t.Errorf("ApprovalWaived = %v, want %v", got, tc.want)
+			}
+			if got := doc.QuestionsOpen(); got != tc.open {
+				t.Errorf("QuestionsOpen = %v, want %v", got, tc.open)
+			}
+		})
+	}
+}
+
 func TestRegressionImpact(t *testing.T) {
 	valid := readValid(t)
 	section := func(body string) edit {

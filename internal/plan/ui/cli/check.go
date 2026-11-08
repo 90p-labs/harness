@@ -46,6 +46,7 @@ func planHelp() string {
 	return strings.Join([]string{
 		"Write the plan as markdown. `harness plan check` lists each problem with its line and rule.",
 		fmt.Sprintf("Level-2 headings: %s.", strings.Join(domain.TopHeadings, ", ")),
+		fmt.Sprintf("## %s: `- %s` or one `- question` on each line. The answers move to ## %s as `- <date>: <question>: <answer>`.", domain.HeadingOpenQuestions, domain.OpenQuestionsNone, domain.HeadingDecisions),
 		fmt.Sprintf("## %s ends with %d level-3 headings in this order: %s.", domain.HeadingSpecs, len(domain.FinalHeadings), strings.Join(domain.FinalHeadings, ", ")),
 		fmt.Sprintf("Each other level-3 heading there needs a %s line with %s. Each criterion is in one of them.", domain.CriteriaKey, domain.FormSpecCriteria),
 		fmt.Sprintf("## %s: an optional line `%s %s` or `%s %s`.", domain.HeadingGoal, domain.TrackPrefix, shareddomain.TrackLight, domain.TrackPrefix, shareddomain.TrackFull),

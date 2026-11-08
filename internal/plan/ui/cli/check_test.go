@@ -65,6 +65,7 @@ func TestPlanHelp(t *testing.T) {
 			domain.MarkNew, domain.MarkChanged, domain.MarkDeleted, domain.TrackPrefix, domain.CriteriaKey, domain.FenceTree, domain.ContractNames,
 			domain.FormTaskHeading, domain.FormDoD, domain.FormDependsOn, domain.FormSpecCriteria, domain.FormCommit, domain.FormPR,
 			domain.DiagramER, domain.DiagramSequence, domain.DiagramState, domain.DiagramClass, domain.SketchExt, "harness diagram --help",
+			"## " + domain.HeadingOpenQuestions, domain.OpenQuestionsNone,
 		},
 	} {
 		want = append(want, list...)

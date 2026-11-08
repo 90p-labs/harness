@@ -14,4 +14,5 @@ const (
 	RuleDiagram          RuleID = "diagram"
 	RuleDiagramRequired  RuleID = "diagram-required"
 	RuleTraceUnlinked    RuleID = "trace-unlinked"
+	RuleOpenQuestions    RuleID = "open-questions"
 )

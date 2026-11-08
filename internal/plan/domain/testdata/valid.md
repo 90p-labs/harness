@@ -119,3 +119,7 @@ harness/
 
 1. `feat/ping-query` (this run), based on `main`: the pong domain and the ping query.
 2. `docs/ping-flow`: the flow notes.
+
+## Open questions
+
+- none
