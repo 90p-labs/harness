@@ -31,7 +31,7 @@ func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 		if err != nil {
 			return lintcli.Handlers{}, err
 		}
-		handlers, err := lintmodule.New(cfg.Lint, version)
+		handlers, err := lintmodule.New(cfg.Lint, worktree, version)
 		if err != nil {
 			return lintcli.Handlers{}, err
 		}

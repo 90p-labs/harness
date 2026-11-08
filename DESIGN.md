@@ -456,7 +456,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |
-| `lint.packs` | empty list | A list of pack names; a pack that needs another pack is an error when that pack is missing |
+| `lint.packs` | empty list | A list of built-in pack names and custom pack folder paths (an entry with a `/`); a pack that needs another pack is an error when that pack is missing |
 | `lint.ddd.root` | `contexts` | The business root folder in `src/` |
 | `lint.ddd.src_files` | `[main.ts]` | The files that can be directly in `src/` |
 | `lint.observability.chart` | `deploy/chart` | The Helm chart folder |
@@ -628,7 +628,7 @@ A lint pack is a set of rules with ids, an engine, a severity and a scope. The `
 - Every GritQL message starts with the rule id in brackets, such as `[ddd/event-readonly]`.
 - The severity is `error`, `warn` or `info`. Only an `error` finding fails the lint gate.
 - The Biome engine runs both the `biome-grit` rules and the `biome-rule` rules, once for each scope.
-- The packs are embedded in the binary. `harness lint init` writes `.harness-lint/` into the repo. The team commits it.
+- The built-in packs are embedded in the binary. A custom pack is a folder in the repo. `harness lint init` writes `.harness-lint/` into the repo. The team commits it.
 - The `.harness-lint/` folder holds `VERSION`, `plugins/` (the GritQL files), `biome/SCOPE/biome.json` for each scope, and `oxlintrc.json`.
 - `harness lint` stops with "run harness lint init" when `.harness-lint/VERSION` differs from the binary version.
 - `harness lint` prints one line for each finding: severity, rule id, file, line and message. It exits 1 when an `error` finding exists.
@@ -646,6 +646,39 @@ A lint pack is a set of rules with ids, an engine, a severity and a scope. The `
 | `nextjs-ddd-shadcn` | `ddd`, `nextjs`, `shadcn` | Combined layout |
 
 A missing required pack is a config error.
+
+#### Custom packs
+
+An entry of `lint.packs` with a `/` is a folder path to a custom pack, such as `./lint/team`. The path is relative to the repo root.
+
+```text
+lint/team/
+├── pack.yaml
+└── rules/
+    └── no-console.grit
+```
+
+```yaml
+name: team
+requires: [ddd]
+rules:
+  - id: team/no-console
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.ts"
+    message: A source file calls console.log. Use the logger.
+    plugin: rules/no-console.grit
+```
+
+- `pack.yaml` has the same keys as a built-in pack. `plugin` is a path in the pack folder.
+- The name matches `^[a-z0-9][a-z0-9-]*$`. A built-in name, or the name of another custom pack, is an error.
+- `requires` names only built-in packs. Each required pack must also be in `lint.packs`.
+- A rule id, `biome` value or `oxlint` value that a built-in pack, another custom pack or an earlier rule of the pack uses is an error. The engines map a diagnostic to one rule.
+- With a custom pack, `.harness-lint/VERSION` holds the binary version, a `+` and a hash of the custom pack files. An edit to a custom pack makes `harness lint` stop with "run harness lint init".
+- A rule has the engine `biome-grit`, `biome-rule` or `oxlint`. The engine `harness` is an error, because its checks are Go code in the binary.
+- A path outside the repo is an error: a path that leaves the repo after it is cleaned, an absolute path, or a symlink that resolves outside the repo. A folder with no `pack.yaml` is an unknown pack.
+- A `plugin` path that leaves the pack folder is an error.
+- `harness lint init` copies the GritQL files of a custom pack into `.harness-lint/plugins/NAME/`, as for a built-in pack.
 
 Pack `ddd`, after the Hollywood concepts, in the NestJS style:
 
