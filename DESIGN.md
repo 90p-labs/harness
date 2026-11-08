@@ -42,7 +42,7 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 
 A run moves through phases. The transition table is deterministic: a row is `(from, event, guard) -> to`. The guards of one `(from, event)` pair exclude each other, so only one row applies.
 
-`Policy.ApprovalNeeded` is computed for each call. The plan module sets it to false when the config turns approval off, or for a docs-only plan with no open question.
+`Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver: every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` never takes the waiver.
 
 Each guard is a named pure function of the run and the policy:
 
@@ -117,7 +117,7 @@ The effects of each event on the run, besides the phase:
 | Event | Effect |
 |---|---|
 | any | `StopBlocks` goes to 0 |
-| `approve-plan` | `ReviewRound` goes to 0 |
+| `approve-plan` | `Track` keeps the stricter of the run track and the plan track, `ReviewRound` goes to 0 |
 | `request-rework` into `working` | `ReviewRound` goes up by 1, `Reason` holds the findings |
 | any event into `blocked` | `BlockedFrom` holds the old phase, `Reason` holds the reason or the findings |
 | `resume` | `BlockedFrom` and `Reason` are cleared |
@@ -213,6 +213,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
 | `agent-model-routing` | `tool.before` | An agent call whose model differs from the role table of the host |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD` |
+| `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
 
 Event kinds:
@@ -391,7 +392,8 @@ One abstraction keeps the run state, the run transitions and later the evidence.
 | `internal/shared/infrastructure/dbal/` | `DB`, `Open`, `InTx`, `Migrate`, the `Dialect` port, the SQLite dialect |
 | `internal/run/domain/repository.go` | `RunKey`, the `RunRepository` port |
 | `internal/run/domain/transitioned.go` | `Transitioned`, the event that `Apply` records |
-| `internal/run/infrastructure/persistence/` | `SQLRunRepository` and the embedded migrations |
+| `internal/run/domain/approval.go` | The `ApprovalRepository` port and `Submission` |
+| `internal/run/infrastructure/persistence/` | `SQLRunRepository`, `SQLApprovalRepository` and the embedded migrations |
 
 The DBAL API:
 
@@ -438,8 +440,16 @@ erDiagram
         TEXT to_phase
         TEXT reason
     }
+    plan_approvals {
+        TEXT run_id PK
+        TEXT plan_sha256 PK
+        TIMESTAMP at
+    }
     runs ||--o{ run_transitions : records
+    runs ||--o{ plan_approvals : approves
 ```
+
+The primary key `(run_id, plan_sha256)` of `plan_approvals` makes a repeated answer one row.
 
 A partial unique index `runs_one_active` on `(repo, worktree)` allows one active run for each worktree. A run is active when its phase is not `done` or `abandoned`.
 
@@ -518,7 +528,7 @@ Exit codes:
 | `start` | the prompt | `start` |
 | `status` | none | none, a query |
 | `plan` | none | `submit-plan` |
-| `approve` | none | `approve-plan` |
+| `approve` | `--by` and `--reason`, both or neither | `approve-plan` |
 | `amend` | none | `amend` |
 | `review` | none | `submit-for-review` |
 | `rework` | `--findings`, required | `request-rework` |
@@ -542,14 +552,37 @@ next: implement test first, run harness verify, then harness run review
 - An illegal transition, a veto, a stale run or an active run on `start` writes `error:` and the cause on stderr, and exits 1.
 - A transition goes through `Flow.Move`: the span `run.transition`, `run.transition.before` (a deny vetoes), `Apply`, `Save`, then `run.transition.after`.
 
-The `plan` and `amend` events go through the `PlanGate` port of the run domain. `Flow.Move` calls it after the legality check:
+The `plan`, `amend` and `approve` events go through the `PlanGate` port of the run domain. `Flow.Move` calls it after the legality check:
 
 1. `Flow.Move` applies the event once to check that it is legal. An illegal event returns `ErrIllegalTransition` and never reaches the gate.
 2. `PlanGate.Submit` checks `plan.md` of the run folder. A problem returns `ErrPlanHasProblems` with the problem lines, and the run stays in its phase.
 3. It sends `plan.submitted`. A deny or a plugin failure returns `ErrPlanRejected` with the reasons, and the run stays in its phase.
-4. It returns the plan track. `Apply` keeps the stricter of the run track and the plan track, so the track never goes down.
+4. It returns a `Submission` with the plan track, the docs-only waiver and a flag for open questions. `Apply` keeps the stricter of the run track and the plan track, so the track never goes down.
 
-`cmd/harness` gives `run.NewModule` an adapter of the plan module as the `PlanGate`. The run context and the plan context never import each other.
+`cmd/harness` gives `run.NewModule` an adapter of the plan module as the `PlanGate`. The run context and the plan context never import each other. `PlanGate.Hash` returns the SHA-256 of `plan.md` in hex, so the run domain reads no file.
+
+The plan approval is a record of the user answer, not a chat reply:
+
+1. The lead asks the question with the header `Plan` and the options `Approve` and `Change the plan`, through the question tool of the host.
+2. The plugin `run.approval` on `tool.after` returns at once unless the run is in `awaiting_approval`, the tool kind is `question` and an answer is `Plan: Approve`. Then the `recordapproval` handler saves the run id and the plan hash in `plan_approvals`, and the plugin returns the context `plan approval recorded`.
+3. `Flow.Move` sends `approve-plan` through `PlanGate.Submit` first, because the grill edits `plan.md` after `run plan`. A plan with an open question returns `ErrOpenQuestions`.
+4. Then `Flow.Move` checks the record. With no row for the current hash, it returns `ErrApprovalNotRecorded`, and the run stays in `awaiting_approval`.
+5. `--by <model> --reason <text>` skips the record check, not the plan check. The transition reason is `approved by <model>: <text>`, so `run status` and the transition log keep it. One flag alone is a usage error.
+
+The guard rule `approval-no-forge` denies the two ways an agent can write the answer itself. A direct SQL write to `state.db` is out of scope.
+
+```mermaid
+stateDiagram-v2
+    [*] --> planning: start
+    planning --> awaiting_approval: submit-plan [approval needed]
+    planning --> working: submit-plan [no approval needed, also a docs-only plan with no open question]
+    awaiting_approval --> recorded: Approve answer to the Plan question
+    recorded --> working: approve-plan [the plan passes the check with no open question, the record matches the plan hash]
+    awaiting_approval --> working: approve-plan --by model --reason text [the plan passes the check with no open question]
+    recorded --> awaiting_approval: plan.md edited, the hash changes
+```
+
+The state `recorded` is not a phase: the run stays in `awaiting_approval`, and the record sits in the store.
 
 The run folder is `.harness/runs/<run id>/` in the worktree top level. A human edits `plan.md` there. `start` does not create the folder.
 
@@ -568,6 +601,8 @@ The `ui` layer: a `ui` package imports its own `application` and `domain` packag
 ## Plan commands
 
 `harness plan check [--file path]` checks a plan in any phase, with or without a run.
+
+A plan has the heading `## Open questions`. It holds `- none` alone, or one question bullet on each line. A non-bullet line, an empty section or `- none` beside a question gives the problem `open-questions`. The lead grills each question with the user and moves each answer to `## Decisions`.
 
 - With `--file`, it checks that file with live round 0.
 - Without `--file`, it checks `plan.md` in the run folder of the active run, with the live round of the run.
@@ -1047,7 +1082,19 @@ Capabilities and fallback:
 - On `session-start`, the handler puts the missing events in the payload. It adds one context line for each, `<event>: this host does not send it`. No host misses an event now, so a fake codec tests it.
 - `harness host capabilities --host H` prints each event and `yes` or `no`, so a user sees a gap before a run.
 
-The tool kind in the payload is `shell`, `edit`, `write`, `read`, `search`, `agent` or `other`. Both hosts send `Bash`, which is `shell`. `Edit`, `MultiEdit` and the Codex `apply_patch` are `edit`. `Write` is `write`, `Read` is `read`, `Grep` and `Glob` are `search`, and `Agent` is `agent`. One `ToolKindOf` in the host domain serves both hosts.
+The tool kind in the payload is `shell`, `edit`, `write`, `read`, `search`, `agent`, `question` or `other`. Both hosts send `Bash`, which is `shell`. `Edit`, `MultiEdit` and the Codex `apply_patch` are `edit`. `Write` is `write`, `Read` is `read`, `Grep` and `Glob` are `search`, and `Agent` is `agent`. The question tool of each host is `question`. One `ToolKindOf` in the host domain serves both hosts.
+
+`QuestionTools` in `internal/shared/domain` gives the question tool of each host and its limits:
+
+| Host | Tool | Questions in one call | Options in one question |
+|---|---|---|---|
+| `claude` | `AskUserQuestion` | 4 | 2 to 4 |
+| `codex` | `request_user_input` | 3 | 2 to 3 |
+
+- The Codex docs do not give the limits. The source is `codex-rs/core/src/tools/handlers/request_user_input_spec.rs` of `openai/codex` at commit `e2c0837`. It says "prefer 1 and do not exceed 3" questions and 2 to 3 options, and the client adds "Other".
+- Codex shows `request_user_input` only in Plan mode, or in Default mode with the feature `default_mode_request_user_input`.
+- On `post-tool-use`, each codec decodes the answers into `ToolPayload.Answers`, as a header and a label. The decode drops the suffix ` (Recommended)`.
+- Claude Code keys an answer by the question text, with one label. Codex keys it by the question id, with a list of labels, and can send the response as a JSON string.
 
 `harness hook` rules:
 

@@ -292,11 +292,20 @@ $ harness plan view
 /home/dev/shop/.harness/runs/20261108-132848-let-a-customer-cancel-an-order-before-it/plan.html
 $ harness run plan
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=awaiting_approval review_round=0 live_round=0
-next: wait for the approval, then harness run approve
+next: ask the Plan question; when the user picks Approve, run harness run approve
+```
+
+Before the plan, the `explorer` agent reads `CONTEXT.md`, `docs/adr/` and the touched code. Each decision that the code cannot make goes under `## Open questions` in `plan.md`. After `harness run plan`, the agent grills the user in rounds through the question tool of the host (`AskUserQuestion` on Claude Code, `request_user_input` on Codex). Each answer moves to `## Decisions`.
+
+When no question is open, the agent asks the `Plan` question with the options `Approve` and `Change the plan`. On `Approve`, the `post-tool-use` hook records the approval for the hash of the current `plan.md`. A plain reply in the chat records nothing.
+
+```console
 $ harness run approve
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=working review_round=0 live_round=0
 next: implement test first, run harness verify, then harness run review
 ```
+
+`harness run approve` refuses when no record matches the current `plan.md`, so an edit after the answer needs a new answer. It also checks `plan.md` again and refuses an open question, because the grill edits the plan after `harness run plan`. A model that the user names approves with `harness run approve --by <model> --reason "<one line>"`, and the transition log keeps both.
 
 Write the test first. Each acceptance criterion of the plan is also a gate, `criterion-N`, that runs its proof command:
 
@@ -390,11 +399,11 @@ stateDiagram-v2
     abandoned --> [*]
 ```
 
-With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes to `working`. `docs/go-live.md` describes `releasing` and `observing`.
+With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes to `working`. A plan with only `docs` commits and `- none` under `## Open questions` also skips the approval on `submit-plan`, but never on `amend`. `docs/go-live.md` describes `releasing` and `observing`.
 
 | Part | Where it acts |
 |---|---|
-| Plan check | `submit-plan` and `amend`: the plan rules, then the `plan.submitted` plugins |
+| Plan check | `submit-plan`, `amend` and `approve-plan`: the plan rules, then the `plan.submitted` plugins |
 | Gates | `harness verify` in `working`; the review needs a passing proof of each criterion |
 | Trace check | `submit-for-review`: the trees, the commits and the owned files against the branch |
 | Reviewers | `reviewing`: the agents of the `reviewer` role, then `ship` or `rework` |

@@ -1,15 +1,119 @@
 package harness
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	guarddomain "github.com/jorge07/harness/internal/guard/domain"
 	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
 	"github.com/jorge07/harness/internal/run/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
+
+const (
+	skillFile        = "skills/harness/SKILL.md"
+	grillFile        = "skills/harness/references/grill.md"
+	explorerFile     = "agents/explorer.md"
+	grillingSource   = "https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md"
+	mitLicense       = "MIT"
+	explorerRole     = "`explorer`"
+	runPlanCommand   = "harness run plan"
+	approveByCommand = "harness run approve --by"
+	pluginsHeading   = "\n## Plugin events\n"
+	hostsHeading     = "\n## Hosts\n"
+	emDash           = "—"
+)
+
+var grillViews = []string{"Product", "QA", "Tech specs"}
+
+func readDoc(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func section(t *testing.T, doc, heading string) string {
+	t.Helper()
+	_, rest, found := strings.Cut(doc, heading)
+	if !found {
+		t.Fatalf("no section %q", strings.TrimSpace(heading))
+	}
+	body, _, _ := strings.Cut(rest, nextHeading)
+	return body
+}
+
+func TestHarnessSkillGrill(t *testing.T) {
+	skill, grill, explorer := readDoc(t, skillFile), readDoc(t, grillFile), readDoc(t, explorerFile)
+
+	explore := strings.Index(skill, explorerRole)
+	submit := strings.Index(skill, runPlanCommand)
+	if explore < 0 || submit < 0 || explore > submit {
+		t.Errorf("%s: the explorer (at %d) must come before %s (at %d)", skillFile, explore, runPlanCommand, submit)
+	}
+	for _, want := range []string{grillFile[len("skills/harness/"):], shareddomain.ApprovalHeader, shareddomain.ApproveLabel, shareddomain.ChangePlanLabel} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("%s does not name %q", skillFile, want)
+		}
+	}
+	wants := []string{grillingSource, mitLicense, shareddomain.RecommendedSuffix[1:]}
+	for _, tool := range shareddomain.QuestionTools {
+		wants = append(wants, tool.Name)
+	}
+	for _, want := range wants {
+		if !strings.Contains(grill, want) {
+			t.Errorf("%s does not name %q", grillFile, want)
+		}
+	}
+	last := -1
+	for _, view := range grillViews {
+		at := strings.Index(grill, "### "+view)
+		if at <= last {
+			t.Errorf("%s: the view %q is missing or out of order", grillFile, view)
+		}
+		last = at
+	}
+	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer} {
+		if strings.Contains(text, emDash) || strings.ContainsFunc(text, isEmoji) {
+			t.Errorf("%s has an em dash or an emoji", path)
+		}
+	}
+}
+
+func isEmoji(r rune) bool {
+	return r >= 0x1F300 && r <= 0x1FAFF || r >= 0x2600 && r <= 0x27BF
+}
+
+func TestDesignMatchesGuardRules(t *testing.T) {
+	table := section(t, readDoc(t, designFile), pluginsHeading)
+	for _, rule := range guarddomain.Rules() {
+		if !strings.Contains(table, "| `"+rule.ID+"` |") {
+			t.Errorf("%s has no guard row for %s", designFile, rule.ID)
+		}
+	}
+}
+
+func TestDesignMatchesQuestionTools(t *testing.T) {
+	hosts := section(t, readDoc(t, designFile), hostsHeading)
+	for host, tool := range shareddomain.QuestionTools {
+		row := fmt.Sprintf("| `%s` | `%s` | %d | %d to %d |", host, tool.Name, tool.MaxQuestions, tool.MinOptions, tool.MaxOptions)
+		if !strings.Contains(hosts, row) {
+			t.Errorf("%s Hosts has no row %q", designFile, row)
+		}
+	}
+	readme := readDoc(t, readmeFile)
+	for _, want := range []string{"`" + shareddomain.ApprovalHeader + "` question", approveByCommand} {
+		if !strings.Contains(readme, want) {
+			t.Errorf("%s does not name %q", readmeFile, want)
+		}
+	}
+}
 
 const (
 	designFile       = "DESIGN.md"
