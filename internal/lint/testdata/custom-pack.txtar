@@ -1,0 +1,20 @@
+-- lint/team/pack.yaml --
+name: team
+requires: []
+rules:
+  - id: team/no-console
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.ts"
+    message: A source file calls console.log. Use the logger.
+    plugin: rules/no-console.grit
+-- lint/team/rules/no-console.grit --
+language js
+
+`console.log($message)` as $call where {
+  register_diagnostic(span=$call, message="[team/no-console] use the logger, not console.log")
+}
+-- src/orders/infrastructure/order.adapter.ts --
+export function placeOrder(id: string): void {
+  console.log(id)
+}

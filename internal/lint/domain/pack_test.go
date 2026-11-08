@@ -72,6 +72,46 @@ func TestPackRequires(t *testing.T) {
 	}
 }
 
+func TestNewCustomPack(t *testing.T) {
+	grit := domain.Rule{ID: "team/no-console", Engine: domain.EngineBiomeGrit, Plugin: "team/rules/no-console.grit"}
+	cases := []struct {
+		name     string
+		pack     string
+		requires []domain.PackName
+		rule     domain.Rule
+		want     error
+	}{
+		{name: "a valid pack", pack: "team", requires: []domain.PackName{domain.PackDDD}, rule: grit},
+		{name: "a built-in name", pack: string(domain.PackDDD), rule: grit, want: domain.ErrPackNameTaken},
+		{name: "an empty name", pack: "", rule: grit, want: domain.ErrInvalidPackName},
+		{name: "a parent name", pack: "..", rule: grit, want: domain.ErrInvalidPackName},
+		{name: "a name with a slash", pack: "team/a", rule: grit, want: domain.ErrInvalidPackName},
+		{name: "an upper case name", pack: "Team", rule: grit, want: domain.ErrInvalidPackName},
+		{name: "a custom requires", pack: "team", requires: []domain.PackName{"other"}, rule: grit, want: domain.ErrUnknownPack},
+		{name: "a harness rule", pack: "team", rule: domain.Rule{ID: "team/layout", Engine: domain.EngineHarness}, want: domain.ErrCustomPackEngine},
+		{name: "an unknown engine", pack: "team", rule: domain.Rule{ID: "team/x", Engine: "eslint"}, want: domain.ErrCustomPackEngine},
+		{name: "a plugin outside the pack", pack: "team", rule: domain.Rule{ID: "team/x", Engine: domain.EngineBiomeGrit, Plugin: "ddd/rules/event-readonly.grit"}, want: domain.ErrPluginOutsidePack},
+		{name: "a plugin with a parent element", pack: "team", rule: domain.Rule{ID: "team/x", Engine: domain.EngineBiomeGrit, Plugin: "team/../ddd/x.grit"}, want: domain.ErrPluginOutsidePack},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pack, err := domain.NewCustomPack(tc.pack, tc.requires, []domain.Rule{tc.rule})
+
+			if tc.want != nil {
+				if !errors.Is(err, tc.want) {
+					t.Fatalf("NewCustomPack = %v, want %v", err, tc.want)
+				}
+				return
+			}
+			want := domain.Pack{Name: domain.PackName(tc.pack), Requires: tc.requires, Rules: []domain.Rule{tc.rule}}
+			if err != nil || !reflect.DeepEqual(pack, want) {
+				t.Fatalf("NewCustomPack = %+v, %v, want %+v", pack, err, want)
+			}
+		})
+	}
+}
+
 func TestRulesByEngine(t *testing.T) {
 	grit := domain.Rule{ID: "ddd/grit", Engine: domain.EngineBiomeGrit}
 	builtin := domain.Rule{ID: "next/biome", Engine: domain.EngineBiomeRule}
