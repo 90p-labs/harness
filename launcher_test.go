@@ -9,21 +9,27 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
 
 const (
-	launcherPath   = "bin/harness"
-	harnessConfig  = ".harness.yaml"
-	skippedHook    = "{}"
-	exitNoCommand  = 127
-	fakeBinary     = "#!/bin/sh\necho \"ran $*\"\n"
-	failingGh      = "#!/bin/sh\necho call >>%q\necho %q >&2\nexit 1\n"
-	ghError        = "HTTP 404: Not Found"
-	executableMode = 0o755
-	downloadWait   = 5 * time.Second
-	pollInterval   = 50 * time.Millisecond
+	launcherPath    = "bin/harness"
+	harnessConfig   = ".harness.yaml"
+	skippedHook     = "{}"
+	exitNoCommand   = 127
+	fakeBinary      = "#!/bin/sh\necho \"ran $*\"\n"
+	failingGh       = "#!/bin/sh\necho call >>%q\necho %q >&2\nexit 1\n"
+	loggingFind     = "#!/bin/sh\n%q \"$@\"\nstatus=$?\necho done >>%q\nexit $status\n"
+	ghError         = "HTTP 404: Not Found"
+	executableMode  = 0o755
+	privateMode     = 0o600
+	downloadLock    = ".download.lock"
+	downloadFailure = ".download.failed"
+	downloadWait    = 30 * time.Second
+	pollInterval    = 50 * time.Millisecond
+	hookReachesLock = 200 * time.Millisecond
 )
 
 var stopHook = []string{"hook", "--host", "claude", "stop"}
@@ -173,6 +179,79 @@ func TestLauncher(t *testing.T) {
 		}
 		if ghCalls := strings.Count(string(raw), "\n"); code != 0 || strings.TrimSpace(stdout) != skippedHook || !strings.Contains(stderr, ghError) || ghCalls != 1 {
 			t.Fatalf("code = %d, stdout = %q, stderr = %q, gh calls = %d, want 0, %s, the gh error and 1 gh call", code, stdout, stderr, ghCalls, skippedHook)
+		}
+	})
+
+	t.Run("a hook that gets the lock after a failed download prints the gh error and does not start gh", func(t *testing.T) {
+		l := newLauncher(t)
+		if err := os.Remove(l.binary); err != nil {
+			t.Fatal(err)
+		}
+		calls := filepath.Join(t.TempDir(), "gh.log")
+		gh := fmt.Sprintf(failingGh, calls, ghError)
+		if err := os.WriteFile(filepath.Join(l.path, "gh"), []byte(gh), executableMode); err != nil {
+			t.Fatal(err)
+		}
+		dist := filepath.Dir(l.binary)
+		lock, failure := filepath.Join(dist, downloadLock), filepath.Join(dist, downloadFailure)
+		// The noclobber redirect opens a FIFO and blocks there until a reader opens it.
+		if err := syscall.Mkfifo(lock, privateMode); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if reader, err := os.OpenFile(lock, os.O_RDONLY|syscall.O_NONBLOCK, 0); err == nil {
+				_ = reader.Close()
+			}
+		})
+		finds := filepath.Join(t.TempDir(), "find.log")
+		realFind, err := os.Readlink(filepath.Join(l.path, "find"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(filepath.Join(l.path, "find")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(l.path, "find"), []byte(fmt.Sprintf(loggingFind, realFind, finds)), executableMode); err != nil {
+			t.Fatal(err)
+		}
+		repo := gitRepo(t, true)
+		type result struct {
+			code           int
+			stdout, stderr string
+		}
+		done := make(chan result)
+		go func() {
+			code, stdout, stderr := l.run(t, repo, stopHook...)
+			done <- result{code, stdout, stderr}
+		}()
+
+		// The stale checks of the lock and the failure file are the last commands before the failure check.
+		for deadline := time.Now().Add(downloadWait); ; time.Sleep(pollInterval) {
+			if raw, _ := os.ReadFile(finds); strings.Count(string(raw), "\n") == 2 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the hook did not reach the stale checks")
+			}
+		}
+		// The wait lets an early failure check pass before the failure file exists; the fixed hook passes in any order.
+		time.Sleep(hookReachesLock)
+		if err := os.WriteFile(failure, []byte(ghError), privateMode); err != nil {
+			t.Fatal(err)
+		}
+		reader, err := os.OpenFile(lock, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := <-done
+		if err := reader.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		_, ghErr := os.Stat(calls)
+		_, lockErr := os.Lstat(lock)
+		if got.code != 0 || strings.TrimSpace(got.stdout) != skippedHook || !strings.Contains(got.stderr, ghError) || !errors.Is(ghErr, os.ErrNotExist) || !errors.Is(lockErr, os.ErrNotExist) {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q, gh log error = %v, lock error = %v, want 0, %s, the gh error, no gh call and no lock", got.code, got.stdout, got.stderr, ghErr, lockErr, skippedHook)
 		}
 	})
 
