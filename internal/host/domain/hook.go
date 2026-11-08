@@ -60,5 +60,10 @@ func ToolKindOf(tool string) shareddomain.ToolKind {
 	if kind, ok := toolKinds[tool]; ok {
 		return kind
 	}
+	for _, question := range shareddomain.QuestionTools {
+		if question.Name == tool {
+			return shareddomain.ToolKindQuestion
+		}
+	}
 	return shareddomain.ToolKindOther
 }

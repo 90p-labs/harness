@@ -84,6 +84,33 @@ func TestCodexDecode(t *testing.T) {
 	})
 }
 
+const (
+	codexQuestionInput  = `{"questions":[{"id":"plan_approval","header":"Plan","question":"Is the plan ready?","options":[{"label":"Approve (Recommended)","description":"start the work"},{"label":"Change the plan","description":"edit plan.md"}]}]}`
+	codexQuestionPrefix = `{"cwd":"/work/app","hook_event_name":"PostToolUse","model":"gpt-5","turn_id":"t1","tool_name":"request_user_input","tool_use_id":"u3","tool_input":` + codexQuestionInput + `,"tool_response":`
+)
+
+func TestQuestionDecodeCodex(t *testing.T) {
+	approve := []shareddomain.Answer{{Header: shareddomain.ApprovalHeader, Label: shareddomain.ApproveLabel}}
+	cases := []struct {
+		name     string
+		response string
+		want     []shareddomain.Answer
+	}{
+		{"response as an object", `{"answers":{"plan_approval":{"answers":["Approve (Recommended)"]}}}`, approve},
+		{"response as a JSON string", `"{\"answers\":{\"plan_approval\":{\"answers\":[\"Approve\"]}}}"`, approve},
+		{"unparsable string", `"cancelled"`, nil},
+		{"answer to an unknown id", `{"answers":{"other":{"answers":["Approve"]}}}`, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			payload, answers := decodedAnswers(t, hookcodec.NewCodex(), hostdomain.HookPostToolUse, codexQuestionPrefix+c.response+`}`)
+			if payload.Kind != shareddomain.ToolKindQuestion || !slices.Equal(answers, c.want) {
+				t.Fatalf("kind = %q, answers = %+v, want %q and %+v", payload.Kind, answers, shareddomain.ToolKindQuestion, c.want)
+			}
+		})
+	}
+}
+
 func TestCodexEncode(t *testing.T) {
 	codec := hookcodec.NewCodex()
 	allow := shareddomain.Verdict{Kind: shareddomain.VerdictAllow}

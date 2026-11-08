@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/jorge07/harness/internal/host/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
@@ -104,6 +105,9 @@ func payloadOf(hook domain.HookName, in hookInput) any {
 	case domain.HookPostToolUse:
 		payload := toolPayload(in)
 		payload.Response = in.ToolResponse
+		if payload.Kind == shareddomain.ToolKindQuestion {
+			payload.Answers = answersOf(in.ToolInput, in.ToolResponse)
+		}
 		return payload
 	case domain.HookStop:
 		agents := 0
@@ -124,6 +128,65 @@ func toolPayload(in hookInput) shareddomain.ToolPayload {
 		Kind:  domain.ToolKindOf(in.ToolName),
 		Input: in.ToolInput,
 	}
+}
+
+type question struct {
+	ID       string `json:"id"`
+	Header   string `json:"header"`
+	Question string `json:"question"`
+}
+
+type questionSet struct {
+	Questions []question                 `json:"questions"`
+	Answers   map[string]json.RawMessage `json:"answers"`
+}
+
+type codexAnswer struct {
+	Answers []string `json:"answers"`
+}
+
+// Claude Code keys an answer by the question text with one label; Codex keys it by the question id with a label list.
+func answersOf(input, response json.RawMessage) []shareddomain.Answer {
+	var asked, answered questionSet
+	if json.Unmarshal(input, &asked) != nil || json.Unmarshal(unquoted(response), &answered) != nil {
+		return nil
+	}
+	questions := answered.Questions
+	if len(questions) == 0 {
+		questions = asked.Questions
+	}
+	var answers []shareddomain.Answer
+	for _, q := range questions {
+		for _, label := range labelsOf(answered.Answers, q) {
+			answers = append(answers, shareddomain.Answer{Header: q.Header, Label: strings.TrimSuffix(label, shareddomain.RecommendedSuffix)})
+		}
+	}
+	return answers
+}
+
+func unquoted(raw json.RawMessage) json.RawMessage {
+	var text string
+	if json.Unmarshal(raw, &text) != nil {
+		return raw
+	}
+	return json.RawMessage(text)
+}
+
+func labelsOf(answers map[string]json.RawMessage, q question) []string {
+	raw, ok := answers[q.Question]
+	if !ok {
+		raw, ok = answers[q.ID]
+	}
+	if !ok {
+		return nil
+	}
+	var label string
+	if json.Unmarshal(raw, &label) == nil {
+		return []string{label}
+	}
+	var codex codexAnswer
+	_ = json.Unmarshal(raw, &codex)
+	return codex.Answers
 }
 
 type specificOutput struct {
