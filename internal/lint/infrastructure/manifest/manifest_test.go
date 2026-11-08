@@ -14,22 +14,18 @@ import (
 
 func writeManifest(t *testing.T, content string) string {
 	t.Helper()
-	repo := t.TempDir()
-	path := filepath.Join(repo, filepath.FromSlash(domain.ManifestFile))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	proof := t.TempDir()
+	if err := os.WriteFile(filepath.Join(proof, domain.ManifestFile), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return repo
+	return proof
 }
 
 func TestManifestRead(t *testing.T) {
 	repo := writeManifest(t, `pack: ddd
 rules:
   - id: ddd/domain-purity
-    canary: lint/canaries/ddd-domain-purity
+    canary: ddd-domain-purity
   - id: ddd/file-suffix
     waived: deptrac checks dependencies, not file names.
 `)
@@ -41,7 +37,7 @@ rules:
 	}
 	waiver := "deptrac checks dependencies, not file names."
 	want := domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
-		{ID: "ddd/domain-purity", Canary: "lint/canaries/ddd-domain-purity"},
+		{ID: "ddd/domain-purity", Canary: "ddd-domain-purity"},
 		{ID: "ddd/file-suffix", Waived: &waiver},
 	}}
 	if !reflect.DeepEqual(got, want) {
@@ -57,7 +53,7 @@ rules:
       harness:
         waived: the binary fixtures prove it.
       deptrac:
-        canary: lint/canaries/ddd-domain-purity
+        canary: ddd-domain-purity
 `)
 
 	got, err := manifest.Read(repo)
@@ -69,7 +65,7 @@ rules:
 	want := domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
 		{ID: "ddd/domain-purity", Engines: map[domain.EngineName]domain.ManifestProof{
 			domain.EngineHarness: {Waived: &waiver},
-			"deptrac":            {Canary: "lint/canaries/ddd-domain-purity"},
+			"deptrac":            {Canary: "ddd-domain-purity"},
 		}},
 	}}
 	if !reflect.DeepEqual(got, want) {
@@ -105,11 +101,13 @@ func TestManifestReadRefuses(t *testing.T) {
 		}
 	})
 
-	t.Run("no manifest names the setup skill", func(t *testing.T) {
-		_, err := manifest.Read(t.TempDir())
+	t.Run("no manifest names the path and the setup skill", func(t *testing.T) {
+		proof := filepath.Join(t.TempDir(), "proof")
 
-		if !errors.Is(err, domain.ErrNoManifest) || !strings.Contains(err.Error(), "lint-setup") || !strings.Contains(err.Error(), domain.ManifestFile) {
-			t.Fatalf("Read = %v, want ErrNoManifest naming the file and the lint-setup skill", err)
+		_, err := manifest.Read(proof)
+
+		if !errors.Is(err, domain.ErrNoManifest) || !strings.Contains(err.Error(), "lint-setup") || !strings.Contains(err.Error(), filepath.Join(proof, domain.ManifestFile)) || strings.Contains(err.Error(), "lint/rules.yaml") {
+			t.Fatalf("Read = %v, want ErrNoManifest naming the path of the file and the lint-setup skill", err)
 		}
 	})
 

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	ManifestFile    = "lint/rules.yaml"
+	ManifestFile    = "rules.yaml"
 	minWaiverWords  = 3
 	manifestKeyPack = "pack"
 	notListed       = "not in " + ManifestFile
@@ -143,8 +143,8 @@ func (p ManifestProof) check(name string) error {
 		return fmt.Errorf("%w in %s: %s", ErrCanaryOrWaiver, ManifestFile, name)
 	case p.Waived != nil && len(strings.Fields(*p.Waived)) < minWaiverWords:
 		return fmt.Errorf("%w in %s: %s", ErrShortWaiver, ManifestFile, name)
-	case p.Canary != "" && !insideRepo(p.Canary):
-		return fmt.Errorf("%w in %s: %s: %s", ErrCanaryOutsideRepo, ManifestFile, name, p.Canary)
+	case p.Canary != "" && !insideProof(p.Canary):
+		return fmt.Errorf("%w in %s: %s: %s", ErrCanaryOutsideProof, ManifestFile, name, p.Canary)
 	}
 	return nil
 }
@@ -206,7 +206,7 @@ func forRuleEngines(group []CanaryResult, engines []EngineName) ([]CanaryResult,
 	return matched, nil
 }
 
-func insideRepo(folder string) bool {
+func insideProof(folder string) bool {
 	clean := path.Clean(folder)
 	return !path.IsAbs(clean) && clean != "." && clean != ".." && !strings.HasPrefix(clean, "../")
 }

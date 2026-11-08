@@ -19,7 +19,7 @@ import (
 )
 
 func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {
-	return lintcli.NewLintCommand(func(ctx context.Context) (lintcli.Handlers, error) {
+	cmd := lintcli.NewLintCommand(func(ctx context.Context) (lintcli.Handlers, error) {
 		env, err := newEnvironment(ctx, flags)
 		if err != nil {
 			return lintcli.Handlers{}, err
@@ -40,10 +40,14 @@ func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 				_, err := handlers.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintdomain.BaselinePath})
 				return err
 			},
-			Canaries: func(ctx context.Context) ([]lintdomain.CanaryResult, error) {
-				return handlers.Canaries.Handle(ctx, canaries.Command{Dir: worktree})
+			Canaries: func(ctx context.Context, proof string) ([]lintdomain.CanaryResult, error) {
+				return handlers.Canaries.Handle(ctx, canaries.Command{Dir: worktree, Proof: proof})
 			},
 			NoPacks: len(cfg.Lint.Packs) == 0,
 		}, nil
 	}, rulecatalogue.Load)
+	for _, sub := range cmd.Commands() {
+		sub.Args = usageArgs(sub.Args)
+	}
+	return cmd
 }
