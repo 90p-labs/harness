@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jorge07/harness/internal/run/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const spanTransition = "run.transition"
@@ -21,23 +20,28 @@ const (
 	attrPhaseTo   = attribute.Key("harness.phase.to")
 )
 
+var gatedEvents = map[domain.Event]bool{
+	domain.EventSubmitPlan: true,
+	domain.EventAmend:      true,
+}
+
 type Command struct {
 	Key    domain.RunKey
 	Event  domain.Event
 	Reason string
-	Track  shareddomain.Track
 }
 
 type Flow struct {
 	repo   domain.RunRepository
 	hooks  domain.TransitionHooks
+	gate   domain.PlanGate
 	policy domain.Policy
 	clock  func() time.Time
 	tracer trace.Tracer
 }
 
-func NewFlow(repo domain.RunRepository, hooks domain.TransitionHooks, policy domain.Policy, clock func() time.Time, tracer trace.Tracer) Flow {
-	return Flow{repo: repo, hooks: hooks, policy: policy, clock: clock, tracer: tracer}
+func NewFlow(repo domain.RunRepository, hooks domain.TransitionHooks, gate domain.PlanGate, policy domain.Policy, clock func() time.Time, tracer trace.Tracer) Flow {
+	return Flow{repo: repo, hooks: hooks, gate: gate, policy: policy, clock: clock, tracer: tracer}
 }
 
 func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err error) {
@@ -55,6 +59,14 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 	}()
 
 	cmd.At = f.clock()
+	if _, err := run.Apply(cmd, f.policy); err != nil {
+		return err
+	}
+	if gatedEvents[cmd.Event] {
+		if cmd.Track, err = f.gate.Submit(ctx, run); err != nil {
+			return err
+		}
+	}
 	if err := f.hooks.Before(ctx, run, cmd); err != nil {
 		return err
 	}
@@ -84,5 +96,5 @@ func (h Handler) Handle(ctx context.Context, cmd Command) error {
 	if err != nil {
 		return err
 	}
-	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, Track: cmd.Track})
+	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason})
 }

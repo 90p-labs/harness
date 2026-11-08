@@ -9,11 +9,14 @@ import (
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
 
+	planmodule "github.com/jorge07/harness/internal/plan"
+	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
 	runmodule "github.com/jorge07/harness/internal/run"
 	"github.com/jorge07/harness/internal/run/domain"
 	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
 	"github.com/jorge07/harness/internal/run/ui/cli"
 	"github.com/jorge07/harness/internal/shared/application/eventbus"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
@@ -28,24 +31,44 @@ func newRunCommand(flags *pflag.FlagSet) *cobra.Command {
 	return cmd
 }
 
-func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() error, error) {
+type environment struct {
+	key       domain.RunKey
+	commonDir string
+	cfg       config.Config
+	bus       eventbus.Bus
+}
+
+func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return cli.Handlers{}, nil, err
+		return environment{}, err
 	}
 	repo, worktree, err := git.RepoKey(ctx, cwd)
 	if err != nil {
-		return cli.Handlers{}, nil, err
+		return environment{}, err
 	}
 	commonDir, err := git.CommonDir(ctx, cwd)
 	if err != nil {
-		return cli.Handlers{}, nil, err
+		return environment{}, err
 	}
 	cfg, err := config.Load(flags, worktree)
 	if err != nil {
+		return environment{}, err
+	}
+	plugins, err := execplugin.FromConfig(cfg.Plugins)
+	if err != nil {
+		return environment{}, err
+	}
+	bus := eventbus.NewBus(plugins, otel.GetTracerProvider(), otel.GetMeterProvider())
+	return environment{key: domain.RunKey{Repo: repo, Worktree: worktree}, commonDir: commonDir, cfg: cfg, bus: bus}, nil
+}
+
+func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() error, error) {
+	env, err := newEnvironment(ctx, flags)
+	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
-	db, err := dbal.Open(ctx, cfg.State.DSN, commonDir)
+	db, err := dbal.Open(ctx, env.cfg.State.DSN, env.commonDir)
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
@@ -53,14 +76,20 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 		_ = db.Close()
 		return cli.Handlers{}, nil, err
 	}
-	plugins, err := execplugin.FromConfig(cfg.Plugins)
-	if err != nil {
-		_ = db.Close()
-		return cli.Handlers{}, nil, err
-	}
-	bus := eventbus.NewBus(plugins, otel.GetTracerProvider(), otel.GetMeterProvider())
-	handlers := runmodule.NewModule(db, bus, cfg.Run, domain.RunKey{Repo: repo, Worktree: worktree}, time.Now)
-	return handlers, db.Close, nil
+	gate := planGate{submit: planmodule.NewModule(env.bus, env.key.Worktree).Submit, worktree: env.key.Worktree}
+	return runmodule.NewModule(db, env.bus, gate, env.cfg.Run, env.key, time.Now), db.Close, nil
+}
+
+type planGate struct {
+	submit   submitplan.Handler
+	worktree string
+}
+
+func (g planGate) Submit(ctx context.Context, run domain.Run) (shareddomain.Track, error) {
+	return g.submit.Handle(ctx, submitplan.Command{
+		RunID: run.ID, Phase: string(run.Phase),
+		Path: planPath(g.worktree, run.ID), LiveRound: run.LiveRound,
+	})
 }
 
 func wrapArgs(cmd *cobra.Command) {

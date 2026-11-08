@@ -111,6 +111,7 @@ func TestExitCodes(t *testing.T) {
 	}{
 		{name: "unknown flag", args: []string{commandVersion, "--nope"}, wantCode: exitUsage, wantError: "error: unknown flag: --nope\n"},
 		{name: "extra argument", args: []string{commandVersion, "extra"}, wantCode: exitUsage, wantError: "error: "},
+		{name: "extra plan check argument", args: []string{"plan", "check", "extra"}, wantCode: exitUsage, wantError: "error: "},
 		{name: "no completion command", args: []string{"completion", "bash", "extra"}, wantCode: exitUsage, wantError: "error: unknown command \"completion\""},
 		{name: "outside a git repo", args: []string{commandConfig}, outside: true, wantCode: exitRuntime, wantError: "error: not in a git repository\n"},
 	}
@@ -185,7 +186,50 @@ const (
 	gitBinary  = "git"
 	stateFile  = ".harness/state.db"
 	activeNo   = "active: no\n"
+
+	validPlanFixture = "../../internal/plan/domain/testdata/valid.md"
+	brokenPlan       = "# Plan\n"
+	commandPlan      = "plan"
+	commandCheck     = "check"
 )
+
+func validPlanFile(t *testing.T) string {
+	t.Helper()
+	abs, err := filepath.Abs(validPlanFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
+func startedRunID(t *testing.T, stdout string) string {
+	t.Helper()
+	fields := strings.Fields(strings.SplitN(stdout, "\n", 2)[0])
+	if len(fields) < 2 || fields[0] != commandRun {
+		t.Fatalf("start stdout = %q, want a run line", stdout)
+	}
+	return fields[1]
+}
+
+func writeRunPlan(t *testing.T, dir, runID, body string) {
+	t.Helper()
+	folder := filepath.Join(dir, ".harness", "runs", runID)
+	if err := os.MkdirAll(folder, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "plan.md"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func validPlan(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile(validPlanFile(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
 
 func gitIn(t *testing.T, dir string, args ...string) {
 	t.Helper()
@@ -207,7 +251,8 @@ func initRepo(t *testing.T) string {
 
 func TestRunLifecycle(t *testing.T) {
 	clearHarnessEnv(t)
-	initRepo(t)
+	valid := validPlan(t)
+	dir := initRepo(t)
 
 	steps := []struct {
 		args      []string
@@ -229,6 +274,9 @@ func TestRunLifecycle(t *testing.T) {
 			if !strings.Contains(stdout, want) {
 				t.Fatalf("%v: stdout = %q, want it to contain %q", step.args, stdout, want)
 			}
+		}
+		if step.args[0] == "start" {
+			writeRunPlan(t, dir, startedRunID(t, stdout), valid)
 		}
 	}
 
@@ -310,5 +358,61 @@ func TestRunVetoExitsOne(t *testing.T) {
 	code, stdout, _ := execute(t, commandRun, "status")
 	if code != exitOK || stdout != activeNo {
 		t.Fatalf("after veto: code = %d, stdout = %q", code, stdout)
+	}
+}
+
+func TestRunPlanChecksThePlan(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	_, stdout, _ := execute(t, commandRun, "start", "Add the login page")
+	runID := startedRunID(t, stdout)
+	writeRunPlan(t, dir, runID, brokenPlan)
+
+	code, _, stderr := execute(t, commandRun, commandPlan)
+
+	if code != exitRuntime || !strings.Contains(stderr, "plan.md:1: heading-missing") {
+		t.Fatalf("code = %d, stderr = %q, want %d and the problem lines", code, stderr, exitRuntime)
+	}
+	_, stdout, _ = execute(t, commandRun, "status")
+	if want := " phase=" + string(domain.PhasePlanning) + " "; !strings.Contains(stdout, want) {
+		t.Errorf("status = %q, want it to contain %q", stdout, want)
+	}
+}
+
+func TestPlanCheckNoRun(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+
+	code, stdout, stderr := execute(t, commandPlan, commandCheck)
+
+	if code != exitUsage || stdout != "" || !strings.HasPrefix(stderr, "error: no plan file") {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and the no plan file error", code, stdout, stderr, exitUsage)
+	}
+}
+
+func TestPlanCheckRefusesABadDiagram(t *testing.T) {
+	clearHarnessEnv(t)
+	broken := strings.Replace(validPlan(t), "Handler --> Pong", "Handler -> Pong", 1)
+	file := filepath.Join(initRepo(t), "plan.md")
+	if err := os.WriteFile(file, []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, _ := execute(t, commandPlan, commandCheck, "--file", file)
+
+	if code != exitRuntime || !strings.Contains(stdout, ": diagram: ") {
+		t.Fatalf("code = %d, stdout = %q, want %d and a diagram problem", code, stdout, exitRuntime)
+	}
+}
+
+func TestPlanCheckValidFixture(t *testing.T) {
+	clearHarnessEnv(t)
+	file := validPlanFile(t)
+	initRepo(t)
+
+	code, stdout, stderr := execute(t, commandPlan, commandCheck, "--file", file)
+
+	if code != exitOK || stdout != "" || stderr != "" {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want a clean plan", code, stdout, stderr)
 	}
 }

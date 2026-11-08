@@ -7,7 +7,17 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
+
+var ErrPlanHasProblems = errors.New("plan has problems")
+
+type Report struct {
+	Problems []Problem
+	Notes    []string
+	Track    shareddomain.Track
+}
 
 const (
 	SideBackend  = "backend"

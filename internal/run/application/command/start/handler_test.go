@@ -63,7 +63,7 @@ func (f *fakeHooks) After(_ context.Context, _ domain.Run, to domain.Run) {
 
 func newHandler(repo *fakeRepository, hooks *fakeHooks) Handler {
 	clock := func() time.Time { return now }
-	flow := transition.NewFlow(repo, hooks, domain.Policy{}, clock, noop.NewTracerProvider().Tracer("test"))
+	flow := transition.NewFlow(repo, hooks, nil, domain.Policy{}, clock, noop.NewTracerProvider().Tracer("test"))
 	return NewHandler(repo, flow, clock)
 }
 

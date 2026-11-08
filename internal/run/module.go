@@ -19,7 +19,7 @@ import (
 
 const tracerName = "github.com/jorge07/harness/internal/run"
 
-func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, cfg config.Run, key domain.RunKey, now func() time.Time) cli.Handlers {
+func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, gate domain.PlanGate, cfg config.Run, key domain.RunKey, now func() time.Time) cli.Handlers {
 	repo := persistence.NewSQLRunRepository(db, now)
 	policy := domain.Policy{
 		ApprovalNeeded:  cfg.Approval,
@@ -28,7 +28,7 @@ func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, cfg config.Run, key dom
 		MaxLiveRounds:   cfg.MaxLiveRounds,
 		MaxStopBlocks:   cfg.MaxStopBlocks,
 	}
-	flow := transition.NewFlow(repo, pluginhooks.NewHooks(bus, key.Worktree), policy, now, otel.Tracer(tracerName))
+	flow := transition.NewFlow(repo, pluginhooks.NewHooks(bus, key.Worktree), gate, policy, now, otel.Tracer(tracerName))
 	return cli.Handlers{
 		Key:        key,
 		Start:      start.NewHandler(repo, flow, now),
