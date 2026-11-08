@@ -10,3 +10,13 @@ rules:
     severity: error
     scope: "src/**/*.php"
     message: The application layer uses the domain layer, never the infrastructure layer.
+  - id: ddd/cross-context
+    engine: deptrac
+    severity: error
+    scope: "src/**/*.php"
+    message: A bounded context does not use the classes of another context.
+  - id: ddd/src-roots
+    engine: deptrac
+    severity: error
+    scope: "src/**/*.php"
+    message: Each class of src sits in a layer of deptrac.yaml, that is in a known context and layer.

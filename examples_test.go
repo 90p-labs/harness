@@ -43,11 +43,12 @@ type example struct {
 	setup    string
 	detected []string
 	canaries bool
+	waived   []string
 }
 
 var examples = []example{
-	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}, canaries: true},
-	{name: "go", lockfile: "go.sum", setup: "go-mod", canaries: true},
+	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}, canaries: true, waived: []string{lintdomain.RuleFileSuffix}},
+	{name: "go", lockfile: "go.sum", setup: "go-mod", canaries: true, waived: []string{lintdomain.RuleFileSuffix}},
 	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install"},
 	{name: "python", lockfile: "uv.lock", setup: "py-install", canaries: true},
 }
@@ -114,13 +115,13 @@ func TestExamples(t *testing.T) {
 				t.Fatalf("lint packs %v: %v", cfg.Lint.Packs, err)
 			}
 			if ex.canaries {
-				checkCanaries(t, dir)
+				checkCanaries(t, dir, ex.waived)
 			}
 		})
 	}
 }
 
-func checkCanaries(t *testing.T, dir string) {
+func checkCanaries(t *testing.T, dir string, wantWaived []string) {
 	t.Helper()
 	catalogue, err := rulecatalogue.Load()
 	if err != nil {
@@ -134,15 +135,21 @@ func checkCanaries(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var waived []string
 	for _, result := range results {
 		switch result.Status {
 		case lintdomain.CanaryFail:
 			t.Errorf("rule %s: %s", result.Rule, result.Detail)
+		case lintdomain.CanaryWaived:
+			waived = append(waived, result.Rule)
 		case lintdomain.CanaryToRun:
 			if info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(result.Canary))); err != nil || !info.IsDir() {
 				t.Errorf("rule %s: canary folder %s is missing", result.Rule, result.Canary)
 			}
 		}
+	}
+	if wantWaived != nil && !slices.Equal(waived, wantWaived) {
+		t.Errorf("waived rules = %q, want %q", waived, wantWaived)
 	}
 }
 
