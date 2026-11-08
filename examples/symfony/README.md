@@ -1,7 +1,7 @@
 # Symfony example
 
 This example shows a Makefile as the gate source for a Symfony project.
-It also shows the architecture rules of the `lint-setup` skill with deptrac, and the canaries that prove them.
+It also shows the architecture rules of the `lint-setup` skill with deptrac.
 Each gate and deptrac run in a container. The harness, the hooks and the plugin scripts run on the host.
 
 ## What the folder holds
@@ -15,11 +15,9 @@ Only the files that you add to your project:
 | `.harness.yaml` | The `make-gates` and `deptrac` plugins, the lint pack and `verify.parallel: 3`. It has no `setup` key and no `gates` key. |
 | `.harness/plugins/make-gates.sh` | The gates plugin. It reads the `## setup` and `## gate` marks. |
 | `deptrac.yaml` | The deptrac config: one layer for each context and layer kind, the library layers and the allowed dependencies. You own this file. |
-| `.php-cs-fixer.dist.php` | The php-cs-fixer config of the Symfony recipe, with `lint/canaries` excluded. |
+| `.php-cs-fixer.dist.php` | The php-cs-fixer config of the Symfony recipe. |
 | `lint/architecture/pack.yaml` | The custom lint pack `architecture`. Its four rules name the engine `deptrac`. |
 | `.harness/plugins/deptrac.sh` | The lint engine plugin. It answers `lint.check`, runs deptrac and maps each violation to a rule id of the catalogue. |
-| `lint/rules.yaml` | The manifest. It gives a canary or a waiver for each rule of the `ddd` catalogue pack. |
-| `lint/canaries/` | One folder for each rule with a canary. Each folder breaks its rule on purpose. |
 
 ## Prerequisites
 
@@ -37,7 +35,7 @@ The image is `composer:2.11.1`. It holds PHP 8.5.12, git and unzip.
 3. Mark the test target with `## gate needs: cs phpstan lint-container`.
 4. `harness gates init` sends the `gates.detect` event to the plugin.
 5. The plugin reads `./Makefile` and prints one `allow` verdict. Its `context` holds one line for each marked target.
-6. The harness writes the `install` line under the `setup` key and the gate lines under the `gates` key of `.harness.yaml`. The `lint` key gives the `lint` gate. `lint/rules.yaml` gives the `lint-canaries` gate.
+6. The harness writes the `install` line under the `setup` key and the gate lines under the `gates` key of `.harness.yaml`. The `lint` key gives the `lint` gate.
 7. `harness verify` runs the setup step, then the gates. Each target calls `docker compose run --rm -T php`.
 
 The `## setup` marker makes the `install` target a setup step with the id `make-install`.
@@ -57,7 +55,7 @@ To add a gate, mark the new target. Then edit the `gates` key by hand, or remove
 
 ## Steps
 
-Copy the files into your project. The example `.php-cs-fixer.dist.php` replaces the file of the php-cs-fixer recipe. It adds `lint/canaries` to the `exclude` list, because each canary breaks a rule on purpose and php-cs-fixer must not check it. If your file has other changes, add only `lint/canaries` to its `exclude` list.
+Copy the files into your project. The example `.php-cs-fixer.dist.php` replaces the file of the php-cs-fixer recipe.
 Then add these lines to `.gitignore`:
 
 ```
@@ -102,7 +100,6 @@ Write the setup step and the gates, then the lint files:
 $ harness gates init
 setup make-install: make install
 lint: harness lint --json
-lint-canaries: harness lint canaries
 make-cs: make cs
 make-phpstan: make phpstan
 make-lint-container: make lint-container
@@ -140,8 +137,6 @@ gates:
   - id: lint
     run: harness lint --json
     baseline: .harness-lint/baseline.json
-  - id: lint-canaries
-    run: harness lint canaries
   - id: make-cs
     run: make cs
     paths:
@@ -180,21 +175,19 @@ The `make-test` gate ends with the `needs` key:
       - make-lint-container
 ```
 
-The four `make` gates have the same `paths`. The setup step has its own `paths`. The `lint` and `lint-canaries` gates have no `paths`, so every tracked file is their input.
+The four `make` gates have the same `paths`. The setup step has its own `paths`. The `lint` gate has no `paths`, so every tracked file is its input.
 Commit `.harness.yaml` and `.harness-lint/`. Then run the gates two times:
 
 ```console
 $ harness verify
 setup make-install 3.123s
 PASS lint 4.089s
-PASS lint-canaries 13.644s
 PASS make-cs 1.993s
 PASS make-phpstan 8.119s
 PASS make-lint-container 1.116s
 PASS make-test 2.364s
 $ harness verify
 CACHED lint 4.088s
-CACHED lint-canaries 13.643s
 CACHED make-cs 1.993s
 CACHED make-phpstan 8.119s
 CACHED make-lint-container 1.116s
@@ -211,7 +204,6 @@ The proof moved the opening brace of `class Kernel` in `src/Kernel.php` to the l
 ```console
 $ harness verify
 PASS lint 3.562s
-PASS lint-canaries 10.552s
 FAIL make-cs 1.683s
 PASS make-phpstan 6.52s
 PASS make-lint-container 1.392s
@@ -260,7 +252,7 @@ $ echo $?
 ```
 
 The `echo $?` line is a separate command. It printed the exit code of `harness verify`. The proof then restored `src/Kernel.php`, and the gates were `CACHED` again.
-php-cs-fixer checked 12 files. The exclude of `.php-cs-fixer.dist.php` keeps the 6 canary files out:
+php-cs-fixer checked 12 files:
 
 ```console
 $ docker compose run --rm -T php vendor/bin/php-cs-fixer list-files 2>/dev/null
@@ -287,7 +279,6 @@ $ rm -rf vendor
 $ harness verify
 setup make-install 7.939s
 CACHED lint 4.088s
-CACHED lint-canaries 13.643s
 CACHED make-cs 1.993s
 CACHED make-phpstan 8.119s
 CACHED make-lint-container 1.116s
@@ -305,27 +296,15 @@ PASS a0e48347076d chore
 
 ## Architecture rules with deptrac
 
-The `lint-setup` skill wrote these files with its steps. `harness lint catalogue` prints the rules of the catalogue.
-The manifest `lint/rules.yaml` names the catalogue pack `ddd` and gives each of its five rules a canary or a waiver:
-
-```yaml
-pack: ddd
-rules:
-  - id: ddd/domain-purity
-    canary: lint/canaries/ddd-domain-purity
-  - id: ddd/layer-direction
-    canary: lint/canaries/ddd-layer-direction
-  - id: ddd/cross-context
-    canary: lint/canaries/ddd-cross-context
-  - id: ddd/file-suffix
-    waived: deptrac checks the dependencies, not the file names.
-  - id: ddd/src-roots
-    canary: lint/canaries/ddd-src-roots
-```
-
+The `lint-setup` skill wrote the config, the plugin and the pack with its steps. `harness lint catalogue` prints the rules of the catalogue.
 The project does not turn on the built-in `ddd` pack, because its engine reads TypeScript.
-The custom pack `architecture` gives the four rules with a canary to the engine `deptrac`. Its scope `src/**/*.php` leaves out `lint/canaries/`.
-`deptrac.yaml` reads only `./src`, so a canary never fails the `lint` gate.
+The custom pack `architecture` gives four rules of the `ddd` pack to the engine `deptrac`. Its scope is `src/**/*.php`.
+The one waived rule is `ddd/file-suffix`. deptrac checks the dependencies, not the names of the files, so the custom pack has no rule for it.
+`deptrac.yaml` reads only `./src`.
+
+The skill proved the rules once at the setup. It wrote a temporary proof folder `lint/proof/` with one canary for each rule, and it ran `harness lint canaries --proof lint/proof`. Each canary breaks its rule on purpose.
+The skill reported each PASS and each WAIVED line with its reason to the user, and then it deleted the folder.
+The project commits no canary, no manifest and no canary gate. A later edit of `deptrac.yaml` that lets a rule through stays green until someone runs the `lint-setup` skill again.
 
 `deptrac.yaml` has one layer for each context and layer kind. The example has the contexts `Order` and `Billing`, so it has six context layers:
 
@@ -343,7 +322,7 @@ The custom pack `architecture` gives the four rules with a canary to the engine 
 The plugin reads the context and the kind from the layer name: a name that ends in `Domain`, `Application` or `Infrastructure` is a context layer. Keep this form for each new layer, with no space or parenthesis in the name. A deptrac message with no layer name stops the plugin with an error.
 `DomainLibraries` holds `^Ramsey\\Uuid\\.*` as a placeholder. Replace it with the list of libraries that your domain may use. deptrac refuses a layer with no collector, so keep one line.
 A controller belongs in the infrastructure layer of its context, for example `App\Order\Infrastructure\Http\OrderController`. The example has no layer for `App\Controller`, so a class there is a `ddd/src-roots` finding.
-Edit the layers and the ruleset to match your project. Then run `harness lint canaries` to see that each rule still catches its canary.
+Edit the layers and the ruleset to match your project. Then run the `lint-setup` skill again to prove the rules.
 
 To add a context, for example `Catalog`, add three layers and three ruleset entries to `deptrac.yaml`:
 
@@ -379,13 +358,11 @@ To add a context, for example `Catalog`, add three layers and three ruleset entr
       - Framework
 ```
 
-The canary `ddd-src-roots` holds the context `Shipping`, which the config does not list. If your project gets a `Shipping` context, give the canary another context name.
-
 The plugin `deptrac.sh` does these steps:
 
 1. It reads the event from stdin before it starts the container.
-2. It reads the folder of the call with `git rev-parse --show-prefix`. The harness runs the plugin in the canary folder for a canary, and in the project root for `harness lint`.
-3. For a canary, it writes a deptrac config that imports `deptrac.yaml` and sets `projectDirectory` to the canary folder. deptrac resolves `./src` from that folder.
+2. It reads the folder of the call with `git rev-parse --show-prefix`. The harness runs the plugin in a canary folder for a proof, and in the project root for `harness lint`.
+3. For a proof canary, it writes a deptrac config that imports `deptrac.yaml` and sets `projectDirectory` to the canary folder. deptrac resolves `./src` from that folder.
 4. It runs `deptrac analyse --report-uncovered` with the JSON formatter in a container with the name `deptrac-lint-<pid>`. An invalid config has no report, so the plugin prints the deptrac text to stderr and exits with 1.
 5. It runs `deptrac debug:unassigned` with the same config. This command lists each class of `src` that is in no layer, and exits with 2 when the list is not empty.
 6. It gives the event, the report and the list to `jq`. The rules come from the layer names in each message:
@@ -408,7 +385,7 @@ $ echo $?
 $ docker ps -a --filter name=-lint- --format '{{.Names}}'
 ```
 
-The proof added five classes, one for each rule with a canary:
+The proof added five classes:
 
 - `src/Order/Domain/OrderSource.php` takes a Symfony `Request`.
 - `src/Order/Domain/OrderJournal.php` takes a `Psr\Log\LoggerInterface`.
@@ -450,77 +427,10 @@ $ echo $?
 1
 ```
 
-### The canaries pass
-
-`harness lint canaries` sends `lint.check` to the engine of each rule with a canary, in the canary folder, with only that rule. The rule must be in the findings. No agent runs in this check:
-
-```console
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-PASS ddd/layer-direction lint/canaries/ddd-layer-direction
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
-$ echo $?
-0
-```
-
-### A config edit breaks a rule
-
-The proof let the application layer of `Order` use the infrastructure layer of `Order`:
-
-```diff
-     OrderApplication:
-       - OrderDomain
-       - SharedDomain
-       - DomainLibraries
-       - Vendor
-+      - OrderInfrastructure
-```
-
-deptrac then gave no finding for the canary `ddd-layer-direction`, and the check failed:
-
-```console
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
-error: a lint canary failed
-$ echo $?
-1
-```
-
-The `lint` gate stays green after this edit, because the code has no violation. The `lint-canaries` gate fails, so `harness verify` fails.
-
-### A waiver accepts the change
-
-When the team wants the edit, it waives the rule in `lint/rules.yaml` with a reason:
-
-```diff
-   - id: ddd/layer-direction
--    canary: lint/canaries/ddd-layer-direction
-+    waived: the team lets the application layer use the infrastructure layer.
-```
-
-```console
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-WAIVED ddd/layer-direction: the team lets the application layer use the infrastructure layer.
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
-$ echo $?
-0
-```
-
-The output shows each waiver with its reason, so a review sees it. The proof then restored `deptrac.yaml` and `lint/rules.yaml`.
-
 ## The project after the setup
 
-The tree comes from `tree -a -I "vendor|node_modules|.git|.venv|var" --dirsfirst` in the project of the proof.
-The marks on the right are not part of the `tree` output. "You add" is a file that you copy or edit. "Harness writes" names the command that writes the file.
+The marks on the right are not part of a `tree` output.
+The project keeps no `lint/proof/` folder, because the skill deletes it after the proof. "You add" is a file that you copy or edit. "Harness writes" names the command that writes the file.
 
 ```text
 .
@@ -549,35 +459,8 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   ├── routes.yaml
 │   └── services.yaml
 ├── lint
-│   ├── architecture
-│   │   └── pack.yaml                                       you add, commit
-│   ├── canaries
-│   │   ├── ddd-cross-context
-│   │   │   └── src
-│   │   │       ├── Billing
-│   │   │       │   └── Application
-│   │   │       │       └── IssueInvoice.php                you add, commit
-│   │   │       └── Order
-│   │   │           └── Domain
-│   │   │               └── Order.php                       you add, commit
-│   │   ├── ddd-domain-purity
-│   │   │   └── src
-│   │   │       └── Order
-│   │   │           └── Domain
-│   │   │               └── Order.php                       you add, commit
-│   │   ├── ddd-layer-direction
-│   │   │   └── src
-│   │   │       └── Order
-│   │   │           ├── Application
-│   │   │           │   └── PlaceOrder.php                  you add, commit
-│   │   │           └── Infrastructure
-│   │   │               └── OrderTable.php                  you add, commit
-│   │   └── ddd-src-roots
-│   │       └── src
-│   │           └── Shipping
-│   │               └── Domain
-│   │                   └── Shipment.php                    you add, commit
-│   └── rules.yaml                                          you add, commit
+│   └── architecture
+│       └── pack.yaml                                       you add, commit
 ├── public
 │   └── index.php
 ├── src
@@ -617,8 +500,6 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 ├── deptrac.yaml                                            you add, commit
 ├── phpunit.dist.xml
 └── symfony.lock
-
-43 directories, 51 files
 ```
 
 Git ignores `.phpunit.cache/` and `.php-cs-fixer.cache`. The tree leaves out `vendor/`, `var/` and `.git/`.

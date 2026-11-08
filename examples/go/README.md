@@ -1,7 +1,7 @@
 # Go example
 
 This example sets up the harness on a Go module. Each gate runs in a Docker container. The harness and the host hooks run on the host.
-It also shows the architecture rules of the `lint-setup` skill with go-arch-lint, and the canaries that prove them.
+It also shows the architecture rules of the `lint-setup` skill with go-arch-lint.
 
 ## Files
 
@@ -12,13 +12,11 @@ The example holds only the files that you add to your module:
   - `plugins` holds the `go-arch-lint` plugin. It answers `lint.check`. `lint.packs` names the custom pack.
   - `verify.parallel: 2` lets the harness run two gates at the same time.
   - `setup` holds one step, `go-mod`. It runs `go mod download` before the gates.
-  - `gates` holds `go-fmt`, `go-vet`, `go-test`, `lint` and `lint-canaries`. `go-test` has `needs: [go-fmt, go-vet]`. `lint` and `lint-canaries` run on the host.
+  - `gates` holds `go-fmt`, `go-vet`, `go-test` and `lint`. `go-test` has `needs: [go-fmt, go-vet]`. `lint` runs on the host.
   - Each Go command runs `docker compose run --rm -T go ...`. The `-T` flag turns off the TTY, because the harness runs a gate with no terminal.
 - `.go-arch-lint.yml`: the go-arch-lint config. It has the components and the allowed imports. You own this file.
 - `lint/architecture/pack.yaml`: the custom lint pack `architecture`. Its four rules name the engine `go-arch-lint`.
 - `.harness/plugins/go-arch-lint.sh`: the lint engine plugin. It runs go-arch-lint and maps each violation to a rule id of the catalogue.
-- `lint/rules.yaml`: the manifest. It gives a canary or a waiver for each rule of the `ddd` catalogue pack.
-- `lint/canaries/`: one folder for each rule with a canary. Each folder has its own `go.mod`, so it is not part of your module. Each folder breaks its rule on purpose.
 
 Set the top-level `name:` of `compose.yaml` to the name of your module. `harness verify --commits` runs the gates in a temporary worktree. The fixed name lets that worktree use the same cache volumes.
 
@@ -26,7 +24,7 @@ Set the top-level `name:` of `compose.yaml` to the name of your module. `harness
 
 - Docker and Docker Compose. The output below comes from Docker Engine 29.9.2 and Compose v5.6.1.
 - The `harness` binary, `sh`, `git` and `jq` on the `PATH` of the host. See the root README for the install steps. The go-arch-lint plugin runs on the host and uses `jq`. The proof used jq 1.6.
-- A Go module with `go.mod` at the top of a git repository. Put the code in `internal/<context>/{domain,application,infrastructure}`. The plugin reads the context and the layer from these folder names. The canaries keep their own module name `example.com/shop`, so your module name does not matter.
+- A Go module with `go.mod` at the top of a git repository. Put the code in `internal/<context>/{domain,application,infrastructure}`. The plugin reads the context and the layer from these folder names.
 - go-arch-lint v1.19.1. The plugin runs it in the container with `go run github.com/fe3dback/go-arch-lint@v1.19.1`, so you install nothing. The module cache volume keeps the download. The first run downloads and builds the tool. The proof took 15 seconds for this first run and 1 second for a later run.
 
 You do not need Go on the host. The container has Go.
@@ -73,7 +71,7 @@ gates:
     run: go test ./...
 ```
 
-The `next:` line points to the `lint-setup` skill, because no lint pack checks the Go code yet. The example already holds the files that the skill writes, so you can skip it.
+The `next:` line points to the `lint-setup` skill, because no lint pack checks the Go code yet. The example already holds the files that the skill keeps, so you can skip it.
 These gates need Go on the host. The example keeps the same ids and runs each command in the container. Its `go-fmt` also fails on a file that `gofmt` cannot parse, and it prints the file names. `gofmt` also reads `testdata/`, so a module that keeps an invalid `.go` file there on purpose needs a narrower command.
 
 ## Step 2: copy the example and run the setup
@@ -114,18 +112,15 @@ PASS go-fmt 695ms
 PASS go-vet 739ms
 PASS go-test 1.002s
 PASS lint 1.664s
-PASS lint-canaries 4.498s
 $ harness verify
 CACHED go-fmt 694ms
 CACHED go-vet 738ms
 CACHED go-test 1.002s
 CACHED lint 1.664s
-CACHED lint-canaries 4.497s
 ```
 
 `verify.parallel: 2` lets the harness run two gates at the same time. `go-fmt` and `go-vet` have no `needs`, so they start together.
 `go-test` has `needs: [go-fmt, go-vet]`. It starts only after both gates are `PASS` or `CACHED`.
-`lint` and `lint-canaries` have no `needs`. The canary folders have their own `go.mod`, so `go vet ./...` and `go test ./...` skip them.
 
 ## A failed gate skips the gates that need it
 
@@ -137,7 +132,6 @@ FAIL go-fmt 540ms
 PASS go-vet 559ms
 SKIPPED go-test needs go-fmt
 PASS lint 1.287s
-PASS lint-canaries 4.011s
 
 go-fmt:
  Container my-go-app-go-run-42b0a8c40957 Creating 
@@ -163,7 +157,6 @@ CACHED go-fmt 694ms
 CACHED go-vet 738ms
 CACHED go-test 1.002s
 CACHED lint 1.664s
-CACHED lint-canaries 4.497s
 ```
 
 ## A new dependency runs the setup step again
@@ -185,13 +178,11 @@ PASS go-fmt 691ms
 PASS go-vet 735ms
 PASS go-test 547ms
 PASS lint 1.385s
-PASS lint-canaries 3.728s
 $ harness verify
 CACHED go-fmt 690ms
 CACHED go-vet 735ms
 CACHED go-test 547ms
 CACHED lint 1.385s
-CACHED lint-canaries 3.728s
 ```
 
 The next run prints no setup line. The step runs only when the hash of its `paths` changes.
@@ -206,34 +197,20 @@ PASS 2724ba442b85 chore
 
 ## Architecture rules with go-arch-lint
 
-The `lint-setup` skill wrote these files with its steps. `harness lint catalogue` prints the rules of the catalogue.
-The manifest `lint/rules.yaml` names the catalogue pack `ddd` and gives each of its five rules a canary or a waiver:
-
-```yaml
-pack: ddd
-rules:
-  - id: ddd/domain-purity
-    canary: lint/canaries/ddd-domain-purity
-  - id: ddd/layer-direction
-    canary: lint/canaries/ddd-layer-direction
-  - id: ddd/cross-context
-    canary: lint/canaries/ddd-cross-context
-  - id: ddd/file-suffix
-    waived: go-arch-lint checks the imports, not the file names.
-  - id: ddd/src-roots
-    canary: lint/canaries/ddd-src-roots
-```
-
+The `lint-setup` skill wrote the config, the plugin and the pack with its steps. `harness lint catalogue` prints the rules of the catalogue.
 The project does not turn on the built-in `ddd` pack, because its engine reads TypeScript.
-The custom pack `architecture` gives the four rules with a canary to the engine `go-arch-lint`. Its scope `internal/**/*.go` leaves out `lint/canaries/`.
-`.go-arch-lint.yml` has `workdir: internal`, so a canary never fails the `lint` gate.
-The one waiver is `ddd/file-suffix`. go-arch-lint checks the imports of a package, not the names of the files.
+The custom pack `architecture` gives four rules of the `ddd` pack to the engine `go-arch-lint`. Its scope is `internal/**/*.go`.
+The one waived rule is `ddd/file-suffix`. go-arch-lint checks the imports of a package, not the names of the files, so the custom pack has no rule for it.
+
+The skill proved the rules once at the setup. It wrote a temporary proof folder `lint/proof/` with one canary for each rule, and it ran `harness lint canaries --proof lint/proof`. Each canary breaks its rule on purpose.
+The skill reported each PASS and each WAIVED line with its reason to the user, and then it deleted the folder.
+The project commits no canary, no manifest and no canary gate. A later edit of `.go-arch-lint.yml` that lets a rule through stays green until someone runs the `lint-setup` skill again.
 
 `.go-arch-lint.yml` has one component for each layer of each context, for example `order-domain` for `internal/order/domain`. The `deps` key lets the domain use nothing, the application layer use the domain and any third-party library, and the infrastructure layer use the domain, the application layer and any third-party library.
 The key `depOnAnyVendor: false` makes a third-party library a violation for each component without `anyVendorDeps: true`, so only the domain cannot use one. The standard library is always allowed. Test files are not checked.
 The `in` globs end with `/**`, so a component also covers the use case folders below its layer folder. A component never lists a component of another context, so each context stays apart.
 A `.go` file under `internal/` that no component covers is a `ddd/src-roots` finding, for example a third context or a file directly in `internal/order/`.
-Edit the components and the `deps` to match your project. Then run `harness lint canaries` to see that each rule still catches its canary.
+Edit the components and the `deps` to match your project. Then run the `lint-setup` skill again to prove the rules.
 
 To add a context, for example `catalog`, add three components and their `deps` to `.go-arch-lint.yml`:
 
@@ -251,14 +228,11 @@ deps:
     anyVendorDeps: true
 ```
 
-Each canary folder holds every component folder, so also add `internal/catalog/{domain,application,infrastructure}` with an empty `.gitkeep` to each canary folder. Then run `harness lint canaries`.
-The canary `ddd-src-roots` holds the context `shipping`, which the config does not list. If your project gets a `shipping` context, give the canary another context name.
-
 The plugin `go-arch-lint.sh` does these steps:
 
 1. It reads the event from stdin before it starts the container.
-2. It reads the folder of the call with `git rev-parse --show-prefix`. The harness runs the plugin in the canary folder for a canary, and in the project root for `harness lint`.
-3. It runs `go-arch-lint check --json` in a container with the name `go-arch-lint-<pid>`, with `--project-path` set to that folder. The config is always `/src/.go-arch-lint.yml`. A canary folder has its own `go.mod` with the module path `example.com/shop`, and its imports use this path, so the tool resolves the imports. A canary folder holds every component folder, because the tool fails with `not found directories` for a missing folder. The folders without code hold an empty `.gitkeep`. No `.go` file sits directly in an `application/` folder: the real canaries are in `application/place_order/` and `application/issue_invoice/`.
+2. It reads the folder of the call with `git rev-parse --show-prefix`. The harness runs the plugin in a canary folder for a proof, and in the project root for `harness lint`.
+3. It runs `go-arch-lint check --json` in a container with the name `go-arch-lint-<pid>`, with `--project-path` set to that folder. The config is always `/src/.go-arch-lint.yml`. A proof canary folder has its own `go.mod` with the module path `example.com/shop`, and its imports use this path, so the tool resolves the imports. A canary folder holds every component folder, because the tool fails with `not found directories` for a missing folder. The folders without code hold an empty `.gitkeep`. No `.go` file sits directly in an `application/` folder: put the code in `application/place_order/` or `application/issue_invoice/`.
 4. A missing config gives no JSON, so the plugin prints the tool text to stderr and exits with 1. A config with a warning stops the plugin with an error that names the warning.
 5. It gives the event and the report to `jq`. An import of another context is a `ddd/cross-context` finding. A violation of a `domain` component is a `ddd/domain-purity` finding. A violation of an `application` component is a `ddd/layer-direction` finding. Any other violation has no catalogue rule, for example a component `order-api` that you add. The plugin then stops with an error that names the violation.
 6. Each file in `ArchWarningsNotMatched` of the report is a `ddd/src-roots` finding at line 1. go-arch-lint checks no import of such a file, so add a component for it.
@@ -319,74 +293,10 @@ $ echo $?
 1
 ```
 
-### The canaries pass
-
-`harness lint canaries` sends `lint.check` to the engine of each rule with a canary, in the canary folder, with only that rule. The rule must be in the findings. No agent runs in this check:
-
-```console
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-PASS ddd/layer-direction lint/canaries/ddd-layer-direction
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-WAIVED ddd/file-suffix: go-arch-lint checks the imports, not the file names.
-$ echo $?
-0
-```
-
-### A config edit breaks a rule
-
-The proof let the application layer of `order` use the infrastructure layer:
-
-```diff
-   order-application:
--    mayDependOn: [order-domain]
-+    mayDependOn: [order-domain, order-infrastructure]
-```
-
-go-arch-lint then gave no finding for the canary `ddd-layer-direction`, and the check failed:
-
-```console
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine go-arch-lint gave no ddd/layer-direction finding
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-WAIVED ddd/file-suffix: go-arch-lint checks the imports, not the file names.
-error: a lint canary failed
-$ echo $?
-1
-```
-
-The `lint` gate stays green after this edit, because the code has no violation. The `lint-canaries` gate fails, so `harness verify` fails.
-
-### A waiver accepts the change
-
-When the team wants the edit, it waives the rule in `lint/rules.yaml` with a reason:
-
-```diff
-   - id: ddd/layer-direction
--    canary: lint/canaries/ddd-layer-direction
-+    waived: the team lets the application layer use the infrastructure layer.
-```
-
-```console
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-WAIVED ddd/layer-direction: the team lets the application layer use the infrastructure layer.
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-WAIVED ddd/file-suffix: go-arch-lint checks the imports, not the file names.
-$ echo $?
-0
-```
-
-The output shows each waiver with its reason, so a review sees it. The proof then restored `.go-arch-lint.yml` and `lint/rules.yaml`.
-
 ## The project after the setup
 
-The tree comes from `tree -a -I "vendor|node_modules|.git|.venv|var" --dirsfirst` in the project of the proof.
-The marks on the right are not part of the `tree` output. "You add" is a file that you copy or edit. "Harness writes" names the command that writes the file.
+The marks on the right are not part of a `tree` output. "You add" is a file that you copy or edit. "Harness writes" names the command that writes the file.
+The project keeps no `lint/proof/` folder, because the skill deletes it after the proof.
 
 ```text
 .
@@ -420,93 +330,14 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │       └── infrastructure
 │           └── memory_repository.go
 ├── lint
-│   ├── architecture
-│   │   └── pack.yaml                                                                           you add, commit
-│   ├── canaries
-│   │   ├── ddd-cross-context
-│   │   │   ├── internal
-│   │   │   │   ├── billing
-│   │   │   │   │   ├── application
-│   │   │   │   │   │   ├── issue_invoice
-│   │   │   │   │   │   │   └── issue_invoice.go                                                you add, commit
-│   │   │   │   │   │   └── .gitkeep                                                            you add, commit
-│   │   │   │   │   ├── domain
-│   │   │   │   │   │   └── doc.go                                                              you add, commit
-│   │   │   │   │   └── infrastructure
-│   │   │   │   │       └── doc.go                                                              you add, commit
-│   │   │   │   └── order
-│   │   │   │       ├── application
-│   │   │   │       │   └── .gitkeep                                                            you add, commit
-│   │   │   │       ├── domain
-│   │   │   │       │   └── doc.go                                                              you add, commit
-│   │   │   │       └── infrastructure
-│   │   │   │           └── doc.go                                                              you add, commit
-│   │   │   └── go.mod                                                                          you add, commit
-│   │   ├── ddd-domain-purity
-│   │   │   ├── internal
-│   │   │   │   ├── billing
-│   │   │   │   │   ├── application
-│   │   │   │   │   │   └── .gitkeep                                                            you add, commit
-│   │   │   │   │   ├── domain
-│   │   │   │   │   │   └── doc.go                                                              you add, commit
-│   │   │   │   │   └── infrastructure
-│   │   │   │   │       └── doc.go                                                              you add, commit
-│   │   │   │   └── order
-│   │   │   │       ├── application
-│   │   │   │       │   └── .gitkeep                                                            you add, commit
-│   │   │   │       ├── domain
-│   │   │   │       │   └── order.go                                                            you add, commit
-│   │   │   │       └── infrastructure
-│   │   │   │           └── doc.go                                                              you add, commit
-│   │   │   └── go.mod                                                                          you add, commit
-│   │   ├── ddd-layer-direction
-│   │   │   ├── internal
-│   │   │   │   ├── billing
-│   │   │   │   │   ├── application
-│   │   │   │   │   │   └── .gitkeep                                                            you add, commit
-│   │   │   │   │   ├── domain
-│   │   │   │   │   │   └── doc.go                                                              you add, commit
-│   │   │   │   │   └── infrastructure
-│   │   │   │   │       └── doc.go                                                              you add, commit
-│   │   │   │   └── order
-│   │   │   │       ├── application
-│   │   │   │       │   ├── place_order
-│   │   │   │       │   │   └── place_order.go                                                  you add, commit
-│   │   │   │       │   └── .gitkeep                                                            you add, commit
-│   │   │   │       ├── domain
-│   │   │   │       │   └── doc.go                                                              you add, commit
-│   │   │   │       └── infrastructure
-│   │   │   │           └── doc.go                                                              you add, commit
-│   │   │   └── go.mod                                                                          you add, commit
-│   │   └── ddd-src-roots
-│   │       ├── internal
-│   │       │   ├── billing
-│   │       │   │   ├── application
-│   │       │   │   │   └── .gitkeep                                                            you add, commit
-│   │       │   │   ├── domain
-│   │       │   │   │   └── doc.go                                                              you add, commit
-│   │       │   │   └── infrastructure
-│   │       │   │       └── doc.go                                                              you add, commit
-│   │       │   ├── order
-│   │       │   │   ├── application
-│   │       │   │   │   └── .gitkeep                                                            you add, commit
-│   │       │   │   ├── domain
-│   │       │   │   │   └── doc.go                                                              you add, commit
-│   │       │   │   └── infrastructure
-│   │       │   │       └── doc.go                                                              you add, commit
-│   │       │   └── shipping
-│   │       │       └── domain
-│   │       │           └── shipment.go                                                         you add, commit
-│   │       └── go.mod                                                                          you add, commit
-│   └── rules.yaml                                                                              you add, commit
+│   └── architecture
+│       └── pack.yaml                                                                           you add, commit
 ├── .gitignore                                                                                  you add the harness lines, commit
 ├── .go-arch-lint.yml                                                                           you add, commit
-├── .harness.yaml                                                                               you add the plugin, the pack and the lint gates, commit
+├── .harness.yaml                                                                               you add the plugin, the pack and the lint gate, commit
 ├── compose.yaml                                                                                you add, commit
 ├── go.mod
 └── go.sum                                                                                      go writes, commit
-
-65 directories, 51 files
 ```
 
 The harness keeps the state of `harness verify` in `.git/.harness/state.db`. The `.harness/` folder of the tree holds only the plugin. The harness writes its run folders there when you run `harness run`. `.gitignore` ignores them, except `.harness/plugins/`.

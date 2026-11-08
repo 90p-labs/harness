@@ -15,16 +15,16 @@ The output in each README is real, from a scratch project that the steps built f
 
 Each example also holds the architecture rules that the `lint-setup` skill writes for its language. `harness lint catalogue` prints the rules.
 
-| Example | Language | Tool | Where the rules live | Canaries |
-|---|---|---|---|---|
-| [`symfony/`](symfony/README.md#architecture-rules-with-deptrac) | PHP | deptrac | `deptrac.yaml`, the plugin `.harness/plugins/deptrac.sh`, the pack `lint/architecture/` and `lint/rules.yaml` | 2, and 2 waivers |
-| [`go/`](go/README.md#architecture-rules-with-go-arch-lint) | Go | go-arch-lint | `.go-arch-lint.yml`, the plugin `.harness/plugins/go-arch-lint.sh`, the pack `lint/architecture/` and `lint/rules.yaml` | 3, and 1 waiver |
-| [`python/`](python/README.md#architecture-rules-with-import-linter) | Python | import-linter, with the custom contract type `domain_purity` | `.importlinter`, the plugins `.harness/plugins/import-linter.sh` and `domain_purity.py`, the pack `lint/architecture/` and `lint/rules.yaml` | 4, and 1 waiver |
-| [`nextjs/`](nextjs/README.md#architecture-rules-with-the-built-in-ddd-pack) | TypeScript | the built-in `ddd` pack | `ddd` in `lint.packs`, the `lint.ddd` keys of `.harness.yaml` and the optional `lint/rules.yaml` | 5, optional: the tests of the binary also prove the built-in rules |
+| Example | Language | Tool | Where the rules live |
+|---|---|---|---|
+| [`symfony/`](symfony/README.md#architecture-rules-with-deptrac) | PHP | deptrac | `deptrac.yaml`, the plugin `.harness/plugins/deptrac.sh` and the pack `lint/architecture/` |
+| [`go/`](go/README.md#architecture-rules-with-go-arch-lint) | Go | go-arch-lint | `.go-arch-lint.yml`, the plugin `.harness/plugins/go-arch-lint.sh` and the pack `lint/architecture/` |
+| [`python/`](python/README.md#architecture-rules-with-import-linter) | Python | import-linter, with the custom contract type `domain_purity` | `.importlinter`, the plugins `.harness/plugins/import-linter.sh` and `domain_purity.py`, and the pack `lint/architecture/` |
+| [`nextjs/`](nextjs/README.md#architecture-rules-with-the-built-in-ddd-pack) | TypeScript | the built-in `ddd` pack | `ddd` in `lint.packs`, and the `lint.ddd` keys of `.harness.yaml` |
 
-The gate `lint-canaries` runs `harness lint canaries`. It proves that each rule still catches its canary, with no agent. A config edit that lets a rule through fails the gate.
-A waiver in `lint/rules.yaml` accepts the change. `harness lint canaries` prints its reason, but `harness verify` prints only the gate result, so a review reads the waiver in the diff.
-A canary proves that its rule catches one fixture. It does not prove that the rule catches each violation in the project.
+The `lint-setup` skill proves the rules once, with a temporary proof folder `lint/proof/` that it deletes after the proof. A project commits no canary. The tests of the binary prove the built-in `ddd` rules.
+A rule that the tool cannot check, for example `ddd/file-suffix` for go and symfony, is waived. The custom pack has no rule for it.
+A later edit of the tool config that lets a rule through stays green until someone runs the `lint-setup` skill again.
 
 ## Rules for every example
 
