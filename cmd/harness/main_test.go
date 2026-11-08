@@ -83,8 +83,12 @@ func TestDiagramCommand(t *testing.T) {
 	t.Run("refuses an unmarked diagram", func(t *testing.T) {
 		code, stdout, stderr := executeWithStdin(t, unmarked, commandDiagram)
 
-		if code != exitUsage || stdout != "" || !strings.Contains(stderr, "error: diagram refused: line 1: no mark") {
-			t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and the refusal reason", code, stdout, stderr, exitUsage)
+		const want = "error: diagram refused: line 1: no mark: end a line with + (new), * (changed) or - (removed)\nhint: harness diagram --help\n"
+		if code != exitUsage || stdout != "" || stderr != want {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and %q", code, stdout, stderr, exitUsage, want)
+		}
+		if strings.Contains(stderr, "Usage:") {
+			t.Errorf("stderr = %q, want no usage text", stderr)
 		}
 	})
 }

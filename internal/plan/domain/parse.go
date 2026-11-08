@@ -10,11 +10,23 @@ import (
 )
 
 const (
+	TrackPrefix    = "Track:"
+	CriteriaKey    = "Criteria:"
+	FenceTree      = "tree"
+	TreeLevelWidth = 4
+	TreeMarks      = MarkNew + ", " + MarkChanged + " or " + MarkDeleted
+
+	FormTaskHeading  = "n. Name"
+	FormDoD          = "criterion n or criteria a, b and c"
+	FormDependsOn    = "none, task n or tasks a, b and c"
+	FormSpecCriteria = "a list such as 1, 2 and 3 or 4 to 9"
+	FormCommit       = "n. `type: subject` (task n)"
+	FormPR           = "n. `type/slug` (this run), based on `base`: text"
+)
+
+const (
 	fenceMark      = "```"
 	fenceMermaid   = "mermaid"
-	fenceTree      = "tree"
-	trackPrefix    = "Track:"
-	criteriaKey    = "Criteria:"
 	dependsNone    = "none"
 	wordTo         = "to"
 	cellEscape     = "\x00"
@@ -26,7 +38,6 @@ const (
 )
 
 const (
-	treeLevelWidth = 4
 	treeBar        = "│   "
 	treeBlank      = "    "
 	treeTee        = "├── "
@@ -134,7 +145,7 @@ func (p *parser) content(line string, n int) {
 	}
 	switch p.section {
 	case HeadingGoal:
-		if v, ok := strings.CutPrefix(line, trackPrefix); ok {
+		if v, ok := strings.CutPrefix(line, TrackPrefix); ok {
 			p.doc.Track = strings.ToLower(strings.TrimSpace(v))
 		}
 	case HeadingCriteria:
@@ -218,7 +229,7 @@ func (p *parser) addSignal(c []string, n int) {
 func (p *parser) startTask(text string, n int) {
 	m := taskHeading.FindStringSubmatch(text)
 	if m == nil {
-		p.problem(n, RuleTaskField, "task heading %q must be n. Name", text)
+		p.problem(n, RuleTaskField, "task heading %q must be %s", text, FormTaskHeading)
 		return
 	}
 	number, _ := strconv.Atoi(m[1])
@@ -249,7 +260,7 @@ func (p *parser) taskField(line string, n int) {
 	case FieldDoD:
 		numbers, _, ok := parseNumbers(value, "criterion ", "criteria ")
 		if !ok {
-			p.problem(n, RuleTaskField, "DoD must start with criterion n or criteria a, b and c")
+			p.problem(n, RuleTaskField, "DoD must start with %s", FormDoD)
 		}
 		t.DoD = numbers
 	case FieldDependsOn:
@@ -267,7 +278,7 @@ func (p *parser) dependencies(value string, n int) []int {
 	}
 	numbers, rest, ok := parseNumbers(value, commitTaskNoun...)
 	if !ok || rest != "" {
-		p.problem(n, RuleTaskField, "Depends on must be none, task n or tasks a, b and c")
+		p.problem(n, RuleTaskField, "Depends on must be %s", FormDependsOn)
 	}
 	return numbers
 }
@@ -308,7 +319,7 @@ func parseNumbers(text string, nouns ...string) ([]int, string, bool) {
 }
 
 func (p *parser) specLine(line string, n int) {
-	value, ok := strings.CutPrefix(line, criteriaKey)
+	value, ok := strings.CutPrefix(line, CriteriaKey)
 	if !ok || len(p.doc.Specs) == 0 {
 		return
 	}
@@ -316,7 +327,7 @@ func (p *parser) specLine(line string, n int) {
 	s.HasCriteriaLine = true
 	numbers, rest, ok := parseNumbers(strings.TrimSpace(value), "")
 	if !ok || strings.Trim(rest, ". ") != "" {
-		p.problem(n, RuleSpecCriteria, "Criteria must be a list such as 1, 2 and 3 or 4 to 9")
+		p.problem(n, RuleSpecCriteria, "Criteria must be %s", FormSpecCriteria)
 		return
 	}
 	s.Criteria = numbers
@@ -328,7 +339,7 @@ func (p *parser) commit(line string, n int) {
 	}
 	m := commitLine.FindStringSubmatch(line)
 	if m == nil {
-		p.problem(n, RuleCommitFormat, "commit must be n. `type: subject` (task n)")
+		p.problem(n, RuleCommitFormat, "commit must be %s", FormCommit)
 		return
 	}
 	tasks, rest, ok := parseNumbers(m[3], commitTaskNoun...)
@@ -346,7 +357,7 @@ func (p *parser) pr(line string, n int) {
 	}
 	m := prLine.FindStringSubmatch(line)
 	if m == nil {
-		p.problem(n, RulePRSequence, "PR line must be n. `type/slug` (this run), based on `base`: text")
+		p.problem(n, RulePRSequence, "PR line must be %s", FormPR)
 		return
 	}
 	number, _ := strconv.Atoi(m[1])
@@ -359,7 +370,7 @@ func (p *parser) closeFence() {
 	switch f.info {
 	case fenceMermaid:
 		p.doc.Diagrams = append(p.doc.Diagrams, newDiagram(f))
-	case fenceTree:
+	case FenceTree:
 		switch p.sub {
 		case HeadingCodeTree:
 			p.doc.CodeTree = p.tree(f)
@@ -397,14 +408,14 @@ func withoutFrontMatter(body []string) []string {
 
 func splitTreeLine(line string) (depth int, rest string, ok bool) {
 	r := []rune(line)
-	for len(r) >= treeLevelWidth {
-		switch string(r[:treeLevelWidth]) {
+	for len(r) >= TreeLevelWidth {
+		switch string(r[:TreeLevelWidth]) {
 		case treeBar, treeBlank:
 			depth++
-			r = r[treeLevelWidth:]
+			r = r[TreeLevelWidth:]
 			continue
 		case treeTee, treeLast:
-			return depth + 1, string(r[treeLevelWidth:]), true
+			return depth + 1, string(r[TreeLevelWidth:]), true
 		}
 		break
 	}
@@ -429,7 +440,7 @@ func (p *parser) tree(f *fence) Tree {
 		}
 		depth, rest, ok := splitTreeLine(line)
 		if !ok {
-			p.problem(n, RuleTreeFormat, "indent must be 4 characters for each level")
+			p.problem(n, RuleTreeFormat, "indent must be %d characters for each level", TreeLevelWidth)
 			continue
 		}
 		fields := strings.Fields(rest)
@@ -455,7 +466,7 @@ func (p *parser) tree(f *fence) Tree {
 		case isDir && len(fields) > 1:
 			p.problem(n, RuleTreeFormat, "folder %q takes no mark", name)
 		case !isDir && (len(fields) != 2 || !validMark(fields[1])):
-			p.problem(n, RuleTreeFormat, "file %q needs a mark: new, changed or deleted", name)
+			p.problem(n, RuleTreeFormat, "file %q needs a mark: %s", name, TreeMarks)
 			continue
 		case !isDir:
 			mark = fields[1]

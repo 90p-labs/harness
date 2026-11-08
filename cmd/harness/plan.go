@@ -36,13 +36,15 @@ func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
 	return cmd
 }
 
+const diagramHint = "hint: harness diagram --help"
+
 func newDiagramCommand() *cobra.Command {
 	cmd := plancli.NewDiagramCommand(planmodule.NewDiagram())
 	runDiagram := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		err := runDiagram(cmd, args)
 		if errors.Is(err, shareddomain.ErrDiagramRefused) {
-			return usageError{err}
+			return refusalError{error: err, hint: diagramHint}
 		}
 		return err
 	}

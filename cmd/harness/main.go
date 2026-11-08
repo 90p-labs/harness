@@ -34,6 +34,15 @@ type usageError struct{ error }
 
 func (e usageError) Unwrap() error { return e.error }
 
+type refusalError struct {
+	error
+	hint string
+}
+
+func (e refusalError) Error() string { return e.error.Error() + "\n" + e.hint }
+
+func (e refusalError) Unwrap() error { return e.error }
+
 func usageArgs(check cobra.PositionalArgs) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := check(cmd, args); err != nil {
@@ -66,11 +75,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	root.SetErr(stderr)
 	if failed, err := root.ExecuteContextC(ctx); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
-		if !errors.As(err, new(usageError)) {
-			return exitRuntime
+		switch {
+		case errors.As(err, new(refusalError)):
+			return exitUsage
+		case errors.As(err, new(usageError)):
+			fmt.Fprint(stderr, failed.UsageString())
+			return exitUsage
 		}
-		fmt.Fprint(stderr, failed.UsageString())
-		return exitUsage
+		return exitRuntime
 	}
 	return exitOK
 }

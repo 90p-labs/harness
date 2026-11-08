@@ -22,6 +22,8 @@ const (
 	brokenPlan = "# Plan\n"
 	flagFile   = "--file"
 	subCommand = "check"
+
+	maxHelpLines = 45
 )
 
 var errDefault = errors.New("no default plan")
@@ -46,6 +48,35 @@ func execute(t *testing.T, connect cli.Connect, args ...string) (string, error) 
 	cmd.SetArgs(args)
 	err := cmd.ExecuteContext(t.Context())
 	return out.String(), err
+}
+
+func TestPlanHelp(t *testing.T) {
+	var closed bool
+
+	out, err := execute(t, connect(nil, &closed), "--help")
+
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	var want []string
+	for _, list := range [][]string{
+		domain.TopHeadings, domain.FinalHeadings, domain.TaskFields, domain.TaskSides, domain.CriteriaHeader, domain.SignalsHeader, domain.SignalFolders,
+		{
+			domain.MarkNew, domain.MarkChanged, domain.MarkDeleted, domain.TrackPrefix, domain.CriteriaKey, domain.FenceTree, domain.ContractNames,
+			domain.FormTaskHeading, domain.FormDoD, domain.FormDependsOn, domain.FormSpecCriteria, domain.FormCommit, domain.FormPR,
+			domain.DiagramER, domain.DiagramSequence, domain.DiagramState, domain.DiagramClass, domain.SketchExt, "harness diagram --help",
+		},
+	} {
+		want = append(want, list...)
+	}
+	for _, w := range want {
+		if !strings.Contains(out, w) {
+			t.Errorf("help does not hold %q", w)
+		}
+	}
+	if lines := strings.Count(out, "\n"); lines >= maxHelpLines {
+		t.Errorf("help has %d lines, want fewer than %d", lines, maxHelpLines)
+	}
 }
 
 func TestPlanCheckCommand(t *testing.T) {
