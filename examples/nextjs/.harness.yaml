@@ -19,7 +19,9 @@ gates:
   - id: lint
     run: harness lint --json
     baseline: .harness-baseline/lint.json
+  - id: lint-canaries
+    run: harness lint canaries
   - id: node-build
     run: docker compose run --rm -T node pnpm run build
     paths: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.mts", "**/*.cts", "**/*.json", "**/*.css", "public/**", .npmrc, pnpm-lock.yaml, pnpm-workspace.yaml, compose.yaml, Dockerfile]
-    needs: [node-typecheck, node-lint, lint]
+    needs: [node-typecheck, node-lint, lint, lint-canaries]

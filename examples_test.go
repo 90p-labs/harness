@@ -49,7 +49,7 @@ type example struct {
 var examples = []example{
 	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}, canaries: true, waived: []string{lintdomain.RuleFileSuffix}},
 	{name: "go", lockfile: "go.sum", setup: "go-mod", canaries: true, waived: []string{lintdomain.RuleFileSuffix}},
-	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install"},
+	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install", canaries: true},
 	{name: "python", lockfile: "uv.lock", setup: "py-install", canaries: true},
 }
 
