@@ -188,3 +188,27 @@ func TestTopLevelOtherGitError(t *testing.T) {
 		t.Fatalf("bare repo: %v, want the git error", err)
 	}
 }
+
+func TestHead(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+
+	if _, err := git.Head(ctx, root); !errors.Is(err, git.ErrNoHead) {
+		t.Fatalf("Head without a commit: %v, want ErrNoHead", err)
+	}
+
+	if out, err := exec.Command("git", "-C", root, "commit", "-q", "--allow-empty", "-m", "first").CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v: %s", err, out)
+	}
+	want, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := git.Head(ctx, root)
+	if err != nil || got != strings.TrimSpace(string(want)) {
+		t.Fatalf("Head = %q, %v, want %q", got, err, want)
+	}
+}
