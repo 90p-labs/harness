@@ -103,11 +103,11 @@ func TestParsePlan(t *testing.T) {
 	if len(doc.Signals) != 1 {
 		t.Fatalf("signals = %+v", doc.Signals)
 	}
-	wantSignal := domain.SignalRow{Criterion: 2, Metric: "`ping.query` span count", Panel: "ping calls", Alert: "none", Threshold: "none", Window: "24h", Line: 43}
+	wantSignal := domain.SignalRow{Criterion: 2, Signal: "ping calls", Source: "prometheus", Query: "ping:calls:rate5m", Breach: "> 100", Window: "24h", Panel: "ping calls", Line: 43}
 	if doc.Signals[0] != wantSignal {
 		t.Errorf("signal = %+v", doc.Signals[0])
 	}
-	if doc.SignalsTable.Line != 41 || len(doc.SignalsTable.Header) != 6 {
+	if doc.SignalsTable.Line != 41 || len(doc.SignalsTable.Header) != 7 {
 		t.Errorf("signals table = %+v", doc.SignalsTable)
 	}
 
@@ -164,7 +164,7 @@ func TestParseProblems(t *testing.T) {
 		{"task heading", "### 2. Ping query", "### Ping query", 31, domain.RuleTaskField, "n. Name"},
 		{"dod form", "- DoD: criteria 2 to 3.", "- DoD: the second criterion.", 36, domain.RuleTaskField, "DoD"},
 		{"depends form", "- Depends on: task 1", "- Depends on: after one", 37, domain.RuleTaskField, "Depends on"},
-		{"signal cells", "| none | none | `24h` |", "| none | `24h` |", 43, domain.RuleSignalsTable, "cells"},
+		{"signal cells", "| `> 100` | `24h` | ping calls |", "| `24h` | ping calls |", 43, domain.RuleSignalsTable, "cells"},
 		{"spec criteria", "Criteria: 2 and 3", "Criteria: all of them", 73, domain.RuleSpecCriteria, "Criteria"},
 		{"tree indent", "        │   └── pong.go ", "      │   └── pong.go ", 91, domain.RuleTreeFormat, "indent"},
 		{"tree mark", "pong.go                    new", "pong.go", 91, domain.RuleTreeFormat, "mark"},

@@ -56,6 +56,39 @@ func byRule(problems []domain.Problem, rule domain.RuleID) []domain.Problem {
 	return out
 }
 
+const (
+	signalsHeaderLines = "| Criterion | Signal | Source | Query | Breach | Window | Panel |\n|---|---|---|---|---|---|---|\n"
+	signalsRow         = "| 2 | ping calls | prometheus | `ping:calls:rate5m` | `> 100` | `24h` | ping calls |\n"
+)
+
+func TestCheckSignalsTable(t *testing.T) {
+	valid := readValid(t)
+	tests := []struct {
+		name  string
+		edits []edit
+		want  []string
+	}{
+		{"valid row", nil, nil},
+		{"bad breach operator", []edit{{"`> 100`", "`= 100`"}}, []string{"plan.md:43: signals-table:"}},
+		{"breach not a number", []edit{{"`> 100`", "`> many`"}}, []string{"plan.md:43: signals-table:"}},
+		{"bad window", []edit{{"`24h`", "`soon`"}}, []string{"plan.md:43: signals-table:"}},
+		{"bad breach and bad window", []edit{{"`> 100`", "`100`"}, {"`24h`", "`soon`"}}, []string{"plan.md:43: signals-table:", "plan.md:43: signals-table:"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := byRule(checkText(mutate(t, valid, tc.edits...), domain.CheckInput{Diagrams: &fakeDiagrams{}}), domain.RuleSignalsTable)
+			if len(got) != len(tc.want) {
+				t.Fatalf("problems = %v, want prefixes %q", got, tc.want)
+			}
+			for i, prefix := range tc.want {
+				if !strings.HasPrefix(got[i].String(), prefix) {
+					t.Errorf("problem %d = %q, want prefix %q", i, got[i], prefix)
+				}
+			}
+		})
+	}
+}
+
 func TestCheckRules(t *testing.T) {
 	valid := readValid(t)
 	if got := checkText(valid, domain.CheckInput{Diagrams: &fakeDiagrams{}}); len(got) != 0 {
@@ -95,14 +128,13 @@ func TestCheckRules(t *testing.T) {
 		{"sentence too long", []edit{{"The domain holds the word that the query returns.", longSentence}}, []string{"plan.md:57: sentence-length:"}},
 		{"em dash", []edit{{"The domain holds", "The domain " + string(rune(0x2014)) + " holds"}}, []string{"plan.md:57: em-dash:"}},
 		{"signals missing", []edit{{"## Signals\n", ""}}, []string{"plan.md:83: signals-missing:"}},
-		{"signals header", []edit{{"| Threshold | Window |", "| Threshold | Time |"}}, []string{"plan.md:41: signals-table:"}},
-		{"signals window", []edit{{"`24h`", "`soon`"}}, []string{"plan.md:43: signals-table:"}},
+		{"signals header", []edit{{"| Breach | Window |", "| Breach | Time |"}}, []string{"plan.md:41: signals-table:"}},
 		{"diagram does not parse", []edit{{"Handler --> Pong", "Handler BAD Pong"}}, []string{"plan.md:59: diagram:"}},
 		{"diagram unmarked", []edit{{"Ready --> Answered : ping (new)", "Ready --> Answered : ping"}}, []string{"plan.md:77: diagram:"}},
 		{"spec names unknown criterion", []edit{{"Criteria: 1\n", "Criteria: 1 and 9\n"}}, []string{"plan.md:52: spec-criteria:"}},
 		{"criterion no spec", []edit{{"Criteria: 2 and 3", "Criteria: 2"}}, []string{"plan.md:19: trace-unlinked:"}},
-		{"signals without a table", []edit{{"| Criterion | Metric | Panel | Alert | Threshold | Window |\n|---|---|---|---|---|---|\n| 2 | `ping.query` span count | ping calls | none | none | `24h` |\n", ""}}, []string{"plan.md:39: signals-table:"}},
-		{"signals table without a row", []edit{{"| 2 | `ping.query` span count | ping calls | none | none | `24h` |\n", ""}}, []string{"plan.md:39: signals-table:"}},
+		{"signals without a table", []edit{{signalsHeaderLines + signalsRow, ""}}, []string{"plan.md:39: signals-table:"}},
+		{"signals table without a row", []edit{{signalsRow, ""}}, []string{"plan.md:39: signals-table:"}},
 		{"duplicate task number", []edit{{"### 2. Ping query", "### 1. Ping query"}, {"(task 2)", "(task 1)"}, {"(tasks 1 and 2)", "(task 1)"}}, []string{"plan.md:31: task-field:"}},
 		{"proof with a dotted package path", []edit{{"`make check`", "`go test ./... -count=1`"}}, nil},
 		{"proof with redirections", []edit{{"`make check`", "`sort < in.txt > out.txt`"}}, nil},
