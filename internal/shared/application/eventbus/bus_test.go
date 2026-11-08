@@ -14,8 +14,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/plugin/application/eventbus"
-	"github.com/jorge07/harness/internal/plugin/domain"
+	"github.com/jorge07/harness/internal/shared/application/eventbus"
+	"github.com/jorge07/harness/internal/shared/domain"
 )
 
 type fakePlugin struct {
@@ -38,7 +38,7 @@ type fixture struct {
 	spans    *tracetest.SpanRecorder
 	reader   *sdkmetric.ManualReader
 	newBus   func(plugins ...domain.Plugin) eventbus.Bus
-	dispatch func(bus eventbus.Bus, event domain.EventName) (eventbus.Result, error)
+	dispatch func(bus eventbus.Bus, event domain.EventName) (domain.DispatchResult, error)
 }
 
 func newFixture() *fixture {
@@ -51,7 +51,7 @@ func newFixture() *fixture {
 	f.newBus = func(plugins ...domain.Plugin) eventbus.Bus {
 		return eventbus.NewBus(plugins, tracerProvider, meterProvider)
 	}
-	f.dispatch = func(bus eventbus.Bus, event domain.EventName) (eventbus.Result, error) {
+	f.dispatch = func(bus eventbus.Bus, event domain.EventName) (domain.DispatchResult, error) {
 		return bus.Dispatch(context.Background(), domain.Envelope{Version: domain.EnvelopeVersion, Event: event})
 	}
 	return f

@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jorge07/harness/internal/plugin/domain"
-	"github.com/jorge07/harness/internal/plugin/infrastructure/execplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
 )
 
 const (
@@ -94,12 +94,13 @@ func newPlugin(t *testing.T, mode string, timeout time.Duration) execplugin.Exec
 	}
 }
 
-func testEnvelope() domain.Envelope {
+func testEnvelope(t *testing.T) domain.Envelope {
+	t.Helper()
 	return domain.Envelope{
 		Version: domain.EnvelopeVersion,
 		Event:   domain.EventToolBefore,
-		Host:    shareddomain.HostClaude,
-		Cwd:     "/repo",
+		Host:    domain.HostClaude,
+		Cwd:     t.TempDir(),
 		Run:     domain.RunRef{ID: "r1", Phase: "working"},
 		Payload: json.RawMessage(`{}`),
 	}
@@ -112,7 +113,7 @@ func TestExecPluginVerdict(t *testing.T) {
 		t.Fatalf("identity: %q %v", plugin.Name(), plugin.Subscribes())
 	}
 
-	got, err := plugin.Handle(context.Background(), testEnvelope())
+	got, err := plugin.Handle(context.Background(), testEnvelope(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestExecPluginVerdict(t *testing.T) {
 func TestExecPluginEmptyStdoutAllows(t *testing.T) {
 	plugin := newPlugin(t, modeEmpty, callTimeout)
 
-	got, err := plugin.Handle(context.Background(), testEnvelope())
+	got, err := plugin.Handle(context.Background(), testEnvelope(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestExecPluginFailure(t *testing.T) {
 			plugin := newPlugin(t, tc.mode, tc.timeout)
 
 			start := time.Now()
-			_, err := plugin.Handle(context.Background(), testEnvelope())
+			_, err := plugin.Handle(context.Background(), testEnvelope(t))
 			elapsed := time.Since(start)
 
 			if !errors.Is(err, domain.ErrPluginFailed) {
@@ -174,7 +175,7 @@ func TestExecPluginFailure(t *testing.T) {
 func TestExecPluginDetachedChildKeepsVerdict(t *testing.T) {
 	plugin := newPlugin(t, modeDetached, callTimeout)
 
-	got, err := plugin.Handle(context.Background(), testEnvelope())
+	got, err := plugin.Handle(context.Background(), testEnvelope(t))
 
 	if err != nil {
 		t.Fatalf("handle: %v", err)
@@ -184,8 +185,25 @@ func TestExecPluginDetachedChildKeepsVerdict(t *testing.T) {
 	}
 }
 
+func TestExecPluginRelativeCommandRunsInEnvelopeCwd(t *testing.T) {
+	worktree := t.TempDir()
+	script := "#!/bin/sh\necho '{\"verdict\":\"deny\",\"reason\":\"from the worktree\"}'\n"
+	if err := os.WriteFile(filepath.Join(worktree, "gate.sh"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	envelope := testEnvelope(t)
+	envelope.Cwd = worktree
+	plugin := execplugin.ExecPlugin{PluginName: "gate", Command: []string{"./gate.sh"}, Timeout: callTimeout}
+
+	got, err := plugin.Handle(context.Background(), envelope)
+
+	if err != nil || got != (domain.Verdict{Kind: domain.VerdictDeny, Reason: "from the worktree"}) {
+		t.Fatalf("got %+v, %v, want the deny of the worktree script", got, err)
+	}
+}
+
 func TestExecPluginEmptyCommandFails(t *testing.T) {
-	_, err := execplugin.ExecPlugin{PluginName: "empty"}.Handle(context.Background(), testEnvelope())
+	_, err := execplugin.ExecPlugin{PluginName: "empty"}.Handle(context.Background(), testEnvelope(t))
 
 	if !errors.Is(err, domain.ErrPluginFailed) {
 		t.Fatalf("err = %v, want ErrPluginFailed", err)
@@ -202,7 +220,7 @@ func TestExecPluginTraceparent(t *testing.T) {
 		TraceFlags: trace.FlagsSampled,
 	}))
 
-	got, err := plugin.Handle(ctx, testEnvelope())
+	got, err := plugin.Handle(ctx, testEnvelope(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
