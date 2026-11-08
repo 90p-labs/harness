@@ -208,7 +208,7 @@ func (h Handler) judgeBaseline(dir string, gate domain.Gate, outcome domain.Outc
 		outcome.Tail += fmt.Sprintf(reportErrorFormat, err)
 		return outcome, nil
 	}
-	var known []domain.Finding
+	var known []shareddomain.Finding
 	raw, err := h.readFile(filepath.Join(dir, gate.Baseline))
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -227,12 +227,12 @@ func (h Handler) judgeBaseline(dir string, gate domain.Gate, outcome domain.Outc
 	return outcome, nil
 }
 
-func parseReport(raw []byte) ([]domain.Finding, error) {
-	var report domain.Report
+func parseReport(raw []byte) ([]shareddomain.Finding, error) {
+	var report shareddomain.Report
 	if err := json.Unmarshal(raw, &report); err != nil {
 		return nil, err
 	}
-	if report.Version != domain.ReportVersion {
+	if report.Version != shareddomain.ReportVersion {
 		return nil, fmt.Errorf("%w: %d", errUnknownReportVersion, report.Version)
 	}
 	return report.Findings, nil
