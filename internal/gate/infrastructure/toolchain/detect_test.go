@@ -145,31 +145,19 @@ func TestDetectLintGates(t *testing.T) {
 		lint toolchain.Lint
 		want []domain.Gate
 	}{
-		"no pack": {lint: toolchain.Lint{Chart: "deploy/chart", Baseline: baseline}},
+		"no pack": {lint: toolchain.Lint{Baseline: baseline}},
 		"packs": {
-			lint: toolchain.Lint{Packs: []string{"ddd", "nextjs"}, Chart: "deploy/chart", Rules: "deploy/**/*.rules.yaml", Baseline: baseline},
+			lint: toolchain.Lint{Packs: []string{"ddd", "nextjs"}, Baseline: baseline},
 			want: []domain.Gate{lintGate()},
 		},
-		"observability": {
-			lint: toolchain.Lint{Packs: []string{"ddd", "observability"}, Chart: "deploy/chart", Rules: "deploy/**/*.rules.yaml", Baseline: baseline},
-			want: []domain.Gate{
-				lintGate(),
-				gate(t, "helm-render", "helm template deploy/chart > /dev/null", nil),
-				gate(t, "promtool-test", "find deploy -name '*.rules.test.yaml' -exec promtool test rules {} +", nil),
-			},
-		},
-		"observability rules at the root": {
-			lint: toolchain.Lint{Packs: []string{"observability"}, Chart: "chart", Rules: "**/*.rules.yaml", Baseline: baseline},
-			want: []domain.Gate{
-				lintGate(),
-				gate(t, "helm-render", "helm template chart > /dev/null", nil),
-				gate(t, "promtool-test", "find . -name '*.rules.test.yaml' -exec promtool test rules {} +", nil),
-			},
+		"observability leaves the deploy gates to the deploy plugins": {
+			lint: toolchain.Lint{Packs: []string{"ddd", "observability"}, Baseline: baseline},
+			want: []domain.Gate{lintGate()},
 		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := toolchain.Detect(repo(t, nil), tt.lint)
+			got, err := toolchain.Detect(repo(t, map[string]string{"Chart.yaml": "", "api.rules.test.yaml": ""}), tt.lint)
 			if err != nil {
 				t.Fatalf("detect: %v", err)
 			}

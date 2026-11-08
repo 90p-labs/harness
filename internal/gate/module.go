@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"context"
 	"os"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/jorge07/harness/internal/gate/infrastructure/toolchain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	"github.com/jorge07/harness/internal/shared/infrastructure/git"
 )
 
 const instrumentationName = "github.com/jorge07/harness/internal/gate"
@@ -43,8 +45,9 @@ func NewCommitChecks(db *dbal.DB) domain.CommitCheckRepository {
 	return persistence.NewSQLCommitCheckRepository(db)
 }
 
-func NewInit(lint toolchain.Lint) initgates.Handler {
+func NewInit(lint toolchain.Lint, bus shareddomain.Dispatcher) initgates.Handler {
 	writer := gateconfig.Writer{}
 	detect := func(dir string) ([]domain.Gate, error) { return toolchain.Detect(dir, lint) }
-	return initgates.NewHandler(detect, writer.HasGates, writer.WriteGates)
+	files := func(ctx context.Context, dir string) ([]string, error) { return git.Files(ctx, dir) }
+	return initgates.NewHandler(detect, files, bus, writer.HasGates, writer.WriteGates)
 }

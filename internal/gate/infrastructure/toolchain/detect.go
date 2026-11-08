@@ -1,16 +1,12 @@
 package toolchain
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"slices"
-	"strings"
 
 	"github.com/jorge07/harness/internal/gate/domain"
 )
@@ -37,16 +33,8 @@ const (
 	runPnpmBiome  = "pnpm exec biome ci ."
 	runNpxBiome   = "npx biome ci ."
 
-	idLint         = "lint"
-	idHelmRender   = "helm-render"
-	idPromtoolTest = "promtool-test"
-
-	runLint         = "harness lint --json"
-	runHelmRender   = "helm template %s > /dev/null"
-	runPromtoolTest = "find %s -name '*.rules.test.yaml' -exec promtool test rules {} +"
-
-	packObservability = "observability"
-	currentDir        = "."
+	idLint  = "lint"
+	runLint = "harness lint --json"
 )
 
 var (
@@ -56,8 +44,6 @@ var (
 
 type Lint struct {
 	Packs    []string
-	Chart    string
-	Rules    string
 	Baseline string
 }
 
@@ -69,26 +55,7 @@ func (l Lint) gates() ([]domain.Gate, error) {
 	if err != nil {
 		return nil, err
 	}
-	gates := []domain.Gate{lint}
-	if !slices.Contains(l.Packs, packObservability) {
-		return gates, nil
-	}
-	observability, err := newGates(
-		gateSpec{idHelmRender, fmt.Sprintf(runHelmRender, l.Chart), nil},
-		gateSpec{idPromtoolTest, fmt.Sprintf(runPromtoolTest, literalDir(l.Rules)), nil},
-	)
-	return append(gates, observability...), err
-}
-
-func literalDir(glob string) string {
-	var dir []string
-	for _, segment := range strings.Split(glob, "/") {
-		if strings.Contains(segment, "*") {
-			break
-		}
-		dir = append(dir, segment)
-	}
-	return cmp.Or(path.Join(dir...), currentDir)
+	return []domain.Gate{lint}, nil
 }
 
 func Detect(dir string, lint Lint) ([]domain.Gate, error) {
@@ -127,11 +94,7 @@ func Detect(dir string, lint Lint) ([]domain.Gate, error) {
 	if err != nil {
 		return nil, err
 	}
-	gates = append(gates, lintGates...)
-	if err := domain.ValidateGates(gates); err != nil {
-		return nil, err
-	}
-	return gates, nil
+	return append(gates, lintGates...), nil
 }
 
 type gateSpec struct {
