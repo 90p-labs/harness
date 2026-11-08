@@ -98,6 +98,7 @@ func TestCheckRules(t *testing.T) {
 		{"signals header", []edit{{"| Threshold | Window |", "| Threshold | Time |"}}, []string{"plan.md:41: signals-table:"}},
 		{"signals window", []edit{{"`24h`", "`soon`"}}, []string{"plan.md:43: signals-table:"}},
 		{"diagram does not parse", []edit{{"Handler --> Pong", "Handler BAD Pong"}}, []string{"plan.md:59: diagram:"}},
+		{"diagram unmarked", []edit{{"Ready --> Answered : ping (new)", "Ready --> Answered : ping"}}, []string{"plan.md:77: diagram:"}},
 		{"spec names unknown criterion", []edit{{"Criteria: 1\n", "Criteria: 1 and 9\n"}}, []string{"plan.md:52: spec-criteria:"}},
 		{"criterion no spec", []edit{{"Criteria: 2 and 3", "Criteria: 2"}}, []string{"plan.md:19: trace-unlinked:"}},
 		{"signals without a table", []edit{{"| Criterion | Metric | Panel | Alert | Threshold | Window |\n|---|---|---|---|---|---|\n| 2 | `ping.query` span count | ping calls | none | none | `24h` |\n", ""}}, []string{"plan.md:39: signals-table:"}},
@@ -147,6 +148,28 @@ func TestDiagramRule(t *testing.T) {
 	if got := checkText(bad, domain.CheckInput{}); len(got) != 0 {
 		t.Errorf("nil parser has problems: %v", got)
 	}
+
+	unmarked := mutate(t, valid, edit{"    Ready --> Answered : ping (new)\n", "    Ready --> Answered : ping\n"})
+	restyled := mutate(t, valid, edit{"classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e", "classDef new stroke:#000"})
+	flowchart := "# Plan\n\n```mermaid\nflowchart TD\n    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n    a --> b\n    class a new\n    cssClass \"b\" new\n```\n"
+
+	t.Run("an unmarked diagram is refused with no parser", func(t *testing.T) {
+		got := byRule(checkText(unmarked, domain.CheckInput{}), domain.RuleDiagram)
+		if len(got) != 1 || got[0].Line != 77 || !strings.Contains(got[0].Message, "no mark") {
+			t.Errorf("problems = %v, want one no mark problem at line 77", got)
+		}
+	})
+	t.Run("a restyled mark is refused", func(t *testing.T) {
+		got := byRule(checkText(restyled, domain.CheckInput{Diagrams: &fakeDiagrams{}}), domain.RuleDiagram)
+		if len(got) != 1 || got[0].Line != 59 || !strings.Contains(got[0].Message, "another style") {
+			t.Errorf("problems = %v, want one another style problem at line 59", got)
+		}
+	})
+	t.Run("a flowchart with class and cssClass lines stays clean", func(t *testing.T) {
+		if got := byRule(checkText(flowchart, domain.CheckInput{Diagrams: &fakeDiagrams{}}), domain.RuleDiagram); len(got) != 0 {
+			t.Errorf("problems = %v, want none", got)
+		}
+	})
 }
 
 func TestSignalsRequired(t *testing.T) {

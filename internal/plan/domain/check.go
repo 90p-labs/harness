@@ -285,11 +285,11 @@ func checkRegression(doc Document, in CheckInput, add report) {
 }
 
 func checkDiagrams(doc Document, in CheckInput, add report) {
-	if in.Diagrams == nil {
-		return
-	}
 	for _, d := range doc.Diagrams {
-		if !d.Checked() {
+		for _, problem := range shareddomain.CheckMarks(d.Body) {
+			add(d.Line, RuleDiagram, "%s", problem)
+		}
+		if in.Diagrams == nil || !d.Checked() {
 			continue
 		}
 		if err := in.Diagrams.Parse(d.Kind, d.Body); err != nil {
