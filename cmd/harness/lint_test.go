@@ -86,9 +86,18 @@ rules:
 		"lint/canaries/ddd-layer-direction/src/Order/Application/PlaceOrder.php": "<?php\n// a canary that the engine misses\n",
 	})
 
+	code, _, stderr = execute(t, commandLint, commandCanaries)
+	if code != exitRuntime || !strings.Contains(stderr, lintdomain.ErrStaleLintFiles.Error()) {
+		t.Fatalf("no lint init: code = %d, stderr = %q, want exit %d and the stale lint files error", code, stderr, exitRuntime)
+	}
+	if code, _, stderr := execute(t, commandLint, commandInit); code != exitOK {
+		t.Fatalf("lint init: code = %d, stderr = %q", code, stderr)
+	}
+
 	code, stdout, stderr := execute(t, commandLint, commandCanaries)
 
-	want := "PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n" +
+	want := "FAIL ddd/src-roots: not in lint/rules.yaml\n" +
+		"PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n" +
 		"FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine canary-lint gave no ddd/layer-direction finding\n" +
 		"FAIL ddd/cross-context: not in lint/rules.yaml\n" +
 		"WAIVED ddd/file-suffix: the tool checks dependencies, not file names.\n"
@@ -97,11 +106,12 @@ rules:
 	}
 
 	writeRepoFile(t, dir, "lint/canaries/ddd-layer-direction/src/Order/Application/PlaceOrder.php", "<?php\n// violates: ddd/layer-direction\n")
-	writeRepoFile(t, dir, lintdomain.ManifestFile, canaryManifest+"  - id: ddd/cross-context\n    waived: the tool cannot see the contexts.\n")
+	writeRepoFile(t, dir, lintdomain.ManifestFile, canaryManifest+"  - id: ddd/cross-context\n    waived: the tool cannot see the contexts.\n  - id: ddd/src-roots\n    waived: the test pack places no file.\n")
 
 	code, stdout, stderr = execute(t, commandLint, commandCanaries)
 
-	want = "PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n" +
+	want = "WAIVED ddd/src-roots: the test pack places no file.\n" +
+		"PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n" +
 		"PASS ddd/layer-direction lint/canaries/ddd-layer-direction\n" +
 		"WAIVED ddd/cross-context: the tool cannot see the contexts.\n" +
 		"WAIVED ddd/file-suffix: the tool checks dependencies, not file names.\n"

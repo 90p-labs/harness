@@ -236,3 +236,12 @@ func TestCanariesCommand(t *testing.T) {
 		}
 	})
 }
+
+func TestBuiltInNoCanaryLine(t *testing.T) {
+	out, err := run(t, canariesOf(nil, nil), subCanaries)
+
+	want := "lint canaries: only built-in rules are active, so there is no canary to run\n"
+	if err != nil || out != want {
+		t.Fatalf("out = %q, err = %v, want %q", out, err, want)
+	}
+}

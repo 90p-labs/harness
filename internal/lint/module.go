@@ -66,7 +66,7 @@ func New(cfg config.Lint, plugins []config.Plugin, worktree, version string, ren
 	linter := lintcommand.NewHandler(active, catalogue.Get, engines, version, otel.Tracer(instrumentationName), otel.Meter(instrumentationName))
 	return Handlers{
 		Lint:     linter,
-		Canaries: canaries.NewHandler(ruleCatalogue, manifest.Read, rules, engines),
+		Canaries: canaries.NewHandler(ruleCatalogue, manifest.Read, rules, engines, linter.CheckVersion),
 		Init:     initlint.NewHandler(active, catalogue.Get, engines, version),
 		Baseline: baseline.NewHandler(func(ctx context.Context, dir string) (shareddomain.Report, error) {
 			return linter.Handle(ctx, lintcommand.Command{Dir: dir})

@@ -1,6 +1,8 @@
 packs:
   - name: ddd
     rules:
+      - id: ddd/src-roots
+        description: Every source file and every dependency belongs to a known context or layer. The tool reports a file or a dependency that it cannot place, and never drops it.
       - id: ddd/domain-purity
         description: The domain layer depends only on itself, the shared domain and the allowed libraries, never on the application or infrastructure layer or a framework.
       - id: ddd/layer-direction

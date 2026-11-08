@@ -8,3 +8,5 @@ rules:
     waived: deptrac needs one layer for each bounded context, and the project has one context. Add the layers and a canary with the second context.
   - id: ddd/file-suffix
     waived: deptrac checks the dependencies, not the file names.
+  - id: ddd/src-roots
+    waived: the example run adds the src-roots canary next.

@@ -67,7 +67,7 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (report shareddomain.R
 	if len(h.packs) == 0 {
 		return report, nil
 	}
-	if err := h.checkVersion(cmd.Dir); err != nil {
+	if err := h.CheckVersion(cmd.Dir); err != nil {
 		return shareddomain.Report{}, err
 	}
 	rules, err := domain.RulesByEngine(h.packs, h.lookup)
@@ -90,7 +90,7 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (report shareddomain.R
 	return report, nil
 }
 
-func (h Handler) checkVersion(dir string) error {
+func (h Handler) CheckVersion(dir string) error {
 	raw, err := os.ReadFile(filepath.Join(dir, domain.LintDir, domain.VersionFile))
 	have := strings.TrimSpace(string(raw))
 	if errors.Is(err, fs.ErrNotExist) || (err == nil && have != h.version) {

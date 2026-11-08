@@ -30,9 +30,13 @@ func catalogue() domain.RuleCatalogue {
 	}}}
 }
 
+func reason(text string) *string {
+	return &text
+}
+
 func TestManifestResults(t *testing.T) {
 	manifest := domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
-		{ID: suffix, Waived: suffixWaiver},
+		{ID: suffix, Waived: reason(suffixWaiver)},
 		{ID: purity, Canary: purityCanary},
 	}}
 
@@ -60,11 +64,15 @@ func TestManifestConfigErrors(t *testing.T) {
 	}{
 		{name: "an unknown pack", manifest: domain.Manifest{Pack: "hexagonal"}, want: domain.ErrUnknownPack, names: "hexagonal"},
 		{name: "an unknown id", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: "ddd/typo", Canary: purityCanary}}}, want: domain.ErrUnknownRule, names: "ddd/typo"},
-		{name: "a duplicate id", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: purityCanary}, {ID: purity, Waived: suffixWaiver}}}, want: domain.ErrDuplicateRule, names: purity},
-		{name: "both canary and waived", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: purityCanary, Waived: suffixWaiver}}}, want: domain.ErrCanaryOrWaiver, names: purity},
+		{name: "a duplicate id", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: purityCanary}, {ID: purity, Waived: reason(suffixWaiver)}}}, want: domain.ErrDuplicateRule, names: purity},
+		{name: "both canary and waived", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: purityCanary, Waived: reason(suffixWaiver)}}}, want: domain.ErrCanaryOrWaiver, names: purity},
 		{name: "neither canary nor waived", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity}}}, want: domain.ErrCanaryOrWaiver, names: purity},
 		{name: "a parent path", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: "../canaries/x"}}}, want: domain.ErrCanaryOutsideRepo, names: purity},
 		{name: "an absolute path", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: "/tmp/x"}}}, want: domain.ErrCanaryOutsideRepo, names: purity},
+		{name: "no pack key", manifest: domain.Manifest{}, want: domain.ErrNoPackKey, names: "pack"},
+		{name: "an empty waiver", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: purityCanary}, {ID: suffix, Waived: reason("")}}}, want: domain.ErrShortWaiver, names: suffix},
+		{name: "a one-word waiver", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: purityCanary}, {ID: suffix, Waived: reason("a")}}}, want: domain.ErrShortWaiver, names: suffix},
+		{name: "every rule waived", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Waived: reason(suffixWaiver)}, {ID: suffix, Waived: reason(suffixWaiver)}}}, want: domain.ErrAllWaived, names: domain.ManifestFile},
 		{name: "the repo root", manifest: domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{{ID: purity, Canary: "lint/.."}}}, want: domain.ErrCanaryOutsideRepo, names: purity},
 	}
 	for _, tc := range cases {

@@ -2,6 +2,7 @@ package rulecatalogue_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jorge07/harness/internal/lint/domain"
@@ -24,9 +25,29 @@ func TestLoad(t *testing.T) {
 		}
 		ids = append(ids, rule.ID)
 	}
-	want := []string{"ddd/domain-purity", "ddd/layer-direction", "ddd/cross-context", "ddd/file-suffix"}
+	want := []string{"ddd/src-roots", "ddd/domain-purity", "ddd/layer-direction", "ddd/cross-context", "ddd/file-suffix"}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("ids = %v, want %v", ids, want)
+	}
+}
+
+func TestCatalogueSrcRoots(t *testing.T) {
+	catalogue, err := rulecatalogue.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pack, err := catalogue.Pack(domain.PackDDD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := slices.IndexFunc(pack.Rules, func(r domain.CatalogueRule) bool { return r.ID == domain.RuleSrcRoots })
+	if at < 0 {
+		t.Fatalf("the catalogue has no %s rule", domain.RuleSrcRoots)
+	}
+	for _, word := range []string{"src/", "TypeScript", "ddd.src_files"} {
+		if strings.Contains(pack.Rules[at].Description, word) {
+			t.Errorf("%s description names %q, want words for any language", domain.RuleSrcRoots, word)
+		}
 	}
 }
 

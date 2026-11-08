@@ -20,6 +20,7 @@ Language: `$ARGUMENTS`. When it is empty, the `linter` agent finds the languages
 
 | Rule id | In plain language |
 |---|---|
+| `ddd/src-roots` | Every source file and every dependency belongs to a known context or layer. The tool reports a file or a dependency that it cannot place. It never drops one. |
 | `ddd/domain-purity` | The domain uses only itself, the shared domain and the allowed libraries. It never uses the application layer, the infrastructure layer or a framework. |
 | `ddd/layer-direction` | The application layer uses the domain layer, never the infrastructure layer. |
 | `ddd/cross-context` | A bounded context uses another context only through its public entry point or its published events. |
