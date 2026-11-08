@@ -16,7 +16,7 @@ Kodify has no extension point. A new guard rule edits four files. The harness ne
 - The bus returns a plugin failure apart from a deny. On a `veto` event the failure counts as a deny, so the event fails closed.
 - A harness error on a veto event fails closed with a `harness error:` deny.
 - PR 5 checks the Codex hook fields and file path against the Codex hooks docs before it writes the codec.
-- Codex has no `subagent.stopped` event. `DecideStop` then gets `agentRunning` false, and the session context says so.
+- Codex sends all 7 hooks, including `subagent.stopped` (checked on the Codex hooks page on 2026-11-08).
 
 ## Consequences
 
