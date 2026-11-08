@@ -142,3 +142,33 @@ func TestRulesByEngine(t *testing.T) {
 		t.Fatalf("err = %v, want ErrMissingPack", err)
 	}
 }
+
+func TestWithoutRules(t *testing.T) {
+	keep := domain.Rule{ID: "ddd/keep", Engine: domain.EngineHarness}
+	drop := domain.Rule{ID: "next/drop", Engine: domain.EngineHarness}
+	packs := map[domain.PackName]domain.Pack{
+		domain.PackDDD:    {Name: domain.PackDDD, Rules: []domain.Rule{keep}},
+		domain.PackNextjs: {Name: domain.PackNextjs, Rules: []domain.Rule{drop}},
+	}
+	lookup := func(name domain.PackName) (domain.Pack, error) { return packs[name], nil }
+	active := []domain.PackName{domain.PackDDD, domain.PackNextjs}
+
+	got, err := domain.WithoutRules(active, lookup, []string{"next/drop"})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	byEngine, err := domain.RulesByEngine(active, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[domain.EngineName][]domain.Rule{domain.EngineHarness: {keep}}; !reflect.DeepEqual(byEngine, want) {
+		t.Errorf("rules = %+v, want %+v", byEngine, want)
+	}
+	if _, err := domain.WithoutRules(active, lookup, []string{"next/typo"}); !errors.Is(err, domain.ErrUnknownRule) || !strings.Contains(err.Error(), "next/typo") {
+		t.Errorf("err = %v, want ErrUnknownRule naming next/typo", err)
+	}
+	if _, err := domain.WithoutRules([]domain.PackName{domain.PackDDD}, lookup, []string{"next/drop"}); !errors.Is(err, domain.ErrUnknownRule) {
+		t.Errorf("err = %v, want ErrUnknownRule for a rule of an inactive pack", err)
+	}
+}

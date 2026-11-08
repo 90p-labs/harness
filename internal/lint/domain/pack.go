@@ -71,6 +71,32 @@ func (p Pack) CheckRequires(active []PackName) error {
 	return nil
 }
 
+func WithoutRules(active []PackName, lookup func(PackName) (Pack, error), ids []string) (func(PackName) (Pack, error), error) {
+	held := map[string]bool{}
+	for _, name := range active {
+		pack, err := lookup(name)
+		if err != nil {
+			return nil, err
+		}
+		for _, rule := range pack.Rules {
+			held[rule.ID] = true
+		}
+	}
+	for _, id := range ids {
+		if !held[id] {
+			return nil, fmt.Errorf("%w: lint.disabled names %q, which is neither a default lint plugin nor a rule of an active pack", ErrUnknownRule, id)
+		}
+	}
+	return func(name PackName) (Pack, error) {
+		pack, err := lookup(name)
+		if err != nil {
+			return Pack{}, err
+		}
+		pack.Rules = slices.DeleteFunc(slices.Clone(pack.Rules), func(rule Rule) bool { return slices.Contains(ids, rule.ID) })
+		return pack, nil
+	}, nil
+}
+
 func RulesByEngine(active []PackName, lookup func(PackName) (Pack, error)) (map[EngineName][]Rule, error) {
 	byEngine := map[EngineName][]Rule{}
 	for _, name := range active {

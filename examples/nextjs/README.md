@@ -97,7 +97,7 @@ $ harness init --host claude
 lint packs: wrote nextjs, shadcn
 gates: wrote node-lint, lint
 lint init: wrote .harness-lint
-lint baseline: wrote .harness-baseline/lint.json (10 findings, run harness lint to see them)
+lint baseline: wrote .harness-baseline/lint.json (11 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
 $ cat .harness.yaml
 lint:
@@ -112,6 +112,7 @@ gates:
     baseline: .harness-baseline/lint.json
 ```
 
+The 11 findings include `next/no-lib-folder` on `src/lib`, because shadcn creates `src/lib/utils.ts`.
 Remove the files that this run wrote before the next step: `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and `.claude/`.
 
 ### 2. Copy the example
@@ -150,12 +151,15 @@ Add `.harness/` to the `.gitignore`. It holds the run folders.
 `.harness.yaml` has `lint.packs`, so `harness init` keeps the packs and the gates.
 It writes the lint files, the lint baseline and the hooks.
 
+Before the init, move the shadcn utils file `src/lib/utils.ts` to `src/components/shared/utils.ts`.
+Set the `utils` alias in `components.json` to `@/components/shared/utils`, and change the `@/lib/utils` imports in `src/components/ui/` to `@/components/shared/utils`.
+
 ```console
 $ harness init --host claude
 lint packs: kept nextjs, shadcn, ddd
 gates: kept
 lint init: wrote .harness-lint
-lint baseline: wrote .harness-baseline/lint.json (11 findings, run harness lint to see them)
+lint baseline: wrote .harness-baseline/lint.json (10 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
 $ harness lint canaries
 PASS ddd/src-roots lint/canaries/ddd-src-roots
@@ -166,7 +170,7 @@ PASS ddd/file-suffix lint/canaries/ddd-file-suffix
 ```
 
 The `ddd` pack reads the business root `src/contexts/`. The proof app has two contexts, `cart` and `catalog`, each with the folders `domain`, `application` and `infrastructure`, and the file `src/contexts/kernel.ts`.
-The baseline accepts the findings of the new app: 10 from the `nextjs` and `shadcn` packs, as in step 1, and 1 from the `ddd` pack. The `src/lib` folder of shadcn is not `app`, `components` or the business root.
+The baseline accepts the findings of the new app: the 11 findings of step 1 without the `lib` finding.
 `harness lint` gives no finding in `lint/canaries/`, so the canaries do not change the baseline.
 Commit `.harness.yaml`, `lint/`, `.harness-lint/`, `.harness-baseline/` and `.claude/`.
 
@@ -365,11 +369,10 @@ The domain may use only itself, the shared domain and the packages in `lint.ddd.
 ```console
 $ harness lint
 error ddd/domain-purity src/contexts/cart/domain/checkout-date.entity.ts:1 A domain file imports a package that is not allowed, or an application or infrastructure path.
-error ddd/src-roots src/lib:1 A folder in src has no place here. Use app, components or the business root, and list the files in ddd.src_files.
 error: lint found error findings
 ```
 
-The `ddd/src-roots` finding is in the baseline. The `ddd/domain-purity` finding is new, so the gate `lint` fails and the harness skips `node-build`.
+The `ddd/domain-purity` finding is new, so the gate `lint` fails and the harness skips `node-build`.
 
 ### Tune a built-in rule
 
@@ -381,7 +384,7 @@ Tune a rule in `.harness.yaml`, in the `lint.ddd` keys. The built-in rules have 
 | `domain_allow` | The packages that the domain may import. |
 | `src_files` | The files that may sit directly in `src/`. |
 
-`lint.disabled` turns off a lint engine, not one rule.
+`lint.disabled` turns off a default lint plugin or one rule. An entry that is not a default lint plugin is a rule id, such as `next/no-lib-folder`. An unknown entry is an error.
 
 The proof allowed `date-fns` in the domain:
 
@@ -392,12 +395,9 @@ lint:
     domain_allow: [date-fns]
 ```
 
-The finding goes away, and the gate passes:
+The finding goes away, and the gates pass:
 
 ```console
-$ harness lint
-error ddd/src-roots src/lib:1 A folder in src has no place here. Use app, components or the business root, and list the files in ddd.src_files.
-error: lint found error findings
 $ harness verify
 CACHED node-typecheck 4.617s
 CACHED node-lint 4.535s
@@ -405,8 +405,6 @@ PASS lint 350ms
 PASS lint-canaries 113ms
 PASS node-build 5.954s
 ```
-
-The listing keeps the `ddd` lines. The other lines are the findings that the baseline already holds.
 
 ### Accept a finding
 
@@ -528,6 +526,8 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   │   ├── layout.tsx
 │   │   └── page.tsx
 │   ├── components
+│   │   ├── shared
+│   │   │   └── utils.ts
 │   │   └── ui
 │   │       └── button.tsx
 │   ├── contexts             you add, commit (the business root of lint.ddd.root)
@@ -559,8 +559,6 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   │   │   │   └── product.memory-repository.ts
 │   │   │   └── catalog.module.ts
 │   │   └── kernel.ts
-│   └── lib
-│       └── utils.ts
 ├── .gitignore               you add the harness line, commit
 ├── .harness.yaml            you add, commit
 ├── AGENTS.md

@@ -215,7 +215,7 @@ error team/no-console src/checkout.ts:2 console.log in source
 error: lint found error findings
 ```
 
-Run `harness lint init` after each edit of a custom pack. A finding takes the severity of its rule. `lint.disabled` turns off a default engine, `harness`, `biome-grit` or `oxlint`, and the rules of that engine then do not run: for example, `lint: {disabled: [biome-grit]}`.
+Run `harness lint init` after each edit of a custom pack. A finding takes the severity of its rule. `lint.disabled` turns off a default engine (`harness`, `biome-grit` or `oxlint`) or one rule, such as `next/no-lib-folder`. The rules of a turned-off engine do not run: for example, `lint: {disabled: [biome-grit]}`.
 
 ### Architecture rules in any language
 

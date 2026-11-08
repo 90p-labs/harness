@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jorge07/harness/internal/deploy/infrastructure/toolplugin"
@@ -22,6 +23,7 @@ const (
 	customPackVersion = "v0.0.1"
 	customRuleID      = "team/no-console"
 	customRuleFile    = "src/orders/infrastructure/order.adapter.ts"
+	noLibFolderRule   = "next/no-lib-folder"
 )
 
 func TestCustomPackFromFolder(t *testing.T) {
@@ -45,6 +47,82 @@ func TestCustomPackFromFolder(t *testing.T) {
 	}
 	if got := report.Findings[0]; got.Rule != customRuleID || got.File != customRuleFile || got.Line != 2 {
 		t.Fatalf("finding = %+v, want %s at %s:2", got, customRuleID, customRuleFile)
+	}
+}
+
+func TestDisabledRule(t *testing.T) {
+	cases := []struct {
+		name     string
+		disabled []string
+		wantErr  error
+	}{
+		{name: "rule id", disabled: []string{noLibFolderRule}},
+		{name: "engine name and rule id", disabled: []string{string(domain.EngineOxlint), noLibFolderRule}},
+		{name: "unknown rule id", disabled: []string{"next/typo"}, wantErr: domain.ErrUnknownRule},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := fixture.Extract(t, filepath.Join("testdata", "custom-pack.txtar"))
+
+			_, err := lintmodule.New(config.Lint{Packs: []string{string(domain.PackNextjs)}, Disabled: tc.disabled}, nil, dir, customPackVersion, toolplugin.Template)
+
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("New err = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDisabledCustomRuleWithoutSlash(t *testing.T) {
+	dir := fixture.Extract(t, filepath.Join("testdata", "custom-pack.txtar"))
+	pack := filepath.Join(dir, "lint", "team", "pack.yaml")
+	source, err := os.ReadFile(pack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renamed := strings.Replace(string(source), customRuleID, "no-console", 1)
+	if err := os.WriteFile(pack, []byte(renamed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = lintmodule.New(config.Lint{Packs: []string{"./lint/team"}, Disabled: []string{"no-console"}}, nil, dir, customPackVersion, toolplugin.Template)
+
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+}
+
+func TestDisabledRuleGivesNoFinding(t *testing.T) {
+	enginesWithoutBinary := []string{string(domain.EngineBiomeGrit), string(domain.EngineOxlint)}
+	cases := []struct {
+		name     string
+		disabled []string
+		want     int
+	}{
+		{name: "rule on", disabled: enginesWithoutBinary, want: 1},
+		{name: "rule off", disabled: append([]string{noLibFolderRule}, enginesWithoutBinary...), want: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := fixture.Extract(t, filepath.Join("..", "lint", "infrastructure", "harnessengine", "testdata", "next", "no-lib-folder.txtar"))
+			handlers, err := lintmodule.New(config.Lint{Packs: []string{string(domain.PackNextjs)}, Disabled: tc.disabled}, nil, dir, customPackVersion, toolplugin.Template)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			ctx := context.Background()
+			if err := handlers.Init.Handle(ctx, initlint.Command{Dir: dir}); err != nil {
+				t.Fatalf("lint init: %v", err)
+			}
+
+			report, err := handlers.Lint.Handle(ctx, lintcommand.Command{Dir: dir})
+
+			if err != nil {
+				t.Fatalf("lint: %v", err)
+			}
+			if len(report.Findings) != tc.want {
+				t.Fatalf("findings = %+v, want %d", report.Findings, tc.want)
+			}
+		})
 	}
 }
 

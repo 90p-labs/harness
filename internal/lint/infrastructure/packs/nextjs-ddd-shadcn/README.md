@@ -4,4 +4,4 @@ This pack joins the layout of Next.js, domain driven design and shadcn. It needs
 
 - A component does not import a business root path.
 - An app file imports the business root only through `kernel.ts`.
-- The `cn` helper is in `src/components/lib/utils.ts`.
+- The `cn` helper is in `src/components/shared/utils.ts`.
