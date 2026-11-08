@@ -22,7 +22,7 @@ func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 			return lintcli.Handlers{}, err
 		}
 		cfg, worktree := env.cfg, env.key.Worktree
-		handlers, err := lintmodule.New(cfg.Lint, worktree, version, deploy.RenderChart(env.bus))
+		handlers, err := lintmodule.New(cfg.Lint, cfg.Plugins, worktree, version, deploy.RenderChart(env.bus))
 		if err != nil {
 			return lintcli.Handlers{}, err
 		}

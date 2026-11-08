@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jorge07/harness/internal/lint/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 func TestPackRequires(t *testing.T) {
@@ -73,7 +74,7 @@ func TestPackRequires(t *testing.T) {
 }
 
 func TestNewCustomPack(t *testing.T) {
-	grit := domain.Rule{ID: "team/no-console", Engine: domain.EngineBiomeGrit, Plugin: "team/rules/no-console.grit"}
+	grit := domain.Rule{ID: "team/no-console", Engine: domain.EngineBiomeGrit, Severity: shareddomain.SeverityError, Plugin: "team/rules/no-console.grit"}
 	cases := []struct {
 		name     string
 		pack     string
@@ -82,6 +83,9 @@ func TestNewCustomPack(t *testing.T) {
 		want     error
 	}{
 		{name: "a valid pack", pack: "team", requires: []domain.PackName{domain.PackDDD}, rule: grit},
+		{name: "a lint plugin engine", pack: "team", rule: domain.Rule{ID: "team/no-todo", Engine: "todo-lint", Severity: shareddomain.SeverityWarn}},
+		{name: "an unknown severity", pack: "team", rule: domain.Rule{ID: "team/no-todo", Engine: "todo-lint", Severity: "warning"}, want: domain.ErrUnknownSeverity},
+		{name: "no severity", pack: "team", rule: domain.Rule{ID: "team/no-todo", Engine: "todo-lint"}, want: domain.ErrUnknownSeverity},
 		{name: "a built-in name", pack: string(domain.PackDDD), rule: grit, want: domain.ErrPackNameTaken},
 		{name: "an empty name", pack: "", rule: grit, want: domain.ErrInvalidPackName},
 		{name: "a parent name", pack: "..", rule: grit, want: domain.ErrInvalidPackName},
@@ -89,7 +93,7 @@ func TestNewCustomPack(t *testing.T) {
 		{name: "an upper case name", pack: "Team", rule: grit, want: domain.ErrInvalidPackName},
 		{name: "a custom requires", pack: "team", requires: []domain.PackName{"other"}, rule: grit, want: domain.ErrUnknownPack},
 		{name: "a harness rule", pack: "team", rule: domain.Rule{ID: "team/layout", Engine: domain.EngineHarness}, want: domain.ErrCustomPackEngine},
-		{name: "an unknown engine", pack: "team", rule: domain.Rule{ID: "team/x", Engine: "eslint"}, want: domain.ErrCustomPackEngine},
+		{name: "an empty engine", pack: "team", rule: domain.Rule{ID: "team/x"}, want: domain.ErrCustomPackEngine},
 		{name: "a plugin outside the pack", pack: "team", rule: domain.Rule{ID: "team/x", Engine: domain.EngineBiomeGrit, Plugin: "ddd/rules/event-readonly.grit"}, want: domain.ErrPluginOutsidePack},
 		{name: "a plugin with a parent element", pack: "team", rule: domain.Rule{ID: "team/x", Engine: domain.EngineBiomeGrit, Plugin: "team/../ddd/x.grit"}, want: domain.ErrPluginOutsidePack},
 	}

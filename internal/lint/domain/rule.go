@@ -12,13 +12,13 @@ const (
 )
 
 type Rule struct {
-	ID         string
-	Engine     EngineName
-	Severity   shareddomain.Severity
-	Scope      string
-	Message    string
-	Plugin     string
-	BiomeRule  string
-	OxlintRule string
-	Reason     string
+	ID         string                `json:"id"`
+	Engine     EngineName            `json:"engine"`
+	Severity   shareddomain.Severity `json:"severity"`
+	Scope      string                `json:"scope,omitempty"`
+	Message    string                `json:"message,omitempty"`
+	Plugin     string                `json:"plugin,omitempty"`
+	BiomeRule  string                `json:"biome,omitempty"`
+	OxlintRule string                `json:"oxlint,omitempty"`
+	Reason     string                `json:"reason,omitempty"`
 }

@@ -103,7 +103,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 			return fmt.Errorf("%w (chosen packs: %s)", errGatesBeforePacks, strings.Join(cfg.Lint.Packs, listSeparator))
 		}
 	}
-	lint, err := lintmodule.New(cfg.Lint, worktree, version, deploy.RenderChart(env.bus))
+	lint, err := lintmodule.New(cfg.Lint, cfg.Plugins, worktree, version, deploy.RenderChart(env.bus))
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,14 @@ const (
 	SeverityInfo  Severity = "info"
 )
 
+func (s Severity) Known() bool {
+	switch s {
+	case SeverityError, SeverityWarn, SeverityInfo:
+		return true
+	}
+	return false
+}
+
 type Finding struct {
 	Rule     string   `json:"rule"`
 	Severity Severity `json:"severity"`

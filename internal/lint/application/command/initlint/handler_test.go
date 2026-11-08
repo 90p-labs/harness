@@ -17,20 +17,30 @@ const binaryVersion = "v1.2.0"
 var errPrepare = errors.New("prepare failed")
 
 type fakeEngine struct {
-	name     domain.EngineName
-	err      error
-	prepared []domain.Rule
-	called   bool
+	name      domain.EngineName
+	err       error
+	prepared  []domain.Rule
+	called    bool
+	lintDirOK bool
 }
 
-func (f *fakeEngine) Name() domain.EngineName { return f.name }
-func (f *fakeEngine) Prepare(_ string, rules []domain.Rule) error {
-	f.called = true
-	f.prepared = rules
-	return f.err
-}
-func (f *fakeEngine) Run(context.Context, string, []domain.Rule) ([]shareddomain.Finding, error) {
+type fakeEngines []*fakeEngine
+
+func (fakeEngines) Check(context.Context, string, domain.EngineName, []domain.Rule) ([]shareddomain.Finding, error) {
 	return nil, nil
+}
+
+func (f fakeEngines) Prepare(_ context.Context, dir string, engine domain.EngineName, rules []domain.Rule) error {
+	for _, e := range f {
+		if e.name == engine {
+			e.called = true
+			e.prepared = rules
+			info, err := os.Stat(filepath.Join(dir, domain.LintDir))
+			e.lintDirOK = err == nil && info.IsDir()
+			return e.err
+		}
+	}
+	return nil
 }
 
 func lookup(name domain.PackName) (domain.Pack, error) {
@@ -55,7 +65,7 @@ func TestLintInitVersion(t *testing.T) {
 		dir := t.TempDir()
 		biome := &fakeEngine{name: domain.EngineBiomeGrit}
 		oxlint := &fakeEngine{name: domain.EngineOxlint}
-		handler := initlint.NewHandler([]domain.PackName{domain.PackDDD}, lookup, []domain.Engine{biome, oxlint}, binaryVersion)
+		handler := initlint.NewHandler([]domain.PackName{domain.PackDDD}, lookup, fakeEngines{biome, oxlint}, binaryVersion)
 
 		if err := handler.Handle(context.Background(), initlint.Command{Dir: dir}); err != nil {
 			t.Fatal(err)
@@ -72,11 +82,24 @@ func TestLintInitVersion(t *testing.T) {
 		}
 	})
 
+	t.Run("an engine prepares into an existing lint folder", func(t *testing.T) {
+		dir := t.TempDir()
+		biome := &fakeEngine{name: domain.EngineBiomeGrit}
+
+		if err := initlint.NewHandler([]domain.PackName{domain.PackDDD}, lookup, fakeEngines{biome}, binaryVersion).Handle(context.Background(), initlint.Command{Dir: dir}); err != nil {
+			t.Fatal(err)
+		}
+
+		if !biome.lintDirOK {
+			t.Fatal("the lint folder did not exist when the engine prepared")
+		}
+	})
+
 	t.Run("no pack writes only the version", func(t *testing.T) {
 		dir := t.TempDir()
 		biome := &fakeEngine{name: domain.EngineBiomeGrit}
 
-		if err := initlint.NewHandler(nil, lookup, []domain.Engine{biome}, binaryVersion).Handle(context.Background(), initlint.Command{Dir: dir}); err != nil {
+		if err := initlint.NewHandler(nil, lookup, fakeEngines{biome}, binaryVersion).Handle(context.Background(), initlint.Command{Dir: dir}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -124,7 +147,7 @@ func TestLintInitVersion(t *testing.T) {
 	t.Run("a prepare error writes no version", func(t *testing.T) {
 		dir := t.TempDir()
 		engine := &fakeEngine{name: domain.EngineHarness, err: errPrepare}
-		handler := initlint.NewHandler([]domain.PackName{domain.PackDDD}, lookup, []domain.Engine{engine}, binaryVersion)
+		handler := initlint.NewHandler([]domain.PackName{domain.PackDDD}, lookup, fakeEngines{engine}, binaryVersion)
 
 		err := handler.Handle(context.Background(), initlint.Command{Dir: dir})
 

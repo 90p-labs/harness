@@ -62,6 +62,7 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 
 	var denies, contexts []string
 	var failures []domain.DispatchFailure
+	var findings []domain.Finding
 	for _, plugin := range b.plugins {
 		if !slices.Contains(plugin.Subscribes(), envelope.Event) {
 			continue
@@ -80,6 +81,9 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 		if kind != domain.KindObserve && verdict.Context != "" {
 			contexts = append(contexts, verdict.Context)
 		}
+		if kind == domain.KindCollect {
+			findings = append(findings, verdict.Findings...)
+		}
 		if verdict.Kind == domain.VerdictDeny && (kind == domain.KindVeto || kind == domain.KindCollect) {
 			denies = append(denies, plugin.Name()+": "+verdict.Reason)
 			if kind == domain.KindVeto {
@@ -89,7 +93,7 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 	}
 
 	result := domain.DispatchResult{
-		Verdict:  domain.Verdict{Kind: domain.VerdictAllow, Context: strings.Join(contexts, "\n\n")},
+		Verdict:  domain.Verdict{Kind: domain.VerdictAllow, Context: strings.Join(contexts, "\n\n"), Findings: findings},
 		Failures: failures,
 	}
 	if len(denies) > 0 {

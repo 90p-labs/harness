@@ -17,7 +17,8 @@ func (k VerdictKind) Known() bool {
 }
 
 type Verdict struct {
-	Kind    VerdictKind `json:"verdict"`
-	Reason  string      `json:"reason,omitempty"`
-	Context string      `json:"context,omitempty"`
+	Kind     VerdictKind `json:"verdict"`
+	Reason   string      `json:"reason,omitempty"`
+	Context  string      `json:"context,omitempty"`
+	Findings []Finding   `json:"findings,omitempty"`
 }

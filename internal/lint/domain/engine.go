@@ -16,3 +16,13 @@ type Engine interface {
 	Prepare(dir string, rules []Rule) error
 	Run(ctx context.Context, dir string, rules []Rule) ([]shareddomain.Finding, error)
 }
+
+type EngineSet interface {
+	Check(ctx context.Context, dir string, engine EngineName, rules []Rule) ([]shareddomain.Finding, error)
+	Prepare(ctx context.Context, dir string, engine EngineName, rules []Rule) error
+}
+
+type CheckPayload struct {
+	Rules []Rule   `json:"rules"`
+	Files []string `json:"files"`
+}
