@@ -1,0 +1,6 @@
+language js
+
+JsxAttribute(name=or { `className`, `style` }) as $attribute where {
+  $attribute <: r"(?s).*(?:\b(?:bg|text|border|ring|fill|stroke|from|via|to|outline|divide|shadow|accent|caret|decoration)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-[0-9]{2,3}\b|#[0-9a-fA-F]{3,8}\b|\brgba?\().*",
+  register_diagnostic(span=$attribute, message="[shadcn/no-raw-colors] use a theme token, not a raw color")
+}

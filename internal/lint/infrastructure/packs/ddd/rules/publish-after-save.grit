@@ -1,0 +1,6 @@
+language js
+
+JsMethodClassMember() as $method where {
+  $method <: r"(?s).*\.publish\(.*\.save\(.*",
+  register_diagnostic(span=$method, message="[ddd/publish-after-save] publish after the repository save, not before")
+}

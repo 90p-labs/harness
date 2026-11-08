@@ -28,6 +28,7 @@ const (
 	quietMissingRefExit  = 1
 	originRemotePrefix   = "origin/"
 	fallbackBranch       = "main"
+	nulSeparator         = "\x00"
 )
 
 func DefaultBranch(ctx context.Context, dir string) (string, error) {
@@ -114,6 +115,28 @@ func Head(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("%w in %s", ErrNoHead, dir)
 	}
 	return out, err
+}
+
+func Files(ctx context.Context, dir string, globs ...string) ([]string, error) {
+	out, err := Run(ctx, dir, nil, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, err
+	}
+	deleted, err := Run(ctx, dir, nil, "ls-files", "-z", "--deleted")
+	if err != nil {
+		return nil, err
+	}
+	gone := map[string]bool{}
+	for _, name := range strings.Split(deleted, nulSeparator) {
+		gone[name] = true
+	}
+	var files []string
+	for _, name := range strings.Split(out, nulSeparator) {
+		if name != "" && !gone[name] && (len(globs) == 0 || MatchesAny(globs, name)) {
+			files = append(files, name)
+		}
+	}
+	return files, nil
 }
 
 func Run(ctx context.Context, dir string, env []string, args ...string) (string, error) {

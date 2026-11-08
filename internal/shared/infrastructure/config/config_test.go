@@ -227,6 +227,56 @@ func TestLoadGates(t *testing.T) {
 	}
 }
 
+func TestLoadLint(t *testing.T) {
+	defaults := config.Lint{
+		DDD:           config.LintDDD{Root: "contexts", SrcFiles: []string{"main.ts"}},
+		Observability: config.LintObservability{Chart: "deploy/chart", Rules: "deploy/**/*.rules.yaml", Dashboards: "deploy/**/dashboards/*.json"},
+	}
+	cases := []struct {
+		name string
+		file string
+		want func(config.Lint) config.Lint
+	}{
+		{name: "defaults", want: func(l config.Lint) config.Lint { return l }},
+		{
+			name: "file over defaults",
+			file: `lint:
+  packs: [ddd, shadcn]
+  ddd:
+    root: domains
+    domain_allow: [zod]
+  shadcn:
+    ui_allow: [clsx]
+  observability:
+    chart: charts/app
+`,
+			want: func(l config.Lint) config.Lint {
+				l.Packs = []string{"ddd", "shadcn"}
+				l.DDD = config.LintDDD{Root: "domains", DomainAllow: []string{"zod"}, SrcFiles: []string{"main.ts"}}
+				l.Shadcn.UIAllow = []string{"clsx"}
+				l.Observability.Chart = "charts/app"
+				return l
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := load(t, tc.file)
+
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if want := tc.want(defaults); !reflect.DeepEqual(got.Lint, want) {
+				t.Errorf("lint = %+v, want %+v", got.Lint, want)
+			}
+		})
+	}
+
+	if _, err := load(t, "lint:\n  ddd:\n    rot: x\n"); err == nil {
+		t.Fatal("want an error for the unknown lint key")
+	}
+}
+
 func TestLoadGateUnknownKey(t *testing.T) {
 	if _, err := load(t, "gates:\n  - {id: a, run: x, cmd: y}\n"); err == nil {
 		t.Fatal("want an error for the unknown gate key")

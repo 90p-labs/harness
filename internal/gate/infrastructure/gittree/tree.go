@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -20,8 +19,6 @@ const (
 	indexFileEnv       = "GIT_INDEX_FILE="
 	indexFileName      = "index"
 	worktreeDirPattern = "harness-gate-*"
-	recursiveSegment   = "**"
-	segmentSeparator   = "/"
 	nulSeparator       = "\x00"
 	logFormat          = "--format=%H%x00%s"
 	entryTabSeparator  = "\t"
@@ -68,7 +65,7 @@ func inputFiles(ctx context.Context, dir string, gate domain.Gate) (string, erro
 	for _, entry := range strings.Split(listing, nulSeparator) {
 		meta, name, found := strings.Cut(entry, entryTabSeparator)
 		fields := strings.Fields(meta)
-		if !found || len(fields) < minEntryFields || !matchesAny(patterns, name) {
+		if !found || len(fields) < minEntryFields || !git.MatchesAny(patterns, name) {
 			continue
 		}
 		lines = append(lines, name+" "+fields[modeFieldIndex]+" "+fields[blobFieldIndex]+"\n")
@@ -109,33 +106,4 @@ func (Tree) AddWorktree(ctx context.Context, dir, sha string) (string, error) {
 func (Tree) RemoveWorktree(ctx context.Context, dir, worktree string) error {
 	_, err := git.Run(ctx, dir, nil, "worktree", "remove", "--force", worktree)
 	return err
-}
-
-func matchesAny(patterns []string, name string) bool {
-	segments := strings.Split(name, segmentSeparator)
-	for _, pattern := range patterns {
-		if matchSegments(strings.Split(pattern, segmentSeparator), segments) {
-			return true
-		}
-	}
-	return false
-}
-
-func matchSegments(pattern, name []string) bool {
-	if len(pattern) == 0 {
-		return len(name) == 0
-	}
-	if pattern[0] == recursiveSegment {
-		for skip := 0; skip <= len(name); skip++ {
-			if matchSegments(pattern[1:], name[skip:]) {
-				return true
-			}
-		}
-		return false
-	}
-	if len(name) == 0 {
-		return false
-	}
-	ok, err := path.Match(pattern[0], name[0])
-	return err == nil && ok && matchSegments(pattern[1:], name[1:])
 }

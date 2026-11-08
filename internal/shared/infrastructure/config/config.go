@@ -38,6 +38,17 @@ const (
 	keyGuardDisabled   = "guard.disabled"
 	keyGitBranch       = "git.default_branch"
 
+	keyLintDDDRoot       = "lint.ddd.root"
+	keyLintDDDSrcFiles   = "lint.ddd.src_files"
+	keyLintChart         = "lint.observability.chart"
+	keyLintRules         = "lint.observability.rules"
+	keyLintDashboards    = "lint.observability.dashboards"
+	defaultLintDDDRoot   = "contexts"
+	defaultLintSrcFile   = "main.ts"
+	defaultLintChart     = "deploy/chart"
+	defaultLintRules     = "deploy/**/*.rules.yaml"
+	defaultLintDashboard = "deploy/**/dashboards/*.json"
+
 	defaultStateDSN = "sqlite:.harness/state.db"
 	defaultRounds   = 3
 )
@@ -50,6 +61,30 @@ type Config struct {
 	Guard   Guard               `mapstructure:"guard"`
 	Git     Git                 `mapstructure:"git"`
 	Gates   []Gate              `mapstructure:"gates"`
+	Lint    Lint                `mapstructure:"lint"`
+}
+
+type Lint struct {
+	Packs         []string          `mapstructure:"packs"`
+	DDD           LintDDD           `mapstructure:"ddd"`
+	Shadcn        LintShadcn        `mapstructure:"shadcn"`
+	Observability LintObservability `mapstructure:"observability"`
+}
+
+type LintDDD struct {
+	Root        string   `mapstructure:"root"`
+	DomainAllow []string `mapstructure:"domain_allow"`
+	SrcFiles    []string `mapstructure:"src_files"`
+}
+
+type LintShadcn struct {
+	UIAllow []string `mapstructure:"ui_allow"`
+}
+
+type LintObservability struct {
+	Chart      string `mapstructure:"chart"`
+	Rules      string `mapstructure:"rules"`
+	Dashboards string `mapstructure:"dashboards"`
 }
 
 type Gate struct {
@@ -146,6 +181,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyPlugins, []any{})
 	v.SetDefault(keyGuardDisabled, []any{})
 	v.SetDefault(keyGitBranch, "")
+	v.SetDefault(keyLintDDDRoot, defaultLintDDDRoot)
+	v.SetDefault(keyLintDDDSrcFiles, []string{defaultLintSrcFile})
+	v.SetDefault(keyLintChart, defaultLintChart)
+	v.SetDefault(keyLintRules, defaultLintRules)
+	v.SetDefault(keyLintDashboards, defaultLintDashboard)
 	v.SetDefault(keyRoles, map[string]any{
 		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): "haiku"},
 		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): "sonnet"},

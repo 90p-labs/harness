@@ -1,0 +1,6 @@
+language js
+
+JsClassDeclaration() as $class where {
+  not $class <: contains JsMethodClassMember(name=`equals`),
+  register_diagnostic(span=$class, message="[ddd/value-object-equals] a value object needs an equals method")
+}

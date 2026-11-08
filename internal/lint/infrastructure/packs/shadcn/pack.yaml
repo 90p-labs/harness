@@ -1,0 +1,25 @@
+name: shadcn
+requires: []
+rules:
+  - id: shadcn/ui-imports
+    engine: harness
+    severity: error
+    scope: "src/components/ui/**"
+    message: A ui file imports a module that is not a ui file, the utils alias, Radix, class-variance-authority, lucide-react or React.
+  - id: shadcn/cn-classnames
+    engine: biome-grit
+    severity: warn
+    scope: "src/**/*.tsx"
+    message: A className joins strings by hand. Use the cn helper.
+    plugin: rules/cn-classnames.grit
+  - id: shadcn/no-raw-colors
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.tsx"
+    message: A class or a style uses a raw color. Use a theme token.
+    plugin: rules/no-raw-colors.grit
+  - id: shadcn/components-json
+    engine: harness
+    severity: error
+    scope: "components.json"
+    message: The components.json file must set tailwind.cssVariables to true.

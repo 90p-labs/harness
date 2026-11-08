@@ -1,0 +1,7 @@
+language js
+
+JsxAttribute(name=`className`, initializer=$value) as $attribute where {
+  not $value <: contains `cn($args)`,
+  $value <: contains or { JsTemplateElement(), `$left + $right` },
+  register_diagnostic(span=$attribute, message="[shadcn/cn-classnames] build a className with cn, not a template literal or a concatenation")
+}

@@ -1,0 +1,13 @@
+language js
+
+or {
+  JsMethodClassMember(name=`execute`, return_type_annotation=TsReturnTypeAnnotation() as $annotation) as $method where {
+    not $annotation <: r"(?s).*:\s*(?:Promise<void>|void)\s*",
+    register_diagnostic(span=$method, message="[ddd/command-handler-returns] a command handler must return void")
+  },
+  JsMethodClassMember(name=`execute`, body=$body) as $method where {
+    not $method <: JsMethodClassMember(return_type_annotation=TsReturnTypeAnnotation()),
+    $body <: contains JsReturnStatement() as $return where { $return <: r"(?s)return\s*[^;\s].*" } until or { JsArrowFunctionExpression(), JsFunctionExpression() },
+    register_diagnostic(span=$method, message="[ddd/command-handler-returns] a command handler must return void")
+  }
+}

@@ -1,0 +1,44 @@
+name: nextjs
+requires: []
+rules:
+  - id: next/client-server-boundary
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A client file imports server-only code.
+  - id: next/app-router-files
+    engine: harness
+    severity: error
+    scope: "src/app/**"
+    message: A file in src/app is not a Next.js route file or a CSS module.
+  - id: next/thin-route-handler
+    engine: harness
+    severity: warn
+    scope: "src/app/**/route.ts"
+    message: A route handler has more than 30 lines. Move the logic into a use case.
+  - id: next/no-img-element
+    engine: biome-rule
+    severity: error
+    scope: "src/**/*.tsx"
+    message: Use the Next.js Image component, not an img element.
+    biome: lint/performance/noImgElement
+  - id: next/no-head-element
+    engine: biome-rule
+    severity: error
+    scope: "src/**/*.tsx"
+    message: Use the Next.js metadata API, not a head element.
+    biome: lint/style/noHeadElement
+  - id: next/no-html-link-for-pages
+    engine: oxlint
+    severity: error
+    scope: "src/**/*.tsx"
+    message: Use the Next.js Link component for a page route, not an anchor.
+    oxlint: nextjs/no-html-link-for-pages
+    reason: Biome has no rule for a raw anchor to a page route.
+  - id: next/no-async-client-component
+    engine: oxlint
+    severity: error
+    scope: "src/**/*.tsx"
+    message: A client component must not be async.
+    oxlint: nextjs/no-async-client-component
+    reason: Biome has no rule for an async client component.

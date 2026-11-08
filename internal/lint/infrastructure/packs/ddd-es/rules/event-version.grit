@@ -1,0 +1,6 @@
+language js
+
+JsClassDeclaration() as $class where {
+  not $class <: contains JsPropertyClassMember(name=`version`, modifiers=contains TsReadonlyModifier()),
+  register_diagnostic(span=$class, message="[ddd-es/event-version] an event needs a readonly version field")
+}

@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -186,6 +188,79 @@ func TestTopLevelOtherGitError(t *testing.T) {
 
 	if err == nil || errors.Is(err, git.ErrNotRepository) || !strings.Contains(err.Error(), "work tree") {
 		t.Fatalf("bare repo: %v, want the git error", err)
+	}
+}
+
+func TestFiles(t *testing.T) {
+	root := initRepo(t)
+	write := func(name string) {
+		t.Helper()
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".gitignore")
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"src/a.tsx", "src/deep/er/b.tsx", "src/c.ts", "README.md", "src/gone.tsx"} {
+		write(name)
+	}
+	if out, err := exec.Command("git", "-C", root, "add", "src/a.tsx", "README.md", "src/gone.tsx").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v: %s", err, out)
+	}
+	if err := os.Remove(filepath.Join(root, "src/gone.tsx")); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"lib/d.tsx", "ignored/e.tsx"} {
+		write(name)
+	}
+
+	cases := []struct {
+		name  string
+		globs []string
+		want  []string
+	}{
+		{
+			name: "no globs lists every file but the ignored ones",
+			want: []string{".gitignore", "README.md", "lib/d.tsx", "src/a.tsx", "src/c.ts", "src/deep/er/b.tsx"},
+		},
+		{
+			name:  "double star crosses folders, tracked and untracked",
+			globs: []string{"src/**/*.tsx"},
+			want:  []string{"src/a.tsx", "src/deep/er/b.tsx"},
+		},
+		{
+			name:  "several globs",
+			globs: []string{"lib/*.tsx", "README.md"},
+			want:  []string{"README.md", "lib/d.tsx"},
+		},
+		{name: "no match", globs: []string{"docs/**"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := git.Files(context.Background(), root, tc.globs...)
+
+			if err != nil {
+				t.Fatalf("Files: %v", err)
+			}
+			sort.Strings(got)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("Files = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git.Files(context.Background(), outside); !errors.Is(err, git.ErrNotRepository) {
+		t.Fatalf("outside a repo: %v, want ErrNotRepository", err)
 	}
 }
 
