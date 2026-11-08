@@ -139,6 +139,43 @@ func TestRepoKeyOutsideRepository(t *testing.T) {
 	}
 }
 
+func TestDefaultBranch(t *testing.T) {
+	t.Run("origin HEAD set", func(t *testing.T) {
+		root := initRepo(t)
+		for _, args := range [][]string{
+			{"commit", "-q", "--allow-empty", "-m", "init"},
+			{"update-ref", "refs/remotes/origin/develop", "HEAD"},
+			{"symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop"},
+		} {
+			if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v: %s", args, err, out)
+			}
+		}
+
+		got, err := git.DefaultBranch(context.Background(), root)
+
+		if err != nil || got != "develop" {
+			t.Fatalf("DefaultBranch = %q, %v, want develop", got, err)
+		}
+	})
+
+	t.Run("origin HEAD not set", func(t *testing.T) {
+		got, err := git.DefaultBranch(context.Background(), initRepo(t))
+
+		if err != nil || got != "main" {
+			t.Fatalf("DefaultBranch = %q, %v, want main", got, err)
+		}
+	})
+
+	t.Run("outside a repository", func(t *testing.T) {
+		_, err := git.DefaultBranch(context.Background(), t.TempDir())
+
+		if !errors.Is(err, git.ErrNotRepository) {
+			t.Fatalf("outside a repo: %v, want ErrNotRepository", err)
+		}
+	})
+}
+
 func TestTopLevelOtherGitError(t *testing.T) {
 	bare := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
