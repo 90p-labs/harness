@@ -75,8 +75,10 @@ var languagesWithNoPack = []struct {
 	{languageGo, []string{goMod}},
 }
 
-var errGatesBeforePacks = errors.New("the gates key exists without lint.packs, so gates init cannot add the lint gate: " +
-	"set lint.packs and the lint gate in .harness.yaml by hand, or remove the gates key and run harness init again")
+var errGatesBeforePacks = errors.New("gates init cannot add the lint gate")
+
+const gatesBeforePacksFormat = "%w: the %s key is set without lint.packs, so set lint.packs and the lint gate in .harness.yaml by hand, " +
+	"or remove the %s key and run harness init again (chosen packs: %s)"
 
 func newInitCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 	cmd := &cobra.Command{
@@ -115,12 +117,12 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		if cfg.Lint.Packs, err = choosePacks(worktree); err != nil {
 			return err
 		}
-		hasGates, err := writer.HasGates(worktree)
+		blockingKey, err := writer.BlockingKey(worktree)
 		if err != nil {
 			return err
 		}
-		if hasGates && len(cfg.Lint.Packs) > 0 {
-			return fmt.Errorf("%w (chosen packs: %s)", errGatesBeforePacks, strings.Join(cfg.Lint.Packs, listSeparator))
+		if blockingKey != "" && len(cfg.Lint.Packs) > 0 {
+			return fmt.Errorf(gatesBeforePacksFormat, errGatesBeforePacks, blockingKey, blockingKey, strings.Join(cfg.Lint.Packs, listSeparator))
 		}
 	}
 	lint, err := lintmodule.New(cfg.Lint, cfg.Plugins, worktree, version, deploy.RenderChart(env.bus))

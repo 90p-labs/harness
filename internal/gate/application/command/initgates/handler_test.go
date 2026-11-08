@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/jorge07/harness/internal/gate/application/command/initgates"
@@ -17,6 +18,8 @@ const (
 	helmLine   = `{"id":"helm-render","run":"helm template deploy/chart > /dev/null"}`
 	kubeLine   = `{"id":"kubeconform","run":"kubeconform deploy","paths":["deploy/**"]}`
 	goTestLine = `{"id":"go-test","run":"go test ./..."}`
+	keyGates   = "gates"
+	keySetup   = "setup"
 )
 
 var (
@@ -25,13 +28,13 @@ var (
 )
 
 type fakeStore struct {
-	exists  bool
+	key     string
 	written []domain.Gate
 	setup   []domain.Setup
 	dir     string
 }
 
-func (f *fakeStore) has(string) (bool, error) { return f.exists, nil }
+func (f *fakeStore) blockingKey(string) (string, error) { return f.key, nil }
 
 func (f *fakeStore) write(dir string, setup []domain.Setup, gates []domain.Gate) error {
 	f.dir, f.setup, f.written = dir, setup, gates
@@ -60,7 +63,7 @@ func detected(string) ([]domain.Gate, error) {
 func listFiles(context.Context, string) ([]string, error) { return repoFiles, nil }
 
 func handler(store *fakeStore, bus shareddomain.Dispatcher) initgates.Handler {
-	return initgates.NewHandler(detected, listFiles, bus, store.has, store.write)
+	return initgates.NewHandler(detected, listFiles, bus, store.blockingKey, store.write)
 }
 
 func newGate(t *testing.T, id, run string, paths []string) domain.Gate {
@@ -153,13 +156,21 @@ func TestHandleProposedSetup(t *testing.T) {
 }
 
 func TestInitGatesRefusesOverwrite(t *testing.T) {
-	store := &fakeStore{exists: true}
+	store := &fakeStore{key: keyGates}
 	_, err := handler(store, answer("")).Handle(context.Background(), initgates.Command{Dir: repoDir})
 	if !errors.Is(err, domain.ErrGatesExist) {
 		t.Fatalf("err = %v, want ErrGatesExist", err)
 	}
 	if store.written != nil {
 		t.Errorf("wrote %+v over existing gates", store.written)
+	}
+}
+
+func TestBlockingKeyNamedInError(t *testing.T) {
+	store := &fakeStore{key: keySetup}
+	_, err := handler(store, answer("")).Handle(context.Background(), initgates.Command{Dir: repoDir})
+	if !errors.Is(err, domain.ErrGatesExist) || !strings.Contains(err.Error(), keySetup) {
+		t.Fatalf("err = %v, want ErrGatesExist naming the setup key", err)
 	}
 }
 
@@ -199,12 +210,12 @@ func TestInitGatesProposalFailures(t *testing.T) {
 
 func TestInitGatesPortFailures(t *testing.T) {
 	ok := func(string, []domain.Setup, []domain.Gate) error { return nil }
-	none := func(string) (bool, error) { return false, nil }
+	none := func(string) (string, error) { return "", nil }
 	tests := map[string]initgates.Handler{
 		"detect": initgates.NewHandler(func(string) ([]domain.Gate, error) { return nil, boom }, listFiles, answer(""), none, ok),
 		"files":  initgates.NewHandler(detected, func(context.Context, string) ([]string, error) { return nil, boom }, answer(""), none, ok),
 		"bus":    initgates.NewHandler(detected, listFiles, &fakeBus{err: boom}, none, ok),
-		"has":    initgates.NewHandler(detected, listFiles, answer(""), func(string) (bool, error) { return false, boom }, ok),
+		"has":    initgates.NewHandler(detected, listFiles, answer(""), func(string) (string, error) { return "", boom }, ok),
 		"write":  initgates.NewHandler(detected, listFiles, answer(""), none, func(string, []domain.Setup, []domain.Gate) error { return boom }),
 	}
 	for name, h := range tests {

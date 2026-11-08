@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	gateconfig "github.com/jorge07/harness/internal/gate/infrastructure/config"
 	lintmodule "github.com/jorge07/harness/internal/lint"
 	lintdomain "github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
@@ -83,22 +84,27 @@ func TestInitSetsUpARepository(t *testing.T) {
 }
 
 func TestInitRefusesPacksAfterGates(t *testing.T) {
-	clearHarnessEnv(t)
-	dir := initRepo(t)
-	original := "gates: []\n"
-	writeRepoFile(t, dir, configFile, original)
-	writeRepoFile(t, dir, packageJSON, `{"dependencies":{"next":"15.0.0"}}`)
+	for _, key := range []string{gateconfig.KeyGates, gateconfig.KeySetup} {
+		t.Run(key, func(t *testing.T) {
+			clearHarnessEnv(t)
+			dir := initRepo(t)
+			original := key + ":\n  - id: test\n    run: go test ./...\n"
+			writeRepoFile(t, dir, configFile, original)
+			writeRepoFile(t, dir, packageJSON, `{"dependencies":{"next":"15.0.0"}}`)
 
-	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+			code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
 
-	if code != exitRuntime || !strings.Contains(stderr, errGatesBeforePacks.Error()) || stdout != "" {
-		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and the gates key error", code, stdout, stderr, exitRuntime)
-	}
-	if config := readConfig(t, dir); config != original {
-		t.Errorf(".harness.yaml = %q, want %q", config, original)
-	}
-	if _, err := os.Stat(filepath.Join(dir, lintdomain.LintDir)); !os.IsNotExist(err) {
-		t.Errorf("%s exists after a refused init", lintdomain.LintDir)
+			wantKey := fmt.Errorf(gatesBeforePacksFormat, errGatesBeforePacks, key, key, lintdomain.PackNextjs).Error()
+			if code != exitRuntime || !strings.Contains(stderr, wantKey) || stdout != "" {
+				t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and %q", code, stdout, stderr, exitRuntime, wantKey)
+			}
+			if config := readConfig(t, dir); config != original {
+				t.Errorf(".harness.yaml = %q, want %q", config, original)
+			}
+			if _, err := os.Stat(filepath.Join(dir, lintdomain.LintDir)); !os.IsNotExist(err) {
+				t.Errorf("%s exists after a refused init", lintdomain.LintDir)
+			}
+		})
 	}
 }
 

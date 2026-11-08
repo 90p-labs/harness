@@ -58,9 +58,9 @@ func TestWriterKeepsExistingKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	var w gateconfig.Writer
-	has, err := w.HasGates(dir)
-	if err != nil || has {
-		t.Fatalf("HasGates = %v, %v, want false", has, err)
+	key, err := w.BlockingKey(dir)
+	if err != nil || key != "" {
+		t.Fatalf("BlockingKey = %q, %v, want none", key, err)
 	}
 	gates := []domain.Gate{
 		{ID: "go-test", Run: "go test ./...", Paths: []string{"**/*.go"}, Timeout: domain.DefaultTimeout},
@@ -88,8 +88,8 @@ func TestWriterKeepsExistingKeys(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(decoded, gates) {
 		t.Errorf("round trip = %+v, %v, want %+v", decoded, err, gates)
 	}
-	if has, err := w.HasGates(dir); err != nil || !has {
-		t.Errorf("HasGates after write = %v, %v, want true", has, err)
+	if key, err := w.BlockingKey(dir); err != nil || key != gateconfig.KeyGates {
+		t.Errorf("BlockingKey after write = %q, %v, want %q", key, err, gateconfig.KeyGates)
 	}
 }
 
@@ -190,22 +190,22 @@ func TestWriteSetupConfig(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(setupOnly, configFile), []byte("setup:\n  - {id: deps, run: x}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if has, err := w.HasGates(setupOnly); err != nil || !has {
-		t.Errorf("HasGates with a setup key = %v, %v, want true", has, err)
+	if key, err := w.BlockingKey(setupOnly); err != nil || key != gateconfig.KeySetup {
+		t.Errorf("BlockingKey with a setup key = %q, %v, want %q", key, err, gateconfig.KeySetup)
 	}
 }
 
 func TestWriterMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	var w gateconfig.Writer
-	if has, err := w.HasGates(dir); err != nil || has {
-		t.Fatalf("HasGates = %v, %v, want false", has, err)
+	if key, err := w.BlockingKey(dir); err != nil || key != "" {
+		t.Fatalf("BlockingKey = %q, %v, want none", key, err)
 	}
 	if err := w.WriteGates(dir, nil, []domain.Gate{{ID: "a", Run: "x", Timeout: domain.DefaultTimeout}}); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if has, err := w.HasGates(dir); err != nil || !has {
-		t.Errorf("HasGates = %v, %v, want true", has, err)
+	if key, err := w.BlockingKey(dir); err != nil || key != gateconfig.KeyGates {
+		t.Errorf("BlockingKey = %q, %v, want %q", key, err, gateconfig.KeyGates)
 	}
 }
 
@@ -277,7 +277,69 @@ func TestWriterBrokenYAML(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, configFile), []byte("a: [\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (gateconfig.Writer{}).HasGates(dir); err == nil {
+	if _, err := (gateconfig.Writer{}).BlockingKey(dir); err == nil {
 		t.Error("want an error for broken yaml")
+	}
+}
+
+func TestBlockingKey(t *testing.T) {
+	const filled = "  - {id: a, run: x}\n"
+	cases := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{"an empty gates list is absent", "gates: []\n", ""},
+		{"a null gates key is absent", "gates:\n", ""},
+		{"an empty setup list is absent", "setup: []\n", ""},
+		{"a null setup key is absent", "setup:\n", ""},
+		{"a gates list blocks", "gates:\n" + filled, gateconfig.KeyGates},
+		{"a setup list blocks", "setup:\n" + filled, gateconfig.KeySetup},
+		{"gates win over setup", "setup:\n" + filled + "gates:\n" + filled, gateconfig.KeyGates},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, configFile), []byte(tc.yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := (gateconfig.Writer{}).BlockingKey(dir); err != nil || got != tc.want {
+				t.Errorf("BlockingKey = %q, %v, want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestBlockingKeyEmptyKeysAreReplaced(t *testing.T) {
+	step := domain.Setup{ID: "deps", Run: "make deps"}
+	gate := domain.Gate{ID: "a", Run: "x", Timeout: domain.DefaultTimeout}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte("setup: []\ngates: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (gateconfig.Writer{}).WriteGates(dir, []domain.Setup{step}, []domain.Gate{gate}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, configFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if strings.Count(text, "gates:") != 1 || strings.Count(text, "setup:") != 1 || strings.Contains(text, "[]") {
+		t.Errorf("want one setup key and one gates key, got:\n%s", text)
+	}
+}
+
+func TestBlockingKeyNothingToWriteAddsNoKey(t *testing.T) {
+	dir := t.TempDir()
+	if err := (gateconfig.Writer{}).WriteGates(dir, nil, nil); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, configFile))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), gateconfig.KeyGates) {
+		t.Errorf("want no gates key, got:\n%s", raw)
 	}
 }

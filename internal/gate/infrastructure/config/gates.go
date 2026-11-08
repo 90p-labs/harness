@@ -17,8 +17,8 @@ import (
 
 const (
 	fileName    = ".harness.yaml"
-	keyGates    = "gates"
-	keySetup    = "setup"
+	KeyGates    = "gates"
+	KeySetup    = "setup"
 	keyLint     = "lint"
 	keyPacks    = "packs"
 	tagString   = "!!str"
@@ -80,16 +80,29 @@ type gateEntry struct {
 	Needs    []string `yaml:"needs,omitempty"`
 }
 
-func (Writer) HasGates(dir string) (bool, error) {
+func (Writer) BlockingKey(dir string) (string, error) {
 	doc, err := readDocument(dir)
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	return hasGateKeys(doc.Content[nodeFirstEl]), nil
+	return blockingKey(doc.Content[nodeFirstEl]), nil
 }
 
-func hasGateKeys(root *yaml.Node) bool {
-	return keyIndex(root, keyGates) >= 0 || keyIndex(root, keySetup) >= 0
+func blockingKey(root *yaml.Node) string {
+	for _, key := range []string{KeyGates, KeySetup} {
+		if i := keyIndex(root, key); i >= 0 && len(root.Content[i+1].Content) > 0 {
+			return key
+		}
+	}
+	return ""
+}
+
+func setKey(root *yaml.Node, key string, value *yaml.Node) {
+	if i := keyIndex(root, key); i >= 0 {
+		root.Content[i+1] = value
+		return
+	}
+	root.Content = append(root.Content, keyNode(key), value)
 }
 
 func (Writer) WriteGates(dir string, setup []domain.Setup, gates []domain.Gate) error {
@@ -98,8 +111,11 @@ func (Writer) WriteGates(dir string, setup []domain.Setup, gates []domain.Gate) 
 		return err
 	}
 	root := doc.Content[nodeFirstEl]
-	if hasGateKeys(root) {
+	if blockingKey(root) != "" {
 		return domain.ErrGatesExist
+	}
+	if len(setup) == 0 && len(gates) == 0 {
+		return nil
 	}
 	if len(setup) > 0 {
 		steps := make([]setupEntry, len(setup))
@@ -110,7 +126,7 @@ func (Writer) WriteGates(dir string, setup []domain.Setup, gates []domain.Gate) 
 		if err := seq.Encode(steps); err != nil {
 			return fmt.Errorf("encode setup: %w", err)
 		}
-		root.Content = append(root.Content, keyNode(keySetup), &seq)
+		setKey(root, KeySetup, &seq)
 	}
 
 	entries := make([]gateEntry, len(gates))
@@ -124,7 +140,7 @@ func (Writer) WriteGates(dir string, setup []domain.Setup, gates []domain.Gate) 
 	if err := seq.Encode(entries); err != nil {
 		return fmt.Errorf("encode gates: %w", err)
 	}
-	root.Content = append(root.Content, keyNode(keyGates), &seq)
+	setKey(root, KeyGates, &seq)
 	return writeDocument(dir, doc)
 }
 
