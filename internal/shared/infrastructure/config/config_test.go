@@ -294,3 +294,24 @@ func TestLoadInvalidPlugin(t *testing.T) {
 		})
 	}
 }
+
+func TestGuardConfig(t *testing.T) {
+	defaults, err := config.Load(flagSet(t), t.TempDir())
+	if err != nil {
+		t.Fatalf("load defaults: %v", err)
+	}
+	if len(defaults.Guard.Disabled) != 0 || defaults.Git.DefaultBranch != "" {
+		t.Errorf("defaults = %+v and %+v, want none", defaults.Guard, defaults.Git)
+	}
+
+	got, err := load(t, "guard:\n  disabled: [git-no-force, writing-style]\ngit:\n  default_branch: develop\n")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !reflect.DeepEqual(got.Guard.Disabled, []string{"git-no-force", "writing-style"}) {
+		t.Errorf("guard.disabled = %v", got.Guard.Disabled)
+	}
+	if got.Git.DefaultBranch != "develop" {
+		t.Errorf("git.default_branch = %q", got.Git.DefaultBranch)
+	}
+}

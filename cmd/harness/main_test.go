@@ -185,7 +185,7 @@ func TestExitCodes(t *testing.T) {
 func TestConfigCommand(t *testing.T) {
 	clearHarnessEnv(t)
 	file := filepath.Join(t.TempDir(), "harness.yaml")
-	body := "plugins:\n  - name: guard\n    command: [guard]\n    events: [tool.before]\n  - name: slow\n    command: [slow]\n    events: [tool.after]\n    timeout: 750ms\n"
+	body := "plugins:\n  - name: guard\n    command: [guard]\n    events: [tool.before]\n  - name: slow\n    command: [slow]\n    events: [tool.after]\n    timeout: 750ms\nguard:\n  disabled: [writing-style]\ngit:\n  default_branch: develop\n"
 	if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestConfigCommand(t *testing.T) {
 	if code != exitOK || stderr != "" {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
-	for _, want := range []string{"dsn: sqlite:.harness/state.db", "max_review_rounds: 3", "name: guard", "timeout: 5s", "timeout: 750ms", "worker:", "claude: sonnet"} {
+	for _, want := range []string{"dsn: sqlite:.harness/state.db", "max_review_rounds: 3", "name: guard", "timeout: 5s", "timeout: 750ms", "worker:", "claude: sonnet", "- writing-style", "default_branch: develop"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, want)
 		}
@@ -515,5 +515,22 @@ func TestPlanCheckValidFixture(t *testing.T) {
 
 	if code != exitOK || stdout != "" || stderr != "" {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want a clean plan", code, stdout, stderr)
+	}
+}
+
+func TestHookGuardEndToEnd(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+	const input = `{"cwd":".","tool_name":"Bash","tool_input":{"command":"git push --force origin feat/x"}}`
+
+	code, stdout, stderr := executeWithStdin(t, input, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q, want %d", code, stderr, exitOK)
+	}
+	for _, want := range []string{`"permissionDecision":"deny"`, "guard.git-no-force: "} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout = %q, want %q", stdout, want)
+		}
 	}
 }

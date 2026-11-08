@@ -35,6 +35,8 @@ const (
 	keyMaxStopBlocks   = "run.max_stop_blocks"
 	keyPlugins         = "plugins"
 	keyRoles           = "roles"
+	keyGuardDisabled   = "guard.disabled"
+	keyGitBranch       = "git.default_branch"
 
 	defaultStateDSN = "sqlite:.harness/state.db"
 	defaultRounds   = 3
@@ -45,6 +47,16 @@ type Config struct {
 	Run     Run                 `mapstructure:"run"`
 	Plugins []Plugin            `mapstructure:"plugins"`
 	Roles   map[string]RoleHost `mapstructure:"roles"`
+	Guard   Guard               `mapstructure:"guard"`
+	Git     Git                 `mapstructure:"git"`
+}
+
+type Guard struct {
+	Disabled []string `mapstructure:"disabled"`
+}
+
+type Git struct {
+	DefaultBranch string `mapstructure:"default_branch"`
 }
 
 type State struct {
@@ -123,6 +135,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyMaxLiveRounds, defaultRounds)
 	v.SetDefault(keyMaxStopBlocks, defaultRounds)
 	v.SetDefault(keyPlugins, []any{})
+	v.SetDefault(keyGuardDisabled, []any{})
+	v.SetDefault(keyGitBranch, "")
 	v.SetDefault(keyRoles, map[string]any{
 		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): "haiku"},
 		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): "sonnet"},

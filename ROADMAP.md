@@ -392,27 +392,27 @@ harness/
 
 ## PR 6: `feat/guard-plugins`, based on `feat/host-adapters`
 
-- Scope: the built-in guard rules as in-process plugins, with a config switch for each rule.
+- Scope: the built-in guard rules as in-process plugins, with a config switch for each rule. The rules are `pr-no-merge`, `pr-draft-only`, `pr-body-shape`, `git-no-force`, `git-no-push-default`, `git-no-verify-skip`, `secrets-read`, `test-no-focus-skip`, `shell-write-source`, `writing-style`, `agent-model-routing` and `stop-holds-turn`.
 - Fixes: K2.
 
 | # | Criterion | Test |
 |---|---|---|
 | 6.1 | `Commands` splits a shell line at `&&`, `\|\|`, `;`, pipes and newlines, and keeps quoted text whole. | `go test ./internal/guard/domain -run TestShellCommands -count=1` |
 | 6.2 | Each rule denies each listed match and allows each listed near miss of its table. | `go test ./internal/guard/domain -run TestRuleMatches -count=1` |
-| 6.3 | Each deny reason starts with the rule id and a colon, and names the next step. | `go test ./internal/guard/domain -run TestDenyReasonShape -count=1` |
+| 6.3 | Each bus deny starts with `guard.`, the rule id and a colon once, and names the next step. | `go test ./internal/guard/application/guardplugin -run TestDenyReasonShape -count=1` |
 | 6.4 | Each rule is one plugin named `guard.` plus its id, subscribed only to its event. | `go test ./internal/guard/application/guardplugin -run TestGuardPluginNames -count=1` |
 | 6.5 | A rule in `guard.disabled` makes no plugin. An unknown id in the list is a config error. | `go test ./internal/guard/application/guardplugin -run TestGuardDisabled -count=1` |
 | 6.6 | `agent-model-routing` reads the role table of the envelope host from the config. | `go test ./internal/guard/application/guardplugin -run TestAgentModelRouting -count=1` |
 | 6.7 | `stop-holds-turn` blocks as `DecideStop` says for the active run and saves the new stop block count. | `go test ./internal/guard/application/guardplugin -run TestStopHoldsTurn -count=1` |
 | 6.8 | Each deny adds 1 to `harness.guard.denies` with the `harness.rule` attribute. | `go test ./internal/guard/application/guardplugin -run TestGuardDenyCounter -count=1` |
-| 6.9 | `DefaultBranch` reads `origin/HEAD` in a test repo, and gives `main` when it is not set. | `go test ./internal/guard/infrastructure/gitinfo -run TestDefaultBranch -count=1` |
+| 6.9 | `DefaultBranch` reads `origin/HEAD` in a test repo, and gives `main` when it is not set. | `go test ./internal/shared/infrastructure/git -run TestDefaultBranch -count=1` |
 | 6.10 | `harness hook --host claude pre-tool-use` with a `git push --force` input prints the `git-no-force` deny. | `go test ./cmd/harness -run TestHookGuardEndToEnd -count=1` |
 
 Tasks:
 
 1. **Shell and tool call parse.** Owned: `internal/guard/domain/shell.go`, `internal/guard/domain/toolcall.go` and their tests. Test first: `shell_test.go` with `TestShellCommands`, which fails because `Commands` does not exist. DoD: criterion 6.1. Depends on: none.
 2. **Rules.** Owned: `internal/guard/domain/` except the files of task 1. Test first: `rule_test.go` with `TestRuleMatches`, which fails because the rules do not exist. DoD: criteria 6.2 and 6.3. Depends on: 1.
-3. **Git info.** Owned: `internal/guard/infrastructure/gitinfo/`. Test first: `gitinfo_test.go` with `TestDefaultBranch`, which fails because the package does not exist. DoD: criterion 6.9. Depends on: none.
+3. **Default branch.** Owned: `internal/shared/infrastructure/git/`. Test first: `git_test.go` with `TestDefaultBranch`, which fails because `DefaultBranch` does not exist. DoD: criterion 6.9. Depends on: none.
 4. **Guard plugins and wiring.** Owned: `internal/guard/application/`, `internal/guard/module.go`, `cmd/harness/main.go`, `cmd/harness/main_test.go`. Test first: `plugin_test.go` with `TestGuardPluginNames`, which fails because the package does not exist. DoD: criteria 6.4 to 6.8 and 6.10. Depends on: 2 and 3.
 
 Commits:
@@ -445,9 +445,10 @@ harness/
         ├── application/
         │   └── guardplugin/
         │       └── plugin.go               new
-        └── infrastructure/
-            └── gitinfo/
-                └── gitinfo.go              new
+└── shared/
+    └── infrastructure/
+        └── git/
+            └── git.go                      changed
 ```
 
 ## PR 7: `feat/gates-evidence`, based on `feat/guard-plugins`

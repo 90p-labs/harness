@@ -9,16 +9,15 @@ import (
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
 
+	"github.com/jorge07/harness/internal/guard"
 	planmodule "github.com/jorge07/harness/internal/plan"
 	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
 	runmodule "github.com/jorge07/harness/internal/run"
 	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
 	"github.com/jorge07/harness/internal/run/ui/cli"
 	"github.com/jorge07/harness/internal/shared/application/eventbus"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
 	"github.com/jorge07/harness/internal/shared/infrastructure/git"
 )
@@ -59,8 +58,14 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	if err != nil {
 		return environment{}, err
 	}
-	bus := eventbus.NewBus(plugins, otel.GetTracerProvider(), otel.GetMeterProvider())
-	return environment{key: domain.RunKey{Repo: repo, Worktree: worktree}, commonDir: commonDir, cfg: cfg, bus: bus}, nil
+	key := domain.RunKey{Repo: repo, Worktree: worktree}
+	guards, err := guard.NewPlugins(cfg.Guard.Disabled, cfg.Git.DefaultBranch, modelsByHost(cfg.Roles), worktree,
+		stopAdapter{cfg: cfg, commonDir: commonDir, key: key})
+	if err != nil {
+		return environment{}, err
+	}
+	bus := eventbus.NewBus(append(plugins, guards...), otel.GetTracerProvider(), otel.GetMeterProvider())
+	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus}, nil
 }
 
 func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() error, error) {
@@ -68,12 +73,8 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
-	db, err := dbal.Open(ctx, env.cfg.State.DSN, env.commonDir)
+	db, err := openState(ctx, env.cfg, env.commonDir)
 	if err != nil {
-		return cli.Handlers{}, nil, err
-	}
-	if err := db.Migrate(ctx, persistence.Module, persistence.Migrations); err != nil {
-		_ = db.Close()
 		return cli.Handlers{}, nil, err
 	}
 	gate := planGate{submit: planmodule.NewModule(env.bus, env.key.Worktree).Submit, worktree: env.key.Worktree}

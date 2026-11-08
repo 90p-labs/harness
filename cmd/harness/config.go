@@ -16,6 +16,16 @@ type configView struct {
 	Run     runView                      `yaml:"run"`
 	Plugins []pluginView                 `yaml:"plugins"`
 	Roles   map[string]map[string]string `yaml:"roles"`
+	Guard   guardView                    `yaml:"guard"`
+	Git     gitView                      `yaml:"git"`
+}
+
+type guardView struct {
+	Disabled []string `yaml:"disabled"`
+}
+
+type gitView struct {
+	DefaultBranch string `yaml:"default_branch"`
 }
 
 type stateView struct {
@@ -76,6 +86,8 @@ func viewOf(cfg config.Config) configView {
 		},
 		Plugins: []pluginView{},
 		Roles:   map[string]map[string]string{},
+		Guard:   guardView{Disabled: append([]string{}, cfg.Guard.Disabled...)},
+		Git:     gitView{DefaultBranch: cfg.Git.DefaultBranch},
 	}
 	for _, p := range cfg.Plugins {
 		view.Plugins = append(view.Plugins, pluginView{Name: p.Name, Command: p.Command, Events: p.Events, Timeout: p.Timeout.String()})
