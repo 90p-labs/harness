@@ -34,7 +34,7 @@ Arguments: `$ARGUMENTS`
 
 ## 3. Write the body
 
-Write the body in a file in the scratchpad, for example `pr-body.md`:
+Write the body in a file `pr-body.md` in the scratchpad, or in the temp dir on a host with none. Keep its absolute path, `<body>` below. Do not write it in the repository.
 
 ```
 ## Why
@@ -60,8 +60,8 @@ Write the body in a file in the scratchpad, for example `pr-body.md`:
 
 1. Run `harness verify --commits <base>`. The guard denies a push and a create before it passes.
 2. Push the branch: `git push -u origin HEAD`.
-3. Run `gh pr view --json url,state`. With an open pull request, run `gh pr edit --body-file pr-body.md`.
-4. With no pull request, run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file pr-body.md`.
+3. Run `gh pr view --json url,state`. With an open pull request, run `gh pr edit --body-file <body>`.
+4. With no pull request, run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file <body>`.
 5. Report the URL. Do not mark the pull request ready and do not merge it.
 
 When the guard denies the body, read the reason, fix the body file and run the command again.
