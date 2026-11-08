@@ -17,6 +17,7 @@ var (
 	ErrInvalidPackName   = errors.New("invalid pack name")
 	ErrPackNameTaken     = errors.New("pack name is taken")
 	ErrRuleTaken         = errors.New("rule id or engine rule is taken")
+	ErrScopeOverlap      = errors.New("two packs check one file for the same rule")
 	ErrPackOutsideRepo   = errors.New("pack folder is outside the repository")
 	ErrCustomPackEngine  = errors.New("a custom pack rule needs an engine other than harness")
 	ErrPluginOutsidePack = errors.New("plugin path is outside the pack folder")

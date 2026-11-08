@@ -1,6 +1,7 @@
 package packs
 
 import (
+	"context"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/git"
 )
 
 //go:embed ddd ddd-es nextjs nextjs-ddd-shadcn observability shadcn
@@ -53,7 +55,13 @@ type ruleDocument struct {
 type Catalogue struct {
 	custom map[domain.PackName]domain.Pack
 	files  fstest.MapFS
-	taken  map[string]domain.PackName
+	taken  map[string][]holder
+	shared domain.RuleCatalogue
+}
+
+type holder struct {
+	pack domain.PackName
+	rule domain.Rule
 }
 
 type packFiles fstest.MapFS
@@ -66,7 +74,12 @@ func (p packFiles) Open(name string) (fs.File, error) {
 }
 
 func Load(repo string, entries []string) (Catalogue, []domain.PackName, error) {
-	catalogue := Catalogue{custom: map[domain.PackName]domain.Pack{}, files: fstest.MapFS{}, taken: map[string]domain.PackName{}}
+	return LoadSharing(repo, entries, domain.RuleCatalogue{})
+}
+
+// LoadSharing lets a custom pack hold an id of the shared catalogue that a pack on another engine holds, when no file is in both scopes.
+func LoadSharing(repo string, entries []string, shared domain.RuleCatalogue) (Catalogue, []domain.PackName, error) {
+	catalogue := Catalogue{custom: map[domain.PackName]domain.Pack{}, files: fstest.MapFS{}, taken: map[string][]holder{}, shared: shared}
 	for _, entry := range entries {
 		if strings.Contains(entry, folderMarker) {
 			continue
@@ -77,7 +90,7 @@ func Load(repo string, entries []string) (Catalogue, []domain.PackName, error) {
 		}
 		for _, rule := range pack.Rules {
 			for _, claim := range ruleClaims(rule) {
-				catalogue.taken[claim] = pack.Name
+				catalogue.taken[claim] = []holder{{pack: pack.Name, rule: rule}}
 			}
 		}
 	}
@@ -168,12 +181,23 @@ func (c Catalogue) loadFolder(repo string, root *os.Root, entry string) (domain.
 	if _, taken := c.custom[pack.Name]; taken {
 		return "", fmt.Errorf("%w: %s and another folder both name %q", domain.ErrPackNameTaken, entry, pack.Name)
 	}
+	var files []string
 	for _, rule := range pack.Rules {
 		for _, claim := range ruleClaims(rule) {
-			if owner, held := c.taken[claim]; held {
-				return "", fmt.Errorf("%w: pack %s, rule %s uses %s, which pack %s already holds", domain.ErrRuleTaken, entry, rule.ID, claim, owner)
+			for _, held := range c.taken[claim] {
+				if claim != rule.ID || !c.shared.Has(claim) || held.pack == pack.Name || held.rule.Engine == rule.Engine {
+					return "", fmt.Errorf("%w: pack %s, rule %s uses %s, which pack %s already holds", domain.ErrRuleTaken, entry, rule.ID, claim, held.pack)
+				}
+				if files == nil {
+					if files, err = git.Files(context.Background(), repo); err != nil {
+						return "", fmt.Errorf("list the files for the scopes of %s: %w", entry, err)
+					}
+				}
+				if err := checkOverlap(files, entry, rule, held); err != nil {
+					return "", err
+				}
 			}
-			c.taken[claim] = pack.Name
+			c.taken[claim] = append(c.taken[claim], holder{pack: pack.Name, rule: rule})
 		}
 	}
 	c.files[path.Join(string(pack.Name), packFile)] = &fstest.MapFile{Data: raw}
@@ -189,6 +213,23 @@ func (c Catalogue) loadFolder(repo string, root *os.Root, entry string) (domain.
 	}
 	c.custom[pack.Name] = pack
 	return pack.Name, nil
+}
+
+func checkOverlap(files []string, entry string, rule domain.Rule, held holder) error {
+	for _, file := range files {
+		if reads(rule, file) && reads(held.rule, file) {
+			return fmt.Errorf("%w: pack %s on the engine %s and pack %s on the engine %s both check %s in %s",
+				domain.ErrScopeOverlap, entry, rule.Engine, held.pack, held.rule.Engine, rule.ID, file)
+		}
+	}
+	return nil
+}
+
+func reads(rule domain.Rule, file string) bool {
+	if rule.Engine == domain.EngineHarness && !domain.IsScript(file) {
+		return false
+	}
+	return rule.Scope == "" || git.MatchesAny([]string{rule.Scope}, file)
 }
 
 func folderInRepo(repo, entry string) (string, error) {

@@ -39,7 +39,11 @@ type Handlers struct {
 }
 
 func New(cfg config.Lint, plugins []config.Plugin, worktree, version string, render harnessengine.RenderChart) (Handlers, error) {
-	catalogue, active, err := packs.Load(worktree, cfg.Packs)
+	ruleCatalogue, err := rulecatalogue.Load()
+	if err != nil {
+		return Handlers{}, err
+	}
+	catalogue, active, err := packs.LoadSharing(worktree, cfg.Packs, ruleCatalogue)
 	if err != nil {
 		return Handlers{}, err
 	}
@@ -58,10 +62,6 @@ func New(cfg config.Lint, plugins []config.Plugin, worktree, version string, ren
 		return Handlers{}, err
 	}
 	if err := engines.Cover(rules); err != nil {
-		return Handlers{}, err
-	}
-	ruleCatalogue, err := rulecatalogue.Load()
-	if err != nil {
 		return Handlers{}, err
 	}
 	linter := lintcommand.NewHandler(active, catalogue.Get, engines, version, otel.Tracer(instrumentationName), otel.Meter(instrumentationName))
