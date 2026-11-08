@@ -3,6 +3,7 @@ package checkplan
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,11 +17,13 @@ import (
 )
 
 const (
-	spanName        = "plan.check"
-	attrProblems    = "harness.plan.problems"
-	attrTrack       = "harness.track"
-	archivedPattern = "plan-*.md"
-	noteFormat      = "%s:%d: note: diagram kind %s is not checked"
+	spanName         = "plan.check"
+	attrProblems     = "harness.plan.problems"
+	attrTrack        = "harness.track"
+	archivedPattern  = "plan-*.md"
+	noteFormat       = "%s:%d: note: diagram kind %s is not checked"
+	hiddenPrefix     = "."
+	dependencyFolder = "node_modules"
 )
 
 type Query struct {
@@ -59,9 +62,13 @@ func (h Handler) Handle(ctx context.Context, q Query) (report domain.Report, err
 	if err != nil {
 		return domain.Report{}, err
 	}
+	sketches, err := sketchFiles(filepath.Dir(q.Path))
+	if err != nil {
+		return domain.Report{}, err
+	}
 	doc, problems := domain.Parse(string(text))
 	problems = append(problems, domain.Check(doc, domain.CheckInput{
-		LiveRound: q.LiveRound, ArchivedPlans: archived, Diagrams: h.parser,
+		LiveRound: q.LiveRound, ArchivedPlans: archived, Diagrams: h.parser, Sketches: sketches,
 	})...)
 	slices.SortStableFunc(problems, func(a, b domain.Problem) int {
 		if a.Line != b.Line {
@@ -69,7 +76,23 @@ func (h Handler) Handle(ctx context.Context, q Query) (report domain.Report, err
 		}
 		return strings.Compare(string(a.Rule), string(b.Rule))
 	})
-	return domain.Report{Problems: problems, Notes: notes(doc), Track: domain.Classify(doc)}, nil
+	return domain.Report{Problems: problems, Notes: notes(doc), Track: domain.Classify(doc), Doc: doc}, nil
+}
+
+func sketchFiles(root string) ([]string, error) {
+	var found []string
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if p != root && d.IsDir() && (err != nil || strings.HasPrefix(d.Name(), hiddenPrefix) || d.Name() == dependencyFolder) {
+			return fs.SkipDir
+		}
+		if err != nil || d.IsDir() || filepath.Ext(p) != domain.SketchExt {
+			return err
+		}
+		rel, err := filepath.Rel(root, p)
+		found = append(found, filepath.ToSlash(rel))
+		return err
+	})
+	return found, err
 }
 
 func archivedPlans(path string) ([]string, error) {

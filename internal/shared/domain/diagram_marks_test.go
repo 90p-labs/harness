@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -265,6 +266,58 @@ func TestDiagramKind(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			if got := domain.DiagramKind(c.body); got != c.want {
 				t.Fatalf("DiagramKind = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestParseMarks(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want domain.Marks
+	}{
+		{
+			"state diagram from harness diagram",
+			lines("stateDiagram-v2", "    "+defNew, "    "+defChanged, " a --> b: go (new)", " b", "    class b changed"),
+			domain.Marks{
+				Nodes: map[string]domain.Mark{"b": domain.MarkChanged},
+				Edges: map[int]domain.Mark{3: domain.MarkNew},
+			},
+		},
+		{
+			"flowchart with a comma list and a label mark",
+			lines("flowchart TD", "    "+defNew, "    "+defRemoved, `    a -->|"(removed)"| b`, "    c --> d", "    class a,b new", "    class c removed"),
+			domain.Marks{
+				Nodes: map[string]domain.Mark{"a": domain.MarkNew, "b": domain.MarkNew, "c": domain.MarkRemoved},
+				Edges: map[int]domain.Mark{3: domain.MarkRemoved},
+			},
+		},
+		{
+			"class diagram with cssClass lines",
+			lines("classDiagram", "    "+defNew, "    "+defChanged, "    class A", "    class B", "    A --> B : (changed)", `    cssClass "A" new`, `    cssClass "B" changed`),
+			domain.Marks{
+				Nodes: map[string]domain.Mark{"A": domain.MarkNew, "B": domain.MarkChanged},
+				Edges: map[int]domain.Mark{5: domain.MarkChanged},
+			},
+		},
+		{
+			"a class that is not a mark gives no entry",
+			lines("flowchart TD", "    a --> b", "    class a,b highlight"),
+			domain.Marks{Nodes: map[string]domain.Mark{}, Edges: map[int]domain.Mark{}},
+		},
+		{
+			"an unmarked kind gives no entry",
+			lines("sequenceDiagram", "    A->>B: go (new)"),
+			domain.Marks{Nodes: map[string]domain.Mark{}, Edges: map[int]domain.Mark{}},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := domain.ParseMarks(c.body)
+
+			if !maps.Equal(got.Nodes, c.want.Nodes) || !maps.Equal(got.Edges, c.want.Edges) {
+				t.Fatalf("ParseMarks = %+v, want %+v", got, c.want)
 			}
 		})
 	}

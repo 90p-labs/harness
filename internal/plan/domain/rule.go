@@ -12,5 +12,6 @@ const (
 	RuleSignalsMissing   RuleID = "signals-missing"
 	RuleRegressionImpact RuleID = "regression-impact"
 	RuleDiagram          RuleID = "diagram"
+	RuleDiagramRequired  RuleID = "diagram-required"
 	RuleTraceUnlinked    RuleID = "trace-unlinked"
 )

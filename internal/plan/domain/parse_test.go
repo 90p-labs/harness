@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -146,6 +147,45 @@ func TestParsePlan(t *testing.T) {
 	}
 	if len(doc.Lines) < 121 {
 		t.Errorf("raw lines = %d", len(doc.Lines))
+	}
+}
+
+func TestParseSketches(t *testing.T) {
+	text := strings.Join([]string{
+		"## Tech specs",
+		"",
+		"### Screen",
+		"",
+		"The list: ![List](ui/list.excalidraw) and ![Detail](ui/detail.excalidraw).",
+		"![Photo](ui/photo.png)",
+		"The parser reads `![title](path.excalidraw)` links.",
+		"",
+		"```",
+		"![Fenced](ui/fenced.excalidraw)",
+		"```",
+		"![Dot](./ui/dot.excalidraw)",
+	}, "\n")
+
+	doc, _ := domain.Parse(text)
+
+	want := []domain.Sketch{
+		{Title: "List", Path: "ui/list.excalidraw", Line: 5},
+		{Title: "Detail", Path: "ui/detail.excalidraw", Line: 5},
+		{Title: "Dot", Path: "ui/dot.excalidraw", Line: 12},
+	}
+	if !slices.Equal(doc.Sketches, want) {
+		t.Fatalf("sketches = %+v, want %+v", doc.Sketches, want)
+	}
+}
+
+func TestDocumentBase(t *testing.T) {
+	doc, _ := domain.Parse(readValid(t))
+	if got := doc.Base(); got != "main" {
+		t.Errorf("Base = %q, want main", got)
+	}
+	doc.PRs = []domain.PR{{Branch: "feat/a", Base: "main"}}
+	if got := doc.Base(); got != "" {
+		t.Errorf("Base with no run PR = %q, want empty", got)
 	}
 }
 

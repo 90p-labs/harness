@@ -68,6 +68,75 @@ func TestCheckPlanSpan(t *testing.T) {
 	}
 }
 
+func TestCheckPlanSketches(t *testing.T) {
+	valid, err := os.ReadFile(validPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, _ := newHandler(t)
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ui"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ui", "x.excalidraw"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	links := "\n## Notes\n\n![Found](ui/x.excalidraw)\n![Lost](ui/y.excalidraw)\n"
+
+	report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, dir, valid, []byte(links))})
+
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	var refused []domain.Problem
+	for _, p := range report.Problems {
+		if p.Rule == domain.RuleDiagramRequired {
+			refused = append(refused, p)
+		}
+	}
+	if len(refused) != 1 || !strings.Contains(refused[0].Message, "ui/y.excalidraw") {
+		t.Fatalf("diagram-required = %v, want one problem for ui/y.excalidraw", refused)
+	}
+}
+
+func TestCheckPlanSketchWalk(t *testing.T) {
+	valid, err := os.ReadFile(validPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, _ := newHandler(t)
+	dir := t.TempDir()
+	for _, folder := range []string{"ui", ".cache", "node_modules"} {
+		if err := os.MkdirAll(filepath.Join(dir, folder), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, folder, "x.excalidraw"), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	locked := filepath.Join(dir, "locked")
+	if err := os.Mkdir(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+	links := "\n## Notes\n\n![Ui](ui/x.excalidraw)\n![Cache](.cache/x.excalidraw)\n![Modules](node_modules/x.excalidraw)\n"
+
+	report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, dir, valid, []byte(links))})
+
+	if err != nil {
+		t.Fatalf("an unreadable folder must not stop the check: %v", err)
+	}
+	var refused []string
+	for _, p := range report.Problems {
+		if p.Rule == domain.RuleDiagramRequired {
+			refused = append(refused, p.Message)
+		}
+	}
+	if len(refused) != 2 || !strings.Contains(refused[0], ".cache/") || !strings.Contains(refused[1], "node_modules/") {
+		t.Fatalf("diagram-required = %v, want the .cache and node_modules links refused", refused)
+	}
+}
+
 func TestCheckPlanReport(t *testing.T) {
 	valid, err := os.ReadFile(validPlan)
 	if err != nil {
@@ -118,6 +187,17 @@ func TestCheckPlanReport(t *testing.T) {
 		}
 		if !slices.IsSortedFunc(report.Problems, func(a, b domain.Problem) int { return a.Line - b.Line }) {
 			t.Errorf("problems are not sorted by line: %v", report.Problems)
+		}
+	})
+
+	t.Run("the report carries the parsed document", func(t *testing.T) {
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), valid)})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if report.Doc.Base() != "main" || len(report.Doc.Tasks) != 2 {
+			t.Errorf("Doc base = %q with %d tasks, want main and 2", report.Doc.Base(), len(report.Doc.Tasks))
 		}
 	})
 
