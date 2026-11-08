@@ -205,6 +205,34 @@ func TestLoadPluginTimeout(t *testing.T) {
 	}
 }
 
+func TestLoadGates(t *testing.T) {
+	got, err := load(t, `gates:
+  - id: go-test
+    run: go test ./...
+    paths: ["**/*.go", go.mod]
+    timeout: 90s
+    baseline: .harness-baseline/lint.json
+  - id: plain
+    run: "true"
+`)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	want := []config.Gate{
+		{ID: "go-test", Run: "go test ./...", Paths: []string{"**/*.go", "go.mod"}, Timeout: 90 * time.Second, Baseline: ".harness-baseline/lint.json"},
+		{ID: "plain", Run: "true"},
+	}
+	if !reflect.DeepEqual(got.Gates, want) {
+		t.Errorf("gates = %+v, want %+v", got.Gates, want)
+	}
+}
+
+func TestLoadGateUnknownKey(t *testing.T) {
+	if _, err := load(t, "gates:\n  - {id: a, run: x, cmd: y}\n"); err == nil {
+		t.Fatal("want an error for the unknown gate key")
+	}
+}
+
 func TestLoadInvalidTimeout(t *testing.T) {
 	for name, timeout := range map[string]string{"bare number": "5", "negative": "-1s"} {
 		t.Run(name, func(t *testing.T) {
