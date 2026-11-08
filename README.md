@@ -388,6 +388,7 @@ The command refuses a draft with a missing section, adds the harness version, th
 
 ## Documents
 
+- [`examples/`](examples/): set up the harness on a Symfony, a Go or a Next.js project, with the gates in containers.
 - [`docs/go-live.md`](docs/go-live.md): follow a run from the merge to production.
 - [`docs/adr/`](docs/adr/): the architecture decision records.
 - [`DESIGN.md`](DESIGN.md): the modules, the loop, the events, the config keys and the rules.
