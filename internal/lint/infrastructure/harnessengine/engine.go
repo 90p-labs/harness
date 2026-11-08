@@ -63,10 +63,11 @@ var _ domain.Engine = (*Engine)(nil)
 
 type Engine struct {
 	settings domain.Settings
+	render   RenderChart
 }
 
-func New(settings domain.Settings) *Engine {
-	return &Engine{settings: settings}
+func New(settings domain.Settings, render RenderChart) *Engine {
+	return &Engine{settings: settings, render: render}
 }
 
 func (*Engine) Name() domain.EngineName {
@@ -91,7 +92,7 @@ func (e *Engine) Run(ctx context.Context, dir string, rules []domain.Rule) ([]sh
 		return nil, err
 	}
 	settings := e.settingsFor(rules)
-	resources, err := renderChart(ctx, dir, tree, settings.Observability.Chart, rules)
+	resources, err := renderChart(ctx, e.render, dir, tree, settings.Observability.Chart, rules)
 	if err != nil {
 		return nil, err
 	}

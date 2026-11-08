@@ -1,10 +1,9 @@
 package harnessengine
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"os/exec"
 	"path"
 	"regexp"
 	"slices"
@@ -16,8 +15,6 @@ import (
 )
 
 const (
-	helmBinary     = "helm"
-	helmTemplate   = "template"
 	kindDeployment = "Deployment"
 	kindHPA        = "HorizontalPodAutoscaler"
 	latestTag      = "latest"
@@ -30,6 +27,7 @@ const (
 var (
 	documentSeparator = regexp.MustCompile(`(?m)^---[ \t]*$`)
 	sourceComment     = regexp.MustCompile(`(?m)^# Source: (\S+)`)
+	errNoSource       = errors.New("the rendered manifest has no `# Source:` comment")
 )
 
 type probe struct {
@@ -69,28 +67,25 @@ var chartChecks = map[string]func([]chartResource) []domain.Violation{
 	domain.RuleHPATarget:           orphanHPAs,
 }
 
-func renderChart(ctx context.Context, dir string, tree domain.Tree, chart string, rules []domain.Rule) ([]chartResource, error) {
+type RenderChart func(ctx context.Context, dir, chart string) ([]byte, error)
+
+func renderChart(ctx context.Context, render RenderChart, dir string, tree domain.Tree, chart string, rules []domain.Rule) ([]chartResource, error) {
 	wanted := slices.ContainsFunc(rules, func(rule domain.Rule) bool { _, ok := chartChecks[rule.ID]; return ok })
 	if !wanted || !slices.ContainsFunc(tree.Files, func(file string) bool { return strings.HasPrefix(file, chart+slash) }) {
 		return nil, nil
 	}
-	binary, err := exec.LookPath(helmBinary)
+	out, err := render(ctx, dir, chart)
 	if err != nil {
-		return nil, fmt.Errorf("%w: the chart rules need %s on the path to render %s", domain.ErrEngineMissing, helmBinary, chart)
-	}
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binary, helmTemplate, chart)
-	cmd.Dir = dir
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("helm template %s: %w: %s", chart, err, bytes.TrimSpace(stderr.Bytes()))
+		return nil, fmt.Errorf("the chart rules: %w", err)
 	}
 	var resources []chartResource
 	for _, document := range documentSeparator.Split(string(out), -1) {
+		if strings.TrimSpace(document) == "" {
+			continue
+		}
 		source := sourceComment.FindStringSubmatch(document)
 		if source == nil {
-			continue
+			return nil, fmt.Errorf("the chart rules: %s: %w", chart, errNoSource)
 		}
 		var resource chartResource
 		if err := yaml.Unmarshal([]byte(document), &resource); err != nil {

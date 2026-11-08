@@ -30,13 +30,13 @@ type Handlers struct {
 	Baseline baseline.Handler
 }
 
-func New(cfg config.Lint, worktree, version string) (Handlers, error) {
+func New(cfg config.Lint, worktree, version string, render harnessengine.RenderChart) (Handlers, error) {
 	catalogue, active, err := packs.Load(worktree, cfg.Packs)
 	if err != nil {
 		return Handlers{}, err
 	}
 	version = catalogue.Version(version)
-	engines := []domain.Engine{harnessengine.New(lintconfig.Decode(cfg)), biome.New(catalogue.Files()), oxlint.New()}
+	engines := []domain.Engine{harnessengine.New(lintconfig.Decode(cfg), render), biome.New(catalogue.Files()), oxlint.New()}
 	linter := lintcommand.NewHandler(active, catalogue.Get, engines, version, otel.Tracer(instrumentationName), otel.Meter(instrumentationName))
 	return Handlers{
 		Lint: linter,

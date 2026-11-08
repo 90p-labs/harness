@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/jorge07/harness/internal/deploy"
 	gatemodule "github.com/jorge07/harness/internal/gate"
 	"github.com/jorge07/harness/internal/gate/application/command/initgates"
 	gatedomain "github.com/jorge07/harness/internal/gate/domain"
@@ -102,7 +103,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 			return fmt.Errorf("%w (chosen packs: %s)", errGatesBeforePacks, strings.Join(cfg.Lint.Packs, listSeparator))
 		}
 	}
-	lint, err := lintmodule.New(cfg.Lint, worktree, version)
+	lint, err := lintmodule.New(cfg.Lint, worktree, version, deploy.RenderChart(env.bus))
 	if err != nil {
 		return err
 	}
