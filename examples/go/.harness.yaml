@@ -1,3 +1,12 @@
+plugins:
+  - name: go-arch-lint
+    command: [sh, -c, 'exec sh "$(git rev-parse --show-toplevel)/.harness/plugins/go-arch-lint.sh"']
+    events: [lint.check]
+    timeout: 60s
+
+lint:
+  packs: [./lint/architecture]
+
 verify:
   parallel: 2
 
@@ -17,3 +26,8 @@ gates:
     run: docker compose run --rm -T go go test ./...
     paths: *go-inputs
     needs: [go-fmt, go-vet]
+  - id: lint
+    run: harness lint --json
+    baseline: .harness-baseline/lint.json
+  - id: lint-canaries
+    run: harness lint canaries
