@@ -1,0 +1,30 @@
+-- src/orders/domain/order.aggregate.ts --
+export class Order {
+  readonly id: string;
+  private lines: string[] = [];
+  status: string;
+
+  constructor(id: string, status: string) {
+    this.id = id;
+    this.status = status;
+  }
+
+  addLine(line: string): void {
+    this.lines.push(line);
+  }
+}
+-- src/orders/domain/invoice.aggregate.ts --
+export class Invoice {
+  readonly id: string;
+  private lines: string[] = [];
+  protected status: string;
+
+  constructor(id: string, status: string) {
+    this.id = id;
+    this.status = status;
+  }
+
+  addLine(line: string): void {
+    this.lines.push(line);
+  }
+}

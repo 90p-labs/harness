@@ -1,0 +1,28 @@
+-- src/orders/domain/money.value-object.ts --
+export class Money {
+  readonly amount: number;
+
+  constructor(amount: number) {
+    this.amount = amount;
+  }
+
+  equals(other: Money): boolean {
+    return this.amount === other.amount;
+  }
+}
+-- src/orders/domain/quantity.value-object.ts --
+export class Quantity {
+  readonly units: number;
+
+  private constructor(units: number) {
+    this.units = units;
+  }
+
+  static of(units: number): Quantity {
+    return new Quantity(units);
+  }
+
+  equals(other: Quantity): boolean {
+    return this.units === other.units;
+  }
+}
