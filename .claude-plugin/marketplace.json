@@ -1,0 +1,14 @@
+{
+  "name": "harness",
+  "description": "Marketplace of the harness plugin.",
+  "owner": {
+    "name": "Jorge Arco"
+  },
+  "plugins": [
+    {
+      "name": "harness",
+      "source": "./",
+      "description": "The harness loop skill, the reviewer agent and the guard hooks."
+    }
+  ]
+}

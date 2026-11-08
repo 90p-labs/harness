@@ -1,0 +1,33 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Check the tag against the plugin manifests
+        run: |
+          for manifest in .claude-plugin/plugin.json .codex-plugin/plugin.json; do
+            version=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$manifest")
+            if [ "v$version" != "$TAG" ]; then
+              echo "$manifest has version $version, the tag is $TAG"
+              exit 1
+            fi
+          done
+      - name: Build the binaries
+        run: make dist VERSION="$TAG"
+      - name: Publish the release
+        run: gh release create "$TAG" dist/harness-* --title "$TAG" --generate-notes

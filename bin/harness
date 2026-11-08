@@ -1,0 +1,119 @@
+#!/bin/sh
+set -e
+
+release_repo=jorge07/harness
+config_file=.harness.yaml
+retry_minutes=10
+
+skip_hook() {
+	echo '{}'
+	exit 0
+}
+
+# A user plugin runs its hooks in every folder, so a hook acts only in a repository that opted in.
+if [ "${1:-}" = hook ]; then
+	top=$(git rev-parse --show-toplevel 2>/dev/null) || skip_hook
+	[ -f "$top/$config_file" ] || skip_hook
+fi
+
+script=$0
+case $script in */*) ;; *) script=./$script ;; esac
+while [ -L "$script" ]; do
+	link=$(readlink "$script")
+	case $link in
+		/*) script=$link ;;
+		*) script=${script%/*}/$link ;;
+	esac
+done
+root=${script%/*}/..
+
+case $(uname -sm) in
+	"Darwin arm64") platform=darwin-arm64 ;;
+	"Darwin x86_64") platform=darwin-amd64 ;;
+	"Linux aarch64" | "Linux arm64") platform=linux-arm64 ;;
+	"Linux x86_64") platform=linux-amd64 ;;
+	*) platform=$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m) ;;
+esac
+target="$root/dist/harness-$platform"
+
+if [ -x "$target" ]; then
+	exec "$target" "$@"
+fi
+
+root=$(cd -P "$root" && pwd -P)
+target="$root/dist/harness-$platform"
+lock="$root/dist/.download.lock"
+failure="$root/dist/.download.failed"
+tmp=
+no_binary_help="install gh and log in (gh auth login), or install Go and run: \"$root/bin/harness\" version"
+
+read_version() {
+	version=
+	while IFS= read -r line; do
+		case $line in
+			*'"version"'*) version=${line#*\"version\"}; version=${version#*\"}; version=${version%%\"*}; break ;;
+		esac
+	done <"$root/.claude-plugin/plugin.json"
+	if [ -z "$version" ]; then
+		echo "no version in $root/.claude-plugin/plugin.json" >&2
+		return 1
+	fi
+}
+
+download() {
+	read_version || return 1
+	mkdir -p "$root/dist"
+	tmp=$(mktemp -d "$root/dist/.download.XXXXXX") || return 1
+	status=0
+	if gh release download "v$version" -R "$release_repo" -p "harness-$platform" -D "$tmp" --clobber &&
+		[ -s "$tmp/harness-$platform" ] &&
+		chmod +x "$tmp/harness-$platform"; then
+		mv -f "$tmp/harness-$platform" "$target" || status=1
+	else
+		status=1
+	fi
+	rm -rf "$tmp"
+	return $status
+}
+
+# A hook has a short timeout and must not block the session, so it never builds and only downloads in the background.
+if [ "${1:-}" = hook ]; then
+	if command -v gh >/dev/null 2>&1 && mkdir -p "$root/dist"; then
+		for stale in "$lock" "$failure"; do
+			if [ -n "$(find "$stale" -mmin +"$retry_minutes" 2>/dev/null)" ]; then
+				rm -f "$stale"
+			fi
+		done
+		if [ -f "$failure" ]; then
+			echo "harness: binary missing, hook skipped. The release download failed: $(cat "$failure"). To fix: $no_binary_help" >&2
+			skip_hook
+		fi
+		if (set -C; : >"$lock") 2>/dev/null; then
+			(
+				trap 'rm -f "$lock"; [ -z "${tmp:-}" ] || rm -rf "$tmp"' EXIT
+				trap 'exit 1' HUP INT TERM
+				# The error goes into the held lock first, so a running download never shows as failed.
+				download 2>"$lock" || mv -f "$lock" "$failure"
+			) </dev/null >/dev/null 2>&1 &
+			echo "harness: binary missing, hook skipped. Downloading the release binary in the background." >&2
+			skip_hook
+		fi
+		echo "harness: binary missing, hook skipped. A download is already running." >&2
+		skip_hook
+	fi
+	echo "harness: binary missing, hook skipped. To fix: $no_binary_help" >&2
+	skip_hook
+fi
+
+if command -v gh >/dev/null 2>&1 && download >&2; then
+	exec "$target" "$@"
+fi
+
+if command -v go >/dev/null 2>&1 && read_version; then
+	echo "harness: building $target" >&2
+	(cd "$root" && go build -ldflags "-X main.version=v$version" -o "$target.$$" ./cmd/harness && mv -f "$target.$$" "$target") >&2
+	exec "$target" "$@"
+fi
+
+echo "harness: binary missing and go is not on PATH. To fix: $no_binary_help" >&2
+exit 127
