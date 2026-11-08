@@ -36,6 +36,7 @@ const (
 	keyPlugins         = "plugins"
 	keyRoles           = "roles"
 	keyGuardDisabled   = "guard.disabled"
+	keyDeployDisabled  = "deploy.disabled"
 	keyGitBranch       = "git.default_branch"
 
 	keyLiveEnvironment = "live.environment"
@@ -64,6 +65,7 @@ type Config struct {
 	Plugins []Plugin            `mapstructure:"plugins"`
 	Roles   map[string]RoleHost `mapstructure:"roles"`
 	Guard   Guard               `mapstructure:"guard"`
+	Deploy  Deploy              `mapstructure:"deploy"`
 	Git     Git                 `mapstructure:"git"`
 	Gates   []Gate              `mapstructure:"gates"`
 	Lint    Lint                `mapstructure:"lint"`
@@ -107,6 +109,10 @@ type Gate struct {
 }
 
 type Guard struct {
+	Disabled []string `mapstructure:"disabled"`
+}
+
+type Deploy struct {
 	Disabled []string `mapstructure:"disabled"`
 }
 
@@ -191,6 +197,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyMaxStopBlocks, defaultRounds)
 	v.SetDefault(keyPlugins, []any{})
 	v.SetDefault(keyGuardDisabled, []any{})
+	v.SetDefault(keyDeployDisabled, []any{})
 	v.SetDefault(keyGitBranch, "")
 	v.SetDefault(keyLiveEnvironment, defaultLiveEnvironment)
 	v.SetDefault(keyLiveRollback, "")

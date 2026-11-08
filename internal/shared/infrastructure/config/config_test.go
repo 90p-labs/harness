@@ -404,6 +404,24 @@ func TestLoadInvalidPlugin(t *testing.T) {
 	}
 }
 
+func TestDeployDisabled(t *testing.T) {
+	defaults, err := config.Load(flagSet(t), t.TempDir())
+	if err != nil {
+		t.Fatalf("load defaults: %v", err)
+	}
+	if defaults.Deploy.Disabled == nil || len(defaults.Deploy.Disabled) != 0 {
+		t.Errorf("default deploy.disabled = %#v, want an empty list", defaults.Deploy.Disabled)
+	}
+
+	got, err := load(t, "deploy:\n  disabled: [helm]\n")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !reflect.DeepEqual(got.Deploy.Disabled, []string{"helm"}) {
+		t.Errorf("deploy.disabled = %v", got.Deploy.Disabled)
+	}
+}
+
 func TestGuardConfig(t *testing.T) {
 	defaults, err := config.Load(flagSet(t), t.TempDir())
 	if err != nil {

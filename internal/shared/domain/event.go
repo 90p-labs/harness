@@ -25,6 +25,8 @@ const (
 	EventGateBefore          EventName = "gate.before"
 	EventGateAfter           EventName = "gate.after"
 	EventSignalsCheck        EventName = "signals.check"
+	EventGatesDetect         EventName = "gates.detect"
+	EventChartRender         EventName = "chart.render"
 )
 
 var catalogue = map[EventName]Kind{
@@ -41,6 +43,8 @@ var catalogue = map[EventName]Kind{
 	EventGateBefore:          KindVeto,
 	EventGateAfter:           KindObserve,
 	EventSignalsCheck:        KindCollect,
+	EventGatesDetect:         KindCollect,
+	EventChartRender:         KindCollect,
 }
 
 func KindOf(name EventName) (Kind, bool) {
