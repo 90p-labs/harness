@@ -1,12 +1,16 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+)
 
 type Phase string
 
 const (
-	PhaseReleasing Phase = "releasing"
-	PhaseObserving Phase = "observing"
+	PhaseReleasing Phase = shareddomain.PhaseReleasing
+	PhaseObserving Phase = shareddomain.PhaseObserving
 )
 
 type Outcome string

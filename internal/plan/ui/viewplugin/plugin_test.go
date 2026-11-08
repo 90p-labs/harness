@@ -14,10 +14,8 @@ import (
 )
 
 const (
-	worktree      = "/work/tree"
-	runID         = "20261108-081430-add-the-login-page"
-	otherPhase    = "working"
-	previousPhase = "planning"
+	worktree = "/work/tree"
+	runID    = "20261108-081430-add-the-login-page"
 )
 
 var (
@@ -31,7 +29,7 @@ func liveRound(round int, err error) viewplugin.LiveRound {
 
 func envelope(t *testing.T, to string) shareddomain.Envelope {
 	t.Helper()
-	raw, err := json.Marshal(shareddomain.TransitionPayload{Event: shareddomain.TransitionSubmitForReview, From: previousPhase, To: to})
+	raw, err := json.Marshal(shareddomain.TransitionPayload{Event: shareddomain.TransitionSubmitForReview, From: shareddomain.PhasePlanning, To: to})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,12 +55,12 @@ func TestViewPlugin(t *testing.T) {
 	t.Run("awaiting approval renders the page of the run in its live round", func(t *testing.T) {
 		commands = nil
 
-		verdict, err := plugin.Handle(t.Context(), envelope(t, viewplugin.PhaseAwaitingApproval))
+		verdict, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
 
 		want := renderview.Command{
 			Path:      filepath.Join(worktree, ".harness", "runs", runID, "plan.md"),
 			RunID:     runID,
-			Phase:     viewplugin.PhaseAwaitingApproval,
+			Phase:     shareddomain.PhaseAwaitingApproval,
 			LiveRound: 1,
 			Proofs:    true,
 		}
@@ -78,7 +76,7 @@ func TestViewPlugin(t *testing.T) {
 		commands = nil
 		noRound := viewplugin.New(worktree, render, liveRound(1, errRound))
 
-		verdict, err := noRound.Handle(t.Context(), envelope(t, viewplugin.PhaseAwaitingApproval))
+		verdict, err := noRound.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
 
 		if !errors.Is(err, errRound) || verdict.Kind != shareddomain.VerdictAllow {
 			t.Fatalf("verdict = %v, err = %v, want allow and the round error", verdict, err)
@@ -91,7 +89,7 @@ func TestViewPlugin(t *testing.T) {
 	t.Run("another phase renders nothing", func(t *testing.T) {
 		commands = nil
 
-		verdict, err := plugin.Handle(t.Context(), envelope(t, otherPhase))
+		verdict, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseWorking))
 
 		if err != nil || verdict.Kind != shareddomain.VerdictAllow || len(commands) != 0 {
 			t.Errorf("verdict = %v, err = %v, commands = %v", verdict, err, commands)
@@ -101,7 +99,7 @@ func TestViewPlugin(t *testing.T) {
 	t.Run("a render error allows and reports the error", func(t *testing.T) {
 		failing := viewplugin.New(worktree, func(context.Context, renderview.Command) (string, error) { return "", errRender }, liveRound(0, nil))
 
-		verdict, err := failing.Handle(t.Context(), envelope(t, viewplugin.PhaseAwaitingApproval))
+		verdict, err := failing.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
 
 		if !errors.Is(err, errRender) || verdict.Kind != shareddomain.VerdictAllow {
 			t.Errorf("verdict = %v, err = %v, want allow and the render error", verdict, err)
@@ -109,7 +107,7 @@ func TestViewPlugin(t *testing.T) {
 	})
 
 	t.Run("a bad payload reports an error", func(t *testing.T) {
-		bad := envelope(t, viewplugin.PhaseAwaitingApproval)
+		bad := envelope(t, shareddomain.PhaseAwaitingApproval)
 		bad.Payload = []byte("{")
 
 		_, err := plugin.Handle(t.Context(), bad)

@@ -11,10 +11,7 @@ import (
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
-const (
-	Name                  = "plan.view"
-	PhaseAwaitingApproval = "awaiting_approval"
-)
+const Name = "plan.view"
 
 type Render func(ctx context.Context, c renderview.Command) (string, error)
 
@@ -44,7 +41,7 @@ func (p Plugin) Handle(ctx context.Context, envelope shareddomain.Envelope) (sha
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
 		return allow, fmt.Errorf("decode transition payload: %w", err)
 	}
-	if payload.To != PhaseAwaitingApproval {
+	if payload.To != shareddomain.PhaseAwaitingApproval {
 		return allow, nil
 	}
 	round, roundErr := p.liveRound(ctx)
