@@ -1,0 +1,11 @@
+{
+  "blocks": [
+    {
+      "owner": "examples/nextjs/lint/canaries/ddd-layer-direction/src/contexts/cart",
+      "rule": "ddd-layer-imports",
+      "paths": [
+        "examples/nextjs/lint/canaries/ddd-layer-direction/src/contexts/cart/application/commands/add-item/add-item.handler.ts"
+      ]
+    }
+  ]
+}

@@ -2,11 +2,20 @@
 set -eu
 
 envelope=$(cat)
-report=$(docker compose --progress quiet run --rm -T python uv run --locked --exact ruff check --no-cache --output-format json --exit-zero . </dev/null)
+report=$(mktemp)
+container="ruff-$$"
+trap 'rm -f "$report"' EXIT
+# A TERM stops the compose client, not the container.
+trap 'docker kill "$container" >/dev/null 2>&1; exit 143' TERM
 
-printf '%s\n%s\n' "$envelope" "$report" | jq -s '.[0].payload as $payload | {
+# A pack scope is one glob with no exclusion, so ruff itself leaves out the canaries.
+docker compose --progress quiet run --rm -T --name "$container" python uv run --no-sync \
+  ruff check --no-cache --output-format json --exit-zero --extend-exclude lint/canaries . </dev/null >"$report" &
+wait $!
+
+printf '%s\n' "$envelope" | jq --slurpfile ruff "$report" '.payload as $payload | {
   verdict: "allow",
-  findings: [.[1][] | (.filename | ltrimstr("/app/")) as $file
+  findings: [$ruff[0][] | (.filename | ltrimstr("/app/")) as $file
     | select($file | IN($payload.files[]))
     | {rule: $payload.rules[0].id, file: $file, line: .location.row, message: ([.code, .message] | map(values) | join(" "))}]
 }'

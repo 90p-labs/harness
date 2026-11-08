@@ -1,0 +1,12 @@
+pack: ddd
+rules:
+  - id: ddd/src-roots
+    canary: lint/canaries/ddd-src-roots
+  - id: ddd/domain-purity
+    canary: lint/canaries/ddd-domain-purity
+  - id: ddd/layer-direction
+    canary: lint/canaries/ddd-layer-direction
+  - id: ddd/cross-context
+    canary: lint/canaries/ddd-cross-context
+  - id: ddd/file-suffix
+    canary: lint/canaries/ddd-file-suffix
