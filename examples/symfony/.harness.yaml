@@ -2,5 +2,11 @@ plugins:
   - name: make-gates
     command: [sh, .harness/plugins/make-gates.sh]
     events: [gates.detect]
+  - name: deptrac
+    command: [sh, -c, 'exec sh "$(git rev-parse --show-toplevel)/.harness/plugins/deptrac.sh"']
+    events: [lint.check]
+    timeout: 60s
+lint:
+  packs: [./lint/architecture]
 verify:
   parallel: 3

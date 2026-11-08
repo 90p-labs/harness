@@ -4,7 +4,7 @@ Each folder holds only the files that you add to a project to set up the harness
 
 | Example | Project | Gate source | Toolchain service |
 |---|---|---|---|
-| [`symfony/`](symfony/) | Symfony | A Makefile with `## setup` and `## gate` targets and a `gates.detect` plugin | `php`, the `composer` image |
+| [`symfony/`](symfony/) | Symfony | A Makefile with `## setup` and `## gate` targets and a `gates.detect` plugin, and the architecture rules with deptrac and canaries | `php`, the `composer` image |
 | [`go/`](go/) | Go module | The `setup` and `gates` keys, with the gate ids of the built-in detection of `go.mod` | `go`, the `golang` image |
 | [`nextjs/`](nextjs/) | Next.js and shadcn | The `setup` and `gates` keys and the lint packs `nextjs` and `shadcn` | `node`, a `Dockerfile` with a pinned pnpm |
 | [`python/`](python/) | Python with uv | The `setup` and `gates` keys, written by hand, and a custom lint pack with a ruff lint engine plugin | `python`, the `uv` image |
