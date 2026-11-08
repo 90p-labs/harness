@@ -147,7 +147,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		fmt.Fprintf(out, lintSetupFormat, language)
 	}
 
-	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus).
+	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath, Manifest: lintdomain.ManifestFile}, env.bus).
 		Handle(ctx, initgates.Command{Dir: worktree})
 	switch {
 	case errors.Is(err, gatedomain.ErrGatesExist):

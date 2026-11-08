@@ -130,7 +130,7 @@ func TestInitTwiceKeepsTheSetup(t *testing.T) {
 	}
 }
 
-func TestInitWithAManifestNamesNoLanguage(t *testing.T) {
+func TestInitWithAManifest(t *testing.T) {
 	clearHarnessEnv(t)
 	dir := initRepo(t)
 	writeRepoFile(t, dir, "go.mod", goModuleFile)
@@ -140,6 +140,12 @@ func TestInitWithAManifestNamesNoLanguage(t *testing.T) {
 
 	if code != exitOK || strings.Contains(stdout, lintSetupPrefix) {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want no lint-setup line with %s", code, stdout, stderr, lintdomain.ManifestFile)
+	}
+	if !strings.Contains(stdout, "gates: wrote go-fmt, go-vet, go-test, lint-canaries\n") {
+		t.Errorf("stdout = %q, want the lint-canaries gate", stdout)
+	}
+	if config := readConfig(t, dir); !strings.Contains(config, "run: harness lint canaries") {
+		t.Errorf(".harness.yaml = %q, want the canary gate", config)
 	}
 }
 
