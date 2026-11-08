@@ -34,6 +34,7 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 | lint | `internal/lint` | Rule packs |
 | live | `internal/live` | Merge and deploy records, signal checks, regression findings |
 | deploy | `internal/deploy` | Default deploy tool plugins (`helm`, `promtool`) on `gates.detect` and `chart.render`, and the chart render query |
+| report | `internal/report` | Harness bug reports: section check, redaction, the GitHub issue |
 
 `ROADMAP.md` gives the pull request that builds each module.
 
@@ -552,7 +553,7 @@ The track comes from `Classify`. It is `full` when the code tree touches 3 or mo
 
 The state file is `.harness/state.db` in the git common dir, so each linked worktree shares it. The DBAL base dir is the common dir, and the default DSN `sqlite:.harness/state.db` is relative to it.
 
-Only a `run` command and `plan check` load the config. Only a `run` command, and `plan check` without `--file`, open the store. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
+Only a `run` command, `plan check` and `report` load the config. Only a `run` command, `plan check` without `--file`, and `report` open the store. `report` reads only the active run, and an error gives the run line `none`. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
 
 `cmd/harness` wraps the `Args` of every command in a usage error, and a command with no `Args` takes none. A `run` command checks its required flag in its `Args` function, because cobra checks `MarkFlagRequired` after the `Args` step.
 
@@ -862,6 +863,30 @@ The findings text names the round, the PR, the SHA, each breach with its panel, 
 `harness live check` checks every run of the repo in `releasing` or `observing`. It prints the id, the phase and the outcome for each run. It exits 1 when one run fails. A cron job or a CI schedule can run it. The session plugin `live.session` also runs the check on `session.started`. It adds one context line `live: <id> <phase> <outcome>` for each run. A check error with no run line gets the line `live: check failed: <error>`. The check stops after 20 seconds. See `docs/go-live.md`.
 
 The hook command also fills `Envelope.Run` with the id and the phase of the active run. With no active run, or a state that does not open, `Run` stays empty.
+
+## Report command
+
+`harness report --title T --body-file F` files a harness bug as an issue in `jorge07/harness` with the label `bug`. The skill `skills/report/` guides the agent: reproduce, collect the traces, write the draft, run a dry-run, wait for the user, and file.
+
+The draft is markdown. It needs each heading below with text. A section with a `[fill: ...]` placeholder counts as missing. A heading inside a code fence does not count.
+
+| Heading | Sub-headings |
+|---|---|
+| `## Summary` | none |
+| `## Reproduction` | `### Commands`, `### Config`, `### Expected`, `### Actual` |
+| `## Traces` | `### Host`, `### Output` |
+| `## Fix suggestion` | none |
+| `## Workaround` | none |
+
+Rules:
+
+- A missing section stops the command with exit 2 and the list of the missing sections. No gh call happens, also with `--dry-run`.
+- The command puts an `### Environment` block directly after `## Traces`: the harness version, the OS and architecture, and the active run id and phase, or `none`.
+- Then it redacts the title and the body. It writes `<redacted>` for an email, a GitHub, Slack, GitLab or npm token, an API key, an AWS key, an `Authorization` header value, a JWT, a private key block and a URL credential. It also redacts the value of a key or a flag whose name holds `token`, `secret`, `password`, `api_key`, `access_key` or `private_key`. It writes `~` for the home folder, also in its dash-encoded form `-Users-<name>`, and for any `/Users/<name>` and `/home/<name>`. A `git@host:path` remote stays.
+- `--dry-run` prints the title, a blank line and the body. It files nothing.
+- Without `--dry-run`, it runs `gh issue create -R jorge07/harness --title T --label bug --body-file -` with the body on stdin, and prints the issue URL. A gh error exits 1 with the gh stderr.
+
+The live and report modules run gh through `internal/shared/infrastructure/github`.
 
 ## Hosts
 

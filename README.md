@@ -317,6 +317,18 @@ With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes 
 | Plugins | every transition (`run.transition.before`, `run.transition.after`), each gate, each plan and each host hook |
 | Live check | `releasing` and `observing`: `harness live check` reads the deploy and the signals |
 
+## Report a harness bug
+
+An agent files a bug about the harness with the `report` skill (`/report` on Claude Code). The skill reproduces the bug on a clean repository, fills `skills/report/references/issue-template.md` and shows a dry-run to the user. It files the issue only after the user says yes:
+
+```console
+$ harness report --dry-run --title "hook: a bad Stop payload exits 2" --body-file draft.md
+$ harness report --title "hook: a bad Stop payload exits 2" --body-file draft.md
+https://github.com/jorge07/harness/issues/31
+```
+
+The command refuses a draft with a missing section, adds the harness version, the OS and the active run, and redacts emails, home paths, tokens and keys.
+
 ## Documents
 
 - [`docs/go-live.md`](docs/go-live.md): follow a run from the merge to production.
