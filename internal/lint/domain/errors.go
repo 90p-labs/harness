@@ -21,4 +21,12 @@ var (
 	ErrCustomPackEngine  = errors.New("a custom pack rule needs an engine other than harness")
 	ErrPluginOutsidePack = errors.New("plugin path is outside the pack folder")
 	ErrUnknownSeverity   = errors.New("rule severity must be error, warn or info")
+
+	ErrNoManifest         = errors.New("no " + ManifestFile + ": run the lint-setup skill to write it")
+	ErrUnknownRule        = errors.New("unknown rule id")
+	ErrDuplicateRule      = errors.New("rule id is listed twice")
+	ErrCanaryOrWaiver     = errors.New("a rule needs exactly one of canary or waived")
+	ErrCanaryOutsideRepo  = errors.New("canary folder is outside the repository")
+	ErrCanaryMissing      = errors.New("canary folder is missing")
+	ErrCanaryRuleInactive = errors.New("no active lint pack has the canary rule")
 )

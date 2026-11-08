@@ -1,0 +1,12 @@
+name: architecture
+rules:
+  - id: ddd/domain-purity
+    engine: deptrac
+    severity: error
+    scope: "src/**/*.php"
+    message: The domain uses only itself, never the application layer, the infrastructure layer or a framework.
+  - id: ddd/layer-direction
+    engine: deptrac
+    severity: error
+    scope: "src/**/*.php"
+    message: The application layer uses the domain layer, never the infrastructure layer.

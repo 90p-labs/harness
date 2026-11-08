@@ -66,12 +66,15 @@ func (p packFiles) Open(name string) (fs.File, error) {
 }
 
 func Load(repo string, entries []string) (Catalogue, []domain.PackName, error) {
-	builtins, err := All()
-	if err != nil {
-		return Catalogue{}, nil, err
-	}
 	catalogue := Catalogue{custom: map[domain.PackName]domain.Pack{}, files: fstest.MapFS{}, taken: map[string]bool{}}
-	for _, pack := range builtins {
+	for _, entry := range entries {
+		if strings.Contains(entry, folderMarker) {
+			continue
+		}
+		pack, err := Get(domain.PackName(entry))
+		if err != nil {
+			return Catalogue{}, nil, err
+		}
 		for _, rule := range pack.Rules {
 			for _, claim := range ruleClaims(rule) {
 				catalogue.taken[claim] = true

@@ -6,6 +6,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/jorge07/harness/internal/lint/application/command/baseline"
+	"github.com/jorge07/harness/internal/lint/application/command/canaries"
 	"github.com/jorge07/harness/internal/lint/application/command/initlint"
 	lintcommand "github.com/jorge07/harness/internal/lint/application/command/lint"
 	"github.com/jorge07/harness/internal/lint/application/lintplugin"
@@ -13,8 +14,10 @@ import (
 	"github.com/jorge07/harness/internal/lint/infrastructure/biome"
 	lintconfig "github.com/jorge07/harness/internal/lint/infrastructure/config"
 	"github.com/jorge07/harness/internal/lint/infrastructure/harnessengine"
+	"github.com/jorge07/harness/internal/lint/infrastructure/manifest"
 	"github.com/jorge07/harness/internal/lint/infrastructure/oxlint"
 	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
+	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
@@ -29,6 +32,7 @@ const (
 
 type Handlers struct {
 	Lint     lintcommand.Handler
+	Canaries canaries.Handler
 	Init     initlint.Handler
 	Baseline baseline.Handler
 }
@@ -55,10 +59,15 @@ func New(cfg config.Lint, plugins []config.Plugin, worktree, version string, ren
 	if err := engines.Cover(rules); err != nil {
 		return Handlers{}, err
 	}
+	ruleCatalogue, err := rulecatalogue.Load()
+	if err != nil {
+		return Handlers{}, err
+	}
 	linter := lintcommand.NewHandler(active, catalogue.Get, engines, version, otel.Tracer(instrumentationName), otel.Meter(instrumentationName))
 	return Handlers{
-		Lint: linter,
-		Init: initlint.NewHandler(active, catalogue.Get, engines, version),
+		Lint:     linter,
+		Canaries: canaries.NewHandler(ruleCatalogue, manifest.Read, rules, engines),
+		Init:     initlint.NewHandler(active, catalogue.Get, engines, version),
 		Baseline: baseline.NewHandler(func(ctx context.Context, dir string) (shareddomain.Report, error) {
 			return linter.Handle(ctx, lintcommand.Command{Dir: dir})
 		}),

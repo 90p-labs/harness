@@ -1,7 +1,7 @@
 # Next.js and shadcn example
 
 This example shows how a Next.js App Router project with shadcn sets up the harness.
-The lint packs are `nextjs` and `shadcn`.
+The lint packs are `nextjs`, `shadcn` and the built-in `ddd` pack.
 The setup step `node-install` and the gates `node-typecheck`, `node-lint` and `node-build` run in a Docker Compose service.
 The gate `lint` runs on the host.
 
@@ -13,7 +13,7 @@ The example holds only the files that you add to your project:
 |---|---|
 | `Dockerfile` | A pinned `node` image with a pinned `pnpm`. |
 | `compose.yaml` | The service `node`. It mounts the project and keeps `node_modules` in a named volume. |
-| `.harness.yaml` | The keys `lint`, `verify`, `setup` and `gates`. |
+| `.harness.yaml` | The keys `lint` (with the pack `ddd`), `verify`, `setup` and `gates`. |
 
 The project is not in this folder. The example was tested with Next.js 16.4.5 (`create-next-app@16.4.5`) and `shadcn@4.23.0`.
 
@@ -71,6 +71,7 @@ The paths in the output below show `/path/to/app` for the project folder.
 
 On a bare app with `pnpm-lock.yaml`, `harness init --host claude` writes host commands, because it does not know about the container.
 The app has no `typecheck` script, so the detection finds no `node-typecheck` gate.
+The detection chooses `nextjs` and `shadcn`. It does not choose `ddd` for a Next.js app, and it prints no `next: run the lint-setup skill` line for TypeScript.
 
 ```console
 $ harness init --host claude
@@ -129,13 +130,15 @@ It writes the lint files, the lint baseline and the hooks.
 
 ```console
 $ harness init --host claude
-lint packs: kept nextjs, shadcn
+lint packs: kept nextjs, shadcn, ddd
 gates: kept
 lint init: wrote .harness-lint
 lint baseline: wrote .harness-baseline/lint.json
 host: wrote /path/to/app/.claude/settings.json
 ```
 
+The `ddd` pack reads the business root `src/contexts/`. The proof app has one context, `cart`, with the folders `domain`, `application` and `infrastructure`.
+The baseline accepts the findings of the new app. The `ddd` pack adds one: the `src/lib` folder of shadcn is not `app`, `components` or the business root.
 Commit `.harness.yaml`, `.harness-lint/`, `.harness-baseline/` and `.claude/`.
 
 ### 4. Verify two times
@@ -146,16 +149,16 @@ The second run prints no `setup` line, because the hash of the step `paths` did 
 
 ```console
 $ harness verify
-setup node-install 12.649s
-PASS node-typecheck 6.953s
-PASS node-lint 6.467s
-PASS lint 441ms
-PASS node-build 12.166s
+setup node-install 3.49s
+PASS node-typecheck 4.814s
+PASS node-lint 4.785s
+PASS lint 349ms
+PASS node-build 7.563s
 $ harness verify
-CACHED node-typecheck 6.953s
-CACHED node-lint 6.467s
-CACHED lint 440ms
-CACHED node-build 12.165s
+CACHED node-typecheck 4.813s
+CACHED node-lint 4.785s
+CACHED lint 349ms
+CACHED node-build 7.562s
 ```
 
 The three keys that shape this run:
@@ -176,42 +179,42 @@ The second run changes nothing, so it prints no `setup` line.
 ```console
 $ echo "# edit" >> pnpm-lock.yaml
 $ harness verify
-setup node-install 4.517s
-PASS node-typecheck 6.027s
-PASS node-lint 5.991s
-PASS lint 471ms
-PASS node-build 7.764s
+setup node-install 3.197s
+PASS node-typecheck 4.229s
+PASS node-lint 4.127s
+PASS lint 506ms
+PASS node-build 5.76s
 $ harness verify
-CACHED node-typecheck 6.027s
-CACHED node-lint 5.99s
-CACHED lint 471ms
-CACHED node-build 7.763s
+CACHED node-typecheck 4.228s
+CACHED node-lint 4.126s
+CACHED lint 505ms
+CACHED node-build 5.759s
 $ git checkout pnpm-lock.yaml
 ```
 
 ### 6. Break a gate
 
-The proof added `src/lib/bad-hook.tsx`. It calls a React hook inside an `if`, and ESLint reports an error.
+The proof added `src/components/bad-hook.tsx`. It calls a React hook inside an `if`, and ESLint reports an error.
 The listing leaves out the BuildKit lines that `docker compose run` prints before the `pnpm` output.
 
 ```console
 $ harness verify; echo "exit $?"
-setup node-install 4.052s
-PASS node-typecheck 6.01s
-FAIL node-lint 5.874s
-PASS lint 440ms
+setup node-install 2.651s
+PASS node-typecheck 4.501s
+FAIL node-lint 4.351s
+PASS lint 479ms
 SKIPPED node-build needs node-lint
 
 node-lint:
- Container my-next-app-node-run-da7132c403c9 Creating 
- Container my-next-app-node-run-da7132c403c9 Created 
+ Container my-next-app-node-run-bc642b3af856 Creating 
+ Container my-next-app-node-run-bc642b3af856 Created 
 
 > app@0.1.0 lint /app
 > eslint
 
 
-/app/src/lib/bad-hook.tsx
-  5:5  error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+/app/src/components/bad-hook.tsx
+  6:5  error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
 
 ✖ 1 problem (1 error, 0 warnings)
 
@@ -224,27 +227,120 @@ exit 1
 
 `node-lint` fails, so the harness does not run `node-build`. It prints `SKIPPED node-build needs node-lint`, and `harness verify` exits with 1.
 The step `node-install` ran in this run, because step 5 put `pnpm-lock.yaml` back to the committed file.
-Delete `src/lib/bad-hook.tsx`. The next `harness verify` reads the cache again:
+Delete `src/components/bad-hook.tsx`. The next `harness verify` reads the cache again:
 
 ```console
-$ rm src/lib/bad-hook.tsx
+$ rm src/components/bad-hook.tsx
 $ harness verify; echo "exit $?"
-CACHED node-typecheck 6.953s
-CACHED node-lint 6.467s
-CACHED lint 440ms
-CACHED node-build 12.165s
+CACHED node-typecheck 5.035s
+CACHED node-lint 4.812s
+CACHED lint 338ms
+CACHED node-build 5.858s
 exit 0
 ```
 
 ### 7. Verify a commit
 
-`harness verify --commits` checks each commit in a temporary worktree. The proof added `src/lib/total.ts` in one commit:
+`harness verify --commits` checks each commit in a temporary worktree. The proof added `src/contexts/cart/domain/cart-total.entity.ts` in one commit:
 
 ```console
 $ git commit -q -m "feat: add the cart total"
 $ harness verify --commits HEAD~1
-PASS 68cb9394c4cd feat
+PASS 25682456b4db feat
 ```
+
+## Architecture rules with the built-in ddd pack
+
+The `lint-setup` skill has a TypeScript path. For TypeScript it picks the built-in `ddd` pack, because the `harness` binary already checks the layers, the contexts and the file suffixes.
+The skill adds `ddd` to `lint.packs` and stops. This example shows what that gives:
+
+- `.harness.yaml` has `packs: [nextjs, shadcn, ddd]`. The skill adds the one word `ddd`.
+- No tool config, no wrapper plugin, no `lint/rules.yaml` and no `lint/architecture/` pack.
+- No canary. The tests of the `harness` binary prove each built-in rule with embedded fixtures, so the project needs no copy of that proof.
+
+The example uses `ddd` beside `nextjs` and `shadcn`. The pack `nextjs-ddd-shadcn` needs all three packs in `lint.packs`, and it adds only the rules for the borders between them.
+The `ddd` pack holds 23 rules.
+
+`harness lint canaries` is for the other languages. It reads `lint/rules.yaml`, so in this project it prints an error. The TypeScript path does not use it:
+
+```console
+$ harness lint canaries
+error: no lint/rules.yaml: run the lint-setup skill to write it
+$ echo $?
+1
+```
+
+### A rule finds a domain file
+
+The proof added `src/contexts/cart/domain/checkout-date.entity.ts`. It imports `addDays` from the package `date-fns`.
+The domain may use only itself, the shared domain and the packages in `lint.ddd.domain_allow`, so `harness lint` gives a finding.
+`harness lint` prints the findings of all packs. The listing keeps the `ddd` lines:
+
+```console
+$ harness lint
+error ddd/domain-purity src/contexts/cart/domain/checkout-date.entity.ts:1 A domain file imports a package that is not allowed, or an application or infrastructure path.
+error ddd/src-roots src/lib:1 A folder in src has no place here. Use app, components or the business root, and list the files in ddd.src_files.
+error: lint found error findings
+```
+
+The `ddd/src-roots` finding is in the baseline. The `ddd/domain-purity` finding is new, so the gate `lint` fails and the harness skips `node-build`.
+
+### Tune a built-in rule
+
+Tune a rule in `.harness.yaml`, in the `lint.ddd` keys. The built-in rules have no other config file.
+
+| Key | Effect |
+|---|---|
+| `root` | The business root under `src/`. The default is `contexts`. |
+| `domain_allow` | The packages that the domain may import. |
+| `src_files` | The files that may sit directly in `src/`. |
+
+`lint.disabled` turns off a lint engine, not one rule.
+
+The proof allowed `date-fns` in the domain:
+
+```yaml
+lint:
+  packs: [nextjs, shadcn, ddd]
+  ddd:
+    domain_allow: [date-fns]
+```
+
+The finding goes away, and the gate passes:
+
+```console
+$ harness lint
+error ddd/src-roots src/lib:1 A folder in src has no place here. Use app, components or the business root, and list the files in ddd.src_files.
+error: lint found error findings
+$ harness verify
+CACHED node-typecheck 4.637s
+CACHED node-lint 4.208s
+PASS lint 286ms
+PASS node-build 5.986s
+```
+
+The listing keeps the `ddd` lines. The other lines are the findings that the baseline already holds.
+
+### Accept a finding
+
+Some findings are not worth a fix now. Accept them in the baseline `.harness-baseline/lint.json`.
+The proof added `src/contexts/cart/domain/legacy-total.entity.ts`. It imports a path in `infrastructure`, which `ddd/domain-purity` forbids.
+The baseline only shrinks, so `harness lint baseline` does not add a finding. To accept the new finding, delete `.harness-baseline/lint.json` and write it again:
+
+```console
+$ rm .harness-baseline/lint.json
+$ harness lint baseline
+$ git diff --stat
+ .harness-baseline/lint.json | 7 +++++++
+ 1 file changed, 7 insertions(+)
+$ harness verify
+PASS node-typecheck 5.035s
+PASS node-lint 4.813s
+PASS lint 339ms
+PASS node-build 5.858s
+```
+
+The new baseline holds all the findings of the moment, so read `harness lint` before you write it. Commit the file. A later `harness lint baseline` removes the finding when you fix the file.
 
 ## The project after the setup
 
@@ -260,9 +356,27 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   └── lint.json            harness writes (lint baseline), commit
 ├── .harness-lint
 │   ├── biome
-│   │   └── sd642062c
+│   │   ├── s02bf6b06
+│   │   │   └── biome.json   harness writes (lint init), commit
+│   │   ├── s17bd3bad
+│   │   │   └── biome.json   harness writes (lint init), commit
+│   │   ├── s41260697
+│   │   │   └── biome.json   harness writes (lint init), commit
+│   │   ├── s52a653d5
+│   │   │   └── biome.json   harness writes (lint init), commit
+│   │   ├── sd642062c
+│   │   │   └── biome.json   harness writes (lint init), commit
+│   │   └── sf9b553be
 │   │       └── biome.json   harness writes (lint init), commit
 │   ├── plugins
+│   │   ├── ddd
+│   │   │   ├── aggregate-encapsulation.grit   harness writes (lint init), commit
+│   │   │   ├── command-handler-returns.grit   harness writes (lint init), commit
+│   │   │   ├── event-readonly.grit   harness writes (lint init), commit
+│   │   │   ├── publish-after-save.grit   harness writes (lint init), commit
+│   │   │   ├── query-handler-no-write.grit   harness writes (lint init), commit
+│   │   │   ├── value-object-equals.grit   harness writes (lint init), commit
+│   │   │   └── value-object-factory.grit   harness writes (lint init), commit
 │   │   └── shadcn
 │   │       ├── cn-classnames.grit   harness writes (lint init), commit
 │   │       └── no-raw-colors.grit   harness writes (lint init), commit
@@ -283,8 +397,24 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   ├── components
 │   │   └── ui
 │   │       └── button.tsx
+│   ├── contexts             you add, commit (the business root of lint.ddd.root)
+│   │   ├── cart
+│   │   │   ├── application
+│   │   │   │   └── commands
+│   │   │   │       └── add-item
+│   │   │   │           ├── add-item.command.ts
+│   │   │   │           └── add-item.handler.ts
+│   │   │   ├── domain
+│   │   │   │   ├── cart-total.entity.ts
+│   │   │   │   ├── cart.aggregate.ts
+│   │   │   │   ├── cart.repository.ts
+│   │   │   │   ├── checkout-date.entity.ts
+│   │   │   │   └── legacy-total.entity.ts
+│   │   │   ├── infrastructure
+│   │   │   │   └── cart.memory-repository.ts
+│   │   │   └── cart.module.ts
+│   │   └── kernel.ts
 │   └── lib
-│       ├── total.ts
 │       └── utils.ts
 ├── .gitignore               you add the harness line, commit
 ├── .harness.yaml            you add, commit
@@ -302,9 +432,10 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 ├── tsconfig.json
 └── tsconfig.tsbuildinfo     ignore
 
-13 directories, 34 files
+26 directories, 55 files
 ```
 
+The tree comes from the end of the proof. It holds `checkout-date.entity.ts` and `legacy-total.entity.ts` from the `ddd` section, and the `.harness.yaml` there holds `domain_allow: [date-fns]`.
 `next-env.d.ts` and `tsconfig.tsbuildinfo` are not harness files. `.gitignore` of the app ignores them.
 The harness keeps the state of `harness verify` in `.git/.harness/state.db`, so the tree has no `.harness/` folder. `.harness/` appears when you run `harness run`, and the `.gitignore` line `.harness/` ignores it.
 `node_modules/` is a mount point on the host. The packages are in the named volume.

@@ -35,6 +35,9 @@ const (
 
 	idLint  = "lint"
 	runLint = "harness lint --json"
+
+	idLintCanaries  = "lint-canaries"
+	runLintCanaries = "harness lint canaries"
 )
 
 var (
@@ -45,17 +48,26 @@ var (
 type Lint struct {
 	Packs    []string
 	Baseline string
+	Manifest string
 }
 
-func (l Lint) gates() ([]domain.Gate, error) {
-	if len(l.Packs) == 0 {
-		return nil, nil
+func (l Lint) gates(dir string) ([]domain.Gate, error) {
+	var gates []domain.Gate
+	if len(l.Packs) > 0 {
+		lint, err := domain.NewGate(idLint, runLint, nil, 0, l.Baseline)
+		if err != nil {
+			return nil, err
+		}
+		gates = append(gates, lint)
 	}
-	lint, err := domain.NewGate(idLint, runLint, nil, 0, l.Baseline)
-	if err != nil {
-		return nil, err
+	if l.Manifest != "" && exists(dir, l.Manifest) {
+		canaries, err := newGates(gateSpec{idLintCanaries, runLintCanaries, nil})
+		if err != nil {
+			return nil, err
+		}
+		gates = append(gates, canaries...)
 	}
-	return []domain.Gate{lint}, nil
+	return gates, nil
 }
 
 func Detect(dir string, lint Lint) ([]domain.Gate, error) {
@@ -90,7 +102,7 @@ func Detect(dir string, lint Lint) ([]domain.Gate, error) {
 		}
 		gates = append(gates, biome...)
 	}
-	lintGates, err := lint.gates()
+	lintGates, err := lint.gates(dir)
 	if err != nil {
 		return nil, err
 	}

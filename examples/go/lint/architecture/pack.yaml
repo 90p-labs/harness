@@ -1,0 +1,17 @@
+name: architecture
+rules:
+  - id: ddd/domain-purity
+    engine: go-arch-lint
+    severity: error
+    scope: "internal/**/*.go"
+    message: The domain uses only itself, never the application layer, the infrastructure layer or a third-party library.
+  - id: ddd/layer-direction
+    engine: go-arch-lint
+    severity: error
+    scope: "internal/**/*.go"
+    message: The application layer uses the domain layer, never the infrastructure layer.
+  - id: ddd/cross-context
+    engine: go-arch-lint
+    severity: error
+    scope: "internal/**/*.go"
+    message: A bounded context does not use the packages of another context.

@@ -226,17 +226,27 @@ func TestLoad(t *testing.T) {
 		engineRule := "  - id: team/%s\n    engine: %s\n    severity: info\n    scope: \"docs/**\"\n    message: A copy.\n    %s: %s\n"
 		writePack(t, repo, "lint/e", team+fmt.Sprintf(engineRule, "img", domain.EngineBiomeRule, "biome", "lint/performance/noImgElement"))
 		writePack(t, repo, "lint/f", team+fmt.Sprintf(engineRule, "link", domain.EngineOxlint, "oxlint", "nextjs/no-html-link-for-pages"))
+		ddd, nextjs := string(domain.PackDDD), string(domain.PackNextjs)
 		cases := map[string][]string{
-			"a built-in rule id":     {"./lint/c"},
-			"two packs, one rule id": {"./lint/a", "./lint/b"},
-			"one rule id twice":      {"./lint/d"},
-			"a built-in biome rule":  {"./lint/e"},
-			"a built-in oxlint rule": {"./lint/f"},
+			"an active built-in rule id":      {ddd, "./lint/c"},
+			"a built-in rule id listed later": {"./lint/c", ddd},
+			"two packs, one rule id":          {"./lint/a", "./lint/b"},
+			"one rule id twice":               {"./lint/d"},
+			"an active built-in biome rule":   {nextjs, "./lint/e"},
+			"an active built-in oxlint rule":  {"./lint/f", nextjs},
 		}
 		for name, entries := range cases {
 			t.Run(name, func(t *testing.T) {
 				if _, _, err := packs.Load(repo, entries); !errors.Is(err, domain.ErrRuleTaken) {
 					t.Fatalf("Load = %v, want ErrRuleTaken", err)
+				}
+			})
+		}
+
+		for _, entry := range []string{"./lint/c", "./lint/e", "./lint/f"} {
+			t.Run("the claim of an inactive built-in pack is free: "+entry, func(t *testing.T) {
+				if _, _, err := packs.Load(repo, []string{entry}); err != nil {
+					t.Fatalf("Load = %v, want the custom pack to load while its built-in pack is not active", err)
 				}
 			})
 		}

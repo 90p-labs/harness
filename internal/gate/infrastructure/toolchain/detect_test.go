@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/jorge07/harness/internal/gate/domain"
@@ -27,7 +28,11 @@ func repo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
 	}
@@ -166,4 +171,26 @@ func TestDetectLintGates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDetectCanaryGate(t *testing.T) {
+	const manifest = "lint/rules.yaml"
+	lint := toolchain.Lint{Packs: []string{"./lint/architecture"}, Manifest: manifest}
+	canaries := gate(t, "lint-canaries", "harness lint canaries", nil)
+
+	t.Run("a manifest adds the canary gate", func(t *testing.T) {
+		got, err := toolchain.Detect(repo(t, map[string]string{manifest: "pack: ddd\n"}), lint)
+
+		if err != nil || len(got) != 2 || !reflect.DeepEqual(got[1], canaries) {
+			t.Fatalf("gates = %+v, %v, want the lint gate and %+v", got, err, canaries)
+		}
+	})
+
+	t.Run("no manifest adds no canary gate", func(t *testing.T) {
+		got, err := toolchain.Detect(repo(t, nil), lint)
+
+		if err != nil || slices.ContainsFunc(got, func(g domain.Gate) bool { return g.ID == canaries.ID }) {
+			t.Fatalf("gates = %+v, %v, want no %s gate", got, err, canaries.ID)
+		}
+	})
 }

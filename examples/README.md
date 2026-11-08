@@ -7,9 +7,22 @@ Each folder holds only the files that you add to a project to set up the harness
 | [`symfony/`](symfony/) | Symfony | A Makefile with `## setup` and `## gate` targets and a `gates.detect` plugin | `php`, the `composer` image |
 | [`go/`](go/) | Go module | The `setup` and `gates` keys, with the gate ids of the built-in detection of `go.mod` | `go`, the `golang` image |
 | [`nextjs/`](nextjs/) | Next.js and shadcn | The `setup` and `gates` keys and the lint packs `nextjs` and `shadcn` | `node`, a `Dockerfile` with a pinned pnpm |
-| [`python/`](python/) | Python with uv | The `setup` and `gates` keys, written by hand, and a custom lint pack with a ruff lint engine plugin | `python`, the `uv` image |
+| [`python/`](python/) | Python with uv | The `setup` and `gates` keys, written by hand, and custom lint packs with ruff and import-linter lint engine plugins | `python`, the `uv` image |
 
 The output in each README is real, from a scratch project that the steps built from zero.
+
+## Architecture rules
+
+Each example also holds the architecture rules that the `lint-setup` skill writes for its language. `harness lint catalogue` prints the rules.
+
+| Example | Language | Tool | Where the rules live | Canaries |
+|---|---|---|---|---|
+| [`symfony/`](symfony/README.md#architecture-rules-with-deptrac) | PHP | deptrac | `deptrac.yaml`, the plugin `.harness/plugins/deptrac.sh`, the pack `lint/architecture/` and `lint/rules.yaml` | 2, and 2 waivers |
+| [`go/`](go/README.md#architecture-rules-with-go-arch-lint) | Go | go-arch-lint | `.go-arch-lint.yml`, the plugin `.harness/plugins/go-arch-lint.sh`, the pack `lint/architecture/` and `lint/rules.yaml` | 3, and 1 waiver |
+| [`python/`](python/README.md#architecture-rules-with-import-linter) | Python | import-linter | `.importlinter`, the plugin `.harness/plugins/import-linter.sh`, the pack `lint/architecture/` and `lint/rules.yaml` | 3, and 1 waiver |
+| [`nextjs/`](nextjs/README.md#architecture-rules-with-the-built-in-ddd-pack) | TypeScript | the built-in `ddd` pack | `ddd` in `lint.packs`, and the `lint.ddd` keys of `.harness.yaml` | none: the tests of the binary prove the built-in rules |
+
+The gate `lint-canaries` runs `harness lint canaries`. It proves that each rule still catches its canary, with no agent. A config edit that lets a rule through fails the gate. A waiver in `lint/rules.yaml` accepts the change and shows its reason.
 
 ## Rules for every example
 
@@ -84,7 +97,7 @@ Know these limits:
 
 ## Your own lint pack
 
-A team linter can feed the same lint report, baseline ratchet and gate `lint` as the built-in packs. The [`python/`](python/) example is the worked example: a ruff pack for a Python project.
+A team linter can feed the same lint report, baseline ratchet and gate `lint` as the built-in packs. The [`python/`](python/) example is the worked example: a ruff pack and an import-linter pack for a Python project.
 
 1. Write a pack folder, such as `lint/python/pack.yaml`. Each rule names a lint engine plugin as its `engine`, and its `scope` selects the files.
 2. Write an exec plugin on `lint.check`. It reads the rules and the files from the payload, runs the linter, and returns `{"verdict":"allow","findings":[...]}`. Each finding needs a rule id of the payload and a file that is relative to the repository.

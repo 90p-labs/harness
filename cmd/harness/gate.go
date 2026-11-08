@@ -22,6 +22,7 @@ import (
 	"github.com/jorge07/harness/internal/gate/infrastructure/toolchain"
 	gatecli "github.com/jorge07/harness/internal/gate/ui/cli"
 	lintmodule "github.com/jorge07/harness/internal/lint"
+	lintdomain "github.com/jorge07/harness/internal/lint/domain"
 	plandomain "github.com/jorge07/harness/internal/plan/domain"
 	plancli "github.com/jorge07/harness/internal/plan/ui/cli"
 	"github.com/jorge07/harness/internal/run/domain"
@@ -66,7 +67,7 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	}
 	verifier := gatemodule.NewVerify(db, env.bus, criterionSource{flags: flags}, time.Now)
 	commits := gatemodule.NewVerifyCommits(db, env.bus, time.Now)
-	initializer := gatemodule.NewInit(toolchain.Lint{Packs: env.cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus)
+	initializer := gatemodule.NewInit(toolchain.Lint{Packs: env.cfg.Lint.Packs, Baseline: lintmodule.BaselinePath, Manifest: lintdomain.ManifestFile}, env.bus)
 	return gatecli.Handlers{
 		Verify: func(ctx context.Context) (verify.Result, error) {
 			return verifier.Handle(ctx, verify.Command{

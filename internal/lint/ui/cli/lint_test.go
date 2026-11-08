@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/jorge07/harness/internal/lint/domain"
 	"github.com/jorge07/harness/internal/lint/ui/cli"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
@@ -15,6 +18,8 @@ const (
 	flagJSON      = "--json"
 	subInit       = "init"
 	subBaseline   = "baseline"
+	subCatalogue  = "catalogue"
+	subCanaries   = "canaries"
 	errorLine     = "error ddd/src-roots contexts/a.ts:3 move the file\n"
 	warnLine      = "warn next/img src/app/page.tsx:12 use next/image\n"
 	missingEngine = "biome is missing"
@@ -27,10 +32,25 @@ func connectWith(handlers cli.Handlers) cli.Connect {
 	return func(context.Context) (cli.Handlers, error) { return handlers, nil }
 }
 
+var catalogue = domain.RuleCatalogue{Packs: []domain.CataloguePack{{
+	Name: domain.PackDDD,
+	Rules: []domain.CatalogueRule{
+		{ID: "ddd/domain-purity", Description: "The domain depends only on itself."},
+		{ID: "ddd/layer-direction", Description: "The application never depends on the infrastructure."},
+	},
+}}}
+
+func loadCatalogue() (domain.RuleCatalogue, error) { return catalogue, nil }
+
 func run(t *testing.T, handlers cli.Handlers, args ...string) (string, error) {
 	t.Helper()
+	return runWith(t, connectWith(handlers), loadCatalogue, args...)
+}
+
+func runWith(t *testing.T, connect cli.Connect, load func() (domain.RuleCatalogue, error), args ...string) (string, error) {
+	t.Helper()
 	var out bytes.Buffer
-	cmd := cli.NewLintCommand(connectWith(handlers))
+	cmd := cli.NewLintCommand(connect, load)
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetOut(&out)
@@ -136,6 +156,83 @@ func TestLintCommandReport(t *testing.T) {
 		}
 		if len(called) != 2 || called[0] != subInit || called[1] != subBaseline {
 			t.Fatalf("called = %v", called)
+		}
+	})
+}
+
+func TestCatalogueCommand(t *testing.T) {
+	noConnect := func(context.Context) (cli.Handlers, error) {
+		t.Fatal("the catalogue command called connect")
+		return cli.Handlers{}, nil
+	}
+
+	t.Run("json prints the catalogue", func(t *testing.T) {
+		out, err := runWith(t, noConnect, loadCatalogue, subCatalogue, flagJSON)
+
+		var got domain.RuleCatalogue
+		if err != nil || json.Unmarshal([]byte(out), &got) != nil || !reflect.DeepEqual(got, catalogue) {
+			t.Fatalf("out = %q, err = %v, want the catalogue as JSON", out, err)
+		}
+		if !strings.Contains(out, `"description":`) || !strings.Contains(out, `"name":"ddd"`) {
+			t.Fatalf("out = %q, want the lower case keys", out)
+		}
+	})
+
+	t.Run("text prints one line for each rule", func(t *testing.T) {
+		out, err := runWith(t, noConnect, loadCatalogue, subCatalogue)
+
+		want := "ddd/domain-purity The domain depends only on itself.\n" +
+			"ddd/layer-direction The application never depends on the infrastructure.\n"
+		if err != nil || out != want {
+			t.Fatalf("out = %q, err = %v, want %q", out, err, want)
+		}
+	})
+
+	t.Run("a load error is returned", func(t *testing.T) {
+		failing := func() (domain.RuleCatalogue, error) { return domain.RuleCatalogue{}, errEngine }
+
+		if _, err := runWith(t, noConnect, failing, subCatalogue); !errors.Is(err, errEngine) {
+			t.Fatalf("err = %v, want the load error", err)
+		}
+	})
+}
+
+func canariesOf(results []domain.CanaryResult, err error) cli.Handlers {
+	return cli.Handlers{Canaries: func(context.Context) ([]domain.CanaryResult, error) { return results, err }}
+}
+
+func TestCanariesCommand(t *testing.T) {
+	pass := domain.CanaryResult{Rule: "ddd/domain-purity", Canary: "lint/canaries/ddd-domain-purity", Status: domain.CanaryPass}
+	waived := domain.CanaryResult{Rule: "ddd/file-suffix", Status: domain.CanaryWaived, Detail: "deptrac checks dependencies"}
+	passLine := "PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n"
+	waivedLine := "WAIVED ddd/file-suffix: deptrac checks dependencies\n"
+
+	t.Run("passes with each canary caught or waived", func(t *testing.T) {
+		out, err := run(t, canariesOf([]domain.CanaryResult{pass, waived}, nil), subCanaries)
+
+		if err != nil || out != passLine+waivedLine {
+			t.Fatalf("out = %q, err = %v, want %q", out, err, passLine+waivedLine)
+		}
+	})
+
+	t.Run("fails with a FAIL line", func(t *testing.T) {
+		missed := domain.CanaryResult{Rule: "ddd/layer-direction", Canary: "lint/canaries/ddd-layer-direction", Status: domain.CanaryFail, Detail: "the engine deptrac gave no ddd/layer-direction finding"}
+		absent := domain.CanaryResult{Rule: "ddd/cross-context", Status: domain.CanaryFail, Detail: "not in lint/rules.yaml"}
+
+		out, err := run(t, canariesOf([]domain.CanaryResult{pass, missed, absent, waived}, nil), subCanaries)
+
+		want := passLine +
+			"FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding\n" +
+			"FAIL ddd/cross-context: not in lint/rules.yaml\n" +
+			waivedLine
+		if !errors.Is(err, cli.ErrCanariesFailed) || out != want {
+			t.Fatalf("out = %q, err = %v, want %q and ErrCanariesFailed", out, err, want)
+		}
+	})
+
+	t.Run("a config error is returned", func(t *testing.T) {
+		if _, err := run(t, canariesOf(nil, errEngine), subCanaries); !errors.Is(err, errEngine) {
+			t.Fatalf("err = %v, want the handler error", err)
 		}
 	})
 }

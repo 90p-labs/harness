@@ -9,31 +9,40 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
-	commandLint     = "lint"
-	commandInit     = "init"
-	commandBaseline = "baseline"
-	flagJSON        = "json"
+	commandLint      = "lint"
+	commandInit      = "init"
+	commandBaseline  = "baseline"
+	commandCatalogue = "catalogue"
+	commandCanaries  = "canaries"
+	flagJSON         = "json"
 
-	findingFormat = "%s %s %s:%d %s\n"
-	noPacksLine   = "no lint pack is set: set lint.packs in .harness.yaml\n"
+	findingFormat       = "%s %s %s:%d %s\n"
+	catalogueRuleFormat = "%s %s\n"
+	canaryLineFormat    = "%s %s\n"
+	noPacksLine         = "no lint pack is set: set lint.packs in .harness.yaml\n"
 )
 
-var ErrFindings = errors.New("lint found error findings")
+var (
+	ErrFindings       = errors.New("lint found error findings")
+	ErrCanariesFailed = errors.New("a lint canary failed")
+)
 
 type Handlers struct {
 	Lint     func(ctx context.Context) (shareddomain.Report, error)
 	Init     func(ctx context.Context) error
 	Baseline func(ctx context.Context) error
+	Canaries func(ctx context.Context) ([]domain.CanaryResult, error)
 	NoPacks  bool
 }
 
 type Connect func(ctx context.Context) (Handlers, error)
 
-func NewLintCommand(connect Connect) *cobra.Command {
+func NewLintCommand(connect Connect, catalogue func() (domain.RuleCatalogue, error)) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandLint,
 		Short: "Check the code against the lint packs",
@@ -82,7 +91,71 @@ func NewLintCommand(connect Connect) *cobra.Command {
 				})
 			},
 		},
+		newCatalogueCommand(catalogue),
+		&cobra.Command{
+			Use:   commandCanaries,
+			Short: "Prove that the engine catches the canary of each architecture rule",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
+					results, err := h.Canaries(ctx)
+					if err != nil {
+						return err
+					}
+					return printCanaries(cmd.OutOrStdout(), results)
+				})
+			},
+		},
 	)
+	return cmd
+}
+
+func printCanaries(out io.Writer, results []domain.CanaryResult) error {
+	failed := false
+	for _, result := range results {
+		line := result.Rule
+		if result.Canary != "" {
+			line += " " + result.Canary
+		}
+		if result.Detail != "" {
+			line += ": " + result.Detail
+		}
+		if _, err := fmt.Fprintf(out, canaryLineFormat, result.Status, line); err != nil {
+			return err
+		}
+		failed = failed || result.Status == domain.CanaryFail
+	}
+	if failed {
+		return ErrCanariesFailed
+	}
+	return nil
+}
+
+func newCatalogueCommand(load func() (domain.RuleCatalogue, error)) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   commandCatalogue,
+		Short: "Print the architecture rule catalogue",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			catalogue, err := load()
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if asJSON, _ := cmd.Flags().GetBool(flagJSON); asJSON {
+				return json.NewEncoder(out).Encode(catalogue)
+			}
+			for _, pack := range catalogue.Packs {
+				for _, rule := range pack.Rules {
+					if _, err := fmt.Fprintf(out, catalogueRuleFormat, rule.ID, rule.Description); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool(flagJSON, false, "print the catalogue as JSON")
 	return cmd
 }
 

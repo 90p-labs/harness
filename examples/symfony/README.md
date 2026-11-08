@@ -1,7 +1,8 @@
 # Symfony example
 
 This example shows a Makefile as the gate source for a Symfony project.
-Each gate runs in a container. The harness and the hooks run on the host.
+It also shows the architecture rules of the `lint-setup` skill with deptrac, and the canaries that prove them.
+Each gate and deptrac run in a container. The harness, the hooks and the plugin scripts run on the host.
 
 ## What the folder holds
 
@@ -11,16 +12,21 @@ Only the files that you add to your project:
 |---|---|
 | `Makefile` | The install target and the gate targets. A `## setup` or `## gate` comment marks each one. |
 | `compose.yaml` | The `php` service. It uses the pinned `composer` image. |
-| `.harness.yaml` | The `make-gates` plugin and `verify.parallel: 3`. It has no `setup` key and no `gates` key. |
-| `.harness/plugins/make-gates.sh` | The plugin. It reads the `## setup` and `## gate` marks. |
+| `.harness.yaml` | The `make-gates` and `deptrac` plugins, the lint pack and `verify.parallel: 3`. It has no `setup` key and no `gates` key. |
+| `.harness/plugins/make-gates.sh` | The gates plugin. It reads the `## setup` and `## gate` marks. |
+| `deptrac.yaml` | The deptrac config: the layers and the allowed dependencies. You own this file. |
+| `lint/architecture/pack.yaml` | The custom lint pack `architecture`. Its two rules name the engine `deptrac`. |
+| `.harness/plugins/deptrac.sh` | The lint engine plugin. It answers `lint.check`, runs deptrac and maps each violation to a rule id of the catalogue. |
+| `lint/rules.yaml` | The manifest. It gives a canary or a waiver for each rule of the `ddd` catalogue pack. |
+| `lint/canaries/` | One folder for each rule with a canary. Each folder breaks its rule on purpose. |
 
 ## Prerequisites
 
 1. Install Docker and Compose. The proof used Docker Engine 29.9.2 and Compose v5.6.1.
-2. Put `harness` and `make` on the `PATH` of the host. Each gate runs `make <target>` on the host.
-3. Use a Symfony project with `phpunit/phpunit`, `phpstan/phpstan` and `friendsofphp/php-cs-fixer` in `require-dev`.
+2. Put `harness`, `make`, `sh` and `jq` on the `PATH` of the host. Each gate runs `make <target>` on the host. The deptrac plugin runs on the host and uses `jq`.
+3. Use a Symfony project with `phpunit/phpunit`, `phpstan/phpstan`, `friendsofphp/php-cs-fixer` and `deptrac/deptrac` in `require-dev`.
 
-The proof used `symfony/skeleton` v7.4.99, `phpunit/phpunit` 13.4.6, `phpstan/phpstan` 2.3.5 and `friendsofphp/php-cs-fixer` v3.95.29.
+The proof used `symfony/skeleton` v7.4.99, `phpunit/phpunit` 13.4.6, `phpstan/phpstan` 2.3.5, `friendsofphp/php-cs-fixer` v3.95.29, `deptrac/deptrac` 4.7.2 and jq 1.6.
 The image is `composer:2.11.1`. It holds PHP 8.5.12, git and unzip.
 
 ## How it works
@@ -30,7 +36,7 @@ The image is `composer:2.11.1`. It holds PHP 8.5.12, git and unzip.
 3. Mark the test target with `## gate needs: cs phpstan lint-container`.
 4. `harness gates init` sends the `gates.detect` event to the plugin.
 5. The plugin reads `./Makefile` and prints one `allow` verdict. Its `context` holds one line for each marked target.
-6. The harness writes the `install` line under the `setup` key and the gate lines under the `gates` key of `.harness.yaml`.
+6. The harness writes the `install` line under the `setup` key and the gate lines under the `gates` key of `.harness.yaml`. The `lint` key gives the `lint` gate. `lint/rules.yaml` gives the `lint-canaries` gate.
 7. `harness verify` runs the setup step, then the gates. Each target calls `docker compose run --rm -T php`.
 
 The `## setup` marker makes the `install` target a setup step with the id `make-install`.
@@ -42,7 +48,7 @@ If the step fails, `harness verify` stops before the first gate and prints `setu
 The `needs` marker gives the `needs` key of the gate. The `make-test` gate starts only after `make-cs`, `make-phpstan` and `make-lint-container` are `PASS` or `CACHED`.
 If a gate in the list fails, the harness prints `SKIPPED make-test needs <gate>` and `harness verify` exits with 1.
 The plugin exits with 1 on an unknown marker.
-`verify.parallel: 3` in `.harness.yaml` sets the most gates that run at the same time. The default is 1. The three gates without `needs` run together.
+`verify.parallel: 3` in `.harness.yaml` sets the most gates that run at the same time. The default is 1. The gates without `needs` run three at a time.
 
 Set the top-level `name:` of `compose.yaml` to the name of your project. The fixed name lets the temporary worktree of `harness verify --commits` use the same composer cache volume.
 The plugin runs only when `harness gates init` or `harness init` writes the `gates` key.
@@ -50,18 +56,19 @@ To add a gate, mark the new target. Then edit the `gates` key by hand, or remove
 
 ## Steps
 
-Copy the four files into your project. Then add these lines to `.gitignore`:
+Copy the files into your project. Then add these lines to `.gitignore`:
 
 ```
 .harness/*
 !.harness/plugins/
 ```
 
-The first line ignores the run state of the harness. The second line keeps the plugin in git.
-Commit the plugin. The command `git ls-files .harness` must list it:
+The first line ignores the run state of the harness. The second line keeps the plugins in git.
+Commit the plugins. The command `git ls-files .harness` must list them:
 
 ```console
 $ git ls-files .harness
+.harness/plugins/deptrac.sh
 .harness/plugins/make-gates.sh
 ```
 
@@ -87,24 +94,35 @@ $ sh .harness/plugins/make-gates.sh </dev/null
 {"verdict":"allow","context":"{\"id\":\"make-install\",\"run\":\"make install\",\"paths\":[\"composer.json\",\"composer.lock\",\"compose.yaml\",\"Makefile\"],\"setup\":true,\"creates\":\"vendor/autoload.php\"}\n{\"id\":\"make-cs\",\"run\":\"make cs\",\"paths\":[\"**/*.php\",\"src/**\",\"tests/**\",\"config/**\",\"bin/**\",\"public/**\",\"templates/**\",\"translations/**\",\"composer.json\",\"composer.lock\",\".env*\",\"phpunit.dist.xml\",\"phpunit.xml.dist\",\"phpstan.neon\",\"phpstan.dist.neon\",\"phpstan.neon.dist\",\"phpstan-baseline.neon\",\".php-cs-fixer.dist.php\",\"Makefile\",\"compose.yaml\"]}\n{\"id\":\"make-phpstan\",\"run\":\"make phpstan\",\"paths\":[\"**/*.php\",\"src/**\",\"tests/**\",\"config/**\",\"bin/**\",\"public/**\",\"templates/**\",\"translations/**\",\"composer.json\",\"composer.lock\",\".env*\",\"phpunit.dist.xml\",\"phpunit.xml.dist\",\"phpstan.neon\",\"phpstan.dist.neon\",\"phpstan.neon.dist\",\"phpstan-baseline.neon\",\".php-cs-fixer.dist.php\",\"Makefile\",\"compose.yaml\"]}\n{\"id\":\"make-lint-container\",\"run\":\"make lint-container\",\"paths\":[\"**/*.php\",\"src/**\",\"tests/**\",\"config/**\",\"bin/**\",\"public/**\",\"templates/**\",\"translations/**\",\"composer.json\",\"composer.lock\",\".env*\",\"phpunit.dist.xml\",\"phpunit.xml.dist\",\"phpstan.neon\",\"phpstan.dist.neon\",\"phpstan.neon.dist\",\"phpstan-baseline.neon\",\".php-cs-fixer.dist.php\",\"Makefile\",\"compose.yaml\"]}\n{\"id\":\"make-test\",\"run\":\"make test\",\"paths\":[\"**/*.php\",\"src/**\",\"tests/**\",\"config/**\",\"bin/**\",\"public/**\",\"templates/**\",\"translations/**\",\"composer.json\",\"composer.lock\",\".env*\",\"phpunit.dist.xml\",\"phpunit.xml.dist\",\"phpstan.neon\",\"phpstan.dist.neon\",\"phpstan.neon.dist\",\"phpstan-baseline.neon\",\".php-cs-fixer.dist.php\",\"Makefile\",\"compose.yaml\"],\"needs\":[\"make-cs\",\"make-phpstan\",\"make-lint-container\"]}"}
 ```
 
-Write the setup step and the gates:
+Write the setup step and the gates, then the lint files:
 
 ```console
 $ harness gates init
 setup make-install: make install
+lint: harness lint --json
+lint-canaries: harness lint canaries
 make-cs: make cs
 make-phpstan: make phpstan
 make-lint-container: make lint-container
 make-test: make test
+$ harness lint init
+$ harness lint baseline
 ```
 
-The harness writes one setup step under the `setup` key and four gates under the `gates` key of `.harness.yaml`. The listing shows the setup step and the first gate:
+`harness lint init` writes `.harness-lint/VERSION`. `harness lint baseline` writes `.harness-baseline/lint.json` with no findings.
+The harness writes one setup step under the `setup` key and six gates under the `gates` key of `.harness.yaml`. The listing shows the setup step and the first three gates:
 
 ```yaml
 plugins:
   - name: make-gates
     command: [sh, .harness/plugins/make-gates.sh]
     events: [gates.detect]
+  - name: deptrac
+    command: [sh, -c, 'exec sh "$(git rev-parse --show-toplevel)/.harness/plugins/deptrac.sh"']
+    events: [lint.check]
+    timeout: 60s
+lint:
+  packs: [./lint/architecture]
 verify:
   parallel: 3
 setup:
@@ -117,6 +135,11 @@ setup:
       - Makefile
     creates: vendor/autoload.php
 gates:
+  - id: lint
+    run: harness lint --json
+    baseline: .harness-baseline/lint.json
+  - id: lint-canaries
+    run: harness lint canaries
   - id: make-cs
     run: make cs
     paths:
@@ -155,40 +178,47 @@ The `make-test` gate ends with the `needs` key:
       - make-lint-container
 ```
 
-The four gates have the same `paths`. The setup step has its own `paths`. Commit the file. Then run the gates two times:
+The four `make` gates have the same `paths`. The setup step has its own `paths`. The `lint` and `lint-canaries` gates have no `paths`, so every tracked file is their input.
+Commit `.harness.yaml`, `.harness-lint/` and `.harness-baseline/`. Then run the gates two times:
 
 ```console
 $ harness verify
-setup make-install 2.755s
-PASS make-cs 1.287s
-PASS make-phpstan 3.858s
-PASS make-lint-container 1.083s
-PASS make-test 814ms
+setup make-install 7.288s
+PASS lint 2.44s
+PASS lint-canaries 4.674s
+PASS make-cs 1.073s
+PASS make-phpstan 4.836s
+PASS make-lint-container 953ms
+PASS make-test 851ms
 $ harness verify
-CACHED make-cs 1.286s
-CACHED make-phpstan 3.857s
-CACHED make-lint-container 1.082s
-CACHED make-test 814ms
+CACHED lint 2.44s
+CACHED lint-canaries 4.674s
+CACHED make-cs 1.072s
+CACHED make-phpstan 4.835s
+CACHED make-lint-container 953ms
+CACHED make-test 850ms
 ```
 
-The first run prints the setup line, then `PASS` for each gate. `make-cs`, `make-phpstan` and `make-lint-container` run in parallel. `make-test` runs after them.
+The first run prints the setup line, then `PASS` for each gate. Three gates without `needs` run at the same time. `make-test` runs after `make-cs`, `make-phpstan` and `make-lint-container`.
 The second run prints no setup line and `CACHED` for each gate, because no input changed.
 
 ## A failed gate
 
-The proof moved the opening brace of `class Kernel` in `src/Kernel.php` to the line of the class. php-cs-fixer reports that change. The three gates without `needs` ran. `make-cs` failed, and the harness skipped `make-test`:
+The proof moved the opening brace of `class Kernel` in `src/Kernel.php` to the line of the class. php-cs-fixer reports that change. The gates without `needs` ran. `make-cs` failed, and the harness skipped `make-test`:
 
 ```console
 $ harness verify
-FAIL make-cs 2.248s
-PASS make-phpstan 12.343s
-PASS make-lint-container 2.752s
+PASS lint 2.342s
+PASS lint-canaries 4.888s
+FAIL make-cs 1.023s
+PASS make-phpstan 5.156s
+PASS make-lint-container 1.665s
 SKIPPED make-test needs make-cs
 
 make-cs:
 docker compose run --rm -T php vendor/bin/php-cs-fixer fix --dry-run --diff
- Container shop-php-run-33726bbbb67e Creating 
- Container shop-php-run-33726bbbb67e Created 
+ Container my-symfony-app-php-run-3355e7f2b058 Creating 
+ Container my-symfony-app-php-run-3355e7f2b058 Created 
 You are running PHP CS Fixer on PHP 8.5.12, but the minimum PHP version supported by your project in composer.json is PHP 8.2. Executing PHP CS Fixer on newer PHP versions may introduce syntax or features not yet available in PHP 8.2, which could cause issues under that version. It is recommended to run PHP CS Fixer on PHP 8.2, to fit your project specifics.
 If you need help while solving warnings, ask at https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/discussions/, we will help you!
 
@@ -197,9 +227,9 @@ PHP runtime: 8.5.12
 Loaded config default from "/app/.php-cs-fixer.dist.php".
 Running analysis on 9 cores with 10 files per process.
 Using cache file ".php-cs-fixer.cache".
- 0/5 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%
- 1/5 [▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░]  20%
- 5/5 [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%
+ 0/8 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%
+ 1/8 [▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░]  12%
+ 8/8 [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%
 
    1) src/Kernel.php
       ---------- begin diff ----------
@@ -218,7 +248,7 @@ Using cache file ".php-cs-fixer.cache".
       ----------- end diff -----------
 
 
-Found 1 of 5 files that can be fixed in 0.045 seconds, 18.00 MB memory used
+Found 1 of 8 files that can be fixed in 0.026 seconds, 20.00 MB memory used
 
 make: *** [cs] Error 8
 
@@ -236,11 +266,13 @@ The setup step does nothing when no input changed. It runs again when `vendor/au
 ```console
 $ rm -rf vendor
 $ harness verify
-setup make-install 11.85s
-CACHED make-cs 1.286s
-CACHED make-phpstan 3.857s
-CACHED make-lint-container 1.082s
-CACHED make-test 814ms
+setup make-install 7.294s
+CACHED lint 2.44s
+CACHED lint-canaries 4.674s
+CACHED make-cs 1.072s
+CACHED make-phpstan 4.835s
+CACHED make-lint-container 953ms
+CACHED make-test 850ms
 ```
 
 A change of `composer.lock` also runs the step, because `composer.lock` is in the `paths` of the step.
@@ -249,8 +281,114 @@ A change of `composer.lock` also runs the step, because `composer.lock` is in th
 
 ```console
 $ harness verify --commits HEAD~1
-PASS 1b46337c7296 chore
+PASS 54e2e60eba3b chore
 ```
+
+## Architecture rules with deptrac
+
+The `lint-setup` skill wrote these files with its steps. `harness lint catalogue` prints the rules of the catalogue.
+The manifest `lint/rules.yaml` names the catalogue pack `ddd` and gives each of its four rules a canary or a waiver:
+
+```yaml
+pack: ddd
+rules:
+  - id: ddd/domain-purity
+    canary: lint/canaries/ddd-domain-purity
+  - id: ddd/layer-direction
+    canary: lint/canaries/ddd-layer-direction
+  - id: ddd/cross-context
+    waived: deptrac needs one layer for each bounded context, and the project has one context. Add the layers and a canary with the second context.
+  - id: ddd/file-suffix
+    waived: deptrac checks the dependencies, not the file names.
+```
+
+The project does not turn on the built-in `ddd` pack, because its engine reads TypeScript.
+The custom pack `architecture` gives the two rules with a canary to the engine `deptrac`. Its scope `src/**/*.php` leaves out `lint/canaries/`.
+`deptrac.yaml` reads only `./src`, so a canary never fails the `lint` gate.
+
+`deptrac.yaml` puts each class in one layer by its namespace: `App\<Context>\Domain`, `App\<Context>\Application` and `App\<Context>\Infrastructure`. The `Framework` layer holds `Symfony` and `Doctrine`.
+The `ruleset` lets the domain use nothing, the application layer use the domain, and the infrastructure layer use all three.
+Edit the layers and the ruleset to match your project. Then run `harness lint canaries` to see that each rule still catches its canary.
+
+The plugin `deptrac.sh` does these steps:
+
+1. It reads the event from stdin before it starts the container.
+2. It reads the folder of the call with `git rev-parse --show-prefix`. The harness runs the plugin in the canary folder for a canary, and in the project root for `harness lint`.
+3. For a canary, it writes a deptrac config that imports `deptrac.yaml` and sets `projectDirectory` to the canary folder. deptrac resolves `./src` from that folder.
+4. It runs deptrac with the JSON formatter in the container. An invalid config has no report, so the plugin prints the deptrac text to stderr and exits with 1.
+5. It gives the event and the report to `jq` on stdin. A violation of the `Domain` layer is a `ddd/domain-purity` finding. A violation of the `Application` layer is a `ddd/layer-direction` finding.
+6. It keeps only the files and the rules of the event.
+
+A domain class that uses a framework class gives a finding. The proof added `src/Order/Domain/Order.php` with a constructor that takes a `Request`:
+
+```console
+$ harness lint
+error ddd/domain-purity src/Order/Domain/Order.php:9 App\Order\Domain\Order must not depend on Symfony\Component\HttpFoundation\Request (Domain on Framework)
+error: lint found error findings
+$ echo $?
+1
+```
+
+### The canaries pass
+
+`harness lint canaries` sends `lint.check` to the engine of each rule with a canary, in the canary folder, with only that rule. The rule must be in the findings. No agent runs in this check:
+
+```console
+$ harness lint canaries
+PASS ddd/domain-purity lint/canaries/ddd-domain-purity
+PASS ddd/layer-direction lint/canaries/ddd-layer-direction
+WAIVED ddd/cross-context: deptrac needs one layer for each bounded context, and the project has one context. Add the layers and a canary with the second context.
+WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
+$ echo $?
+0
+```
+
+### A config edit breaks a rule
+
+The proof let the application layer use the infrastructure layer:
+
+```diff
+     Application:
+       - Domain
++      - Infrastructure
+```
+
+deptrac then gave no finding for the canary `ddd-layer-direction`, and the check failed:
+
+```console
+$ harness lint canaries
+PASS ddd/domain-purity lint/canaries/ddd-domain-purity
+FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding
+WAIVED ddd/cross-context: deptrac needs one layer for each bounded context, and the project has one context. Add the layers and a canary with the second context.
+WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
+error: a lint canary failed
+$ echo $?
+1
+```
+
+The `lint` gate stays green after this edit, because the code has no violation. The `lint-canaries` gate fails, so `harness verify` fails.
+
+### A waiver accepts the change
+
+When the team wants the edit, it waives the rule in `lint/rules.yaml` with a reason:
+
+```diff
+   - id: ddd/layer-direction
+-    canary: lint/canaries/ddd-layer-direction
++    waived: the team lets the application layer use the infrastructure layer.
+```
+
+```console
+$ harness lint canaries
+PASS ddd/domain-purity lint/canaries/ddd-domain-purity
+WAIVED ddd/layer-direction: the team lets the application layer use the infrastructure layer.
+WAIVED ddd/cross-context: deptrac needs one layer for each bounded context, and the project has one context. Add the layers and a canary with the second context.
+WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
+$ echo $?
+0
+```
+
+The output shows each waiver with its reason, so a review sees it. The proof then restored `deptrac.yaml` and `lint/rules.yaml`.
 
 ## The project after the setup
 
@@ -261,7 +399,12 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 .
 ├── .harness
 │   └── plugins
+│       ├── deptrac.sh           you add, commit
 │       └── make-gates.sh        you add, commit
+├── .harness-baseline
+│   └── lint.json                harness writes (lint baseline), commit
+├── .harness-lint
+│   └── VERSION                  harness writes (lint init), commit
 ├── .phpunit.cache
 │   └── test-run-history
 ├── bin
@@ -279,6 +422,23 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   ├── reference.php
 │   ├── routes.yaml
 │   └── services.yaml
+├── lint
+│   ├── architecture
+│   │   └── pack.yaml            you add, commit
+│   ├── canaries
+│   │   ├── ddd-domain-purity
+│   │   │   └── src
+│   │   │       └── Order
+│   │   │           └── Domain
+│   │   │               └── Order.php                you add, commit
+│   │   └── ddd-layer-direction
+│   │       └── src
+│   │           └── Order
+│   │               ├── Application
+│   │               │   └── PlaceOrder.php           you add, commit
+│   │               └── Infrastructure
+│   │                   └── OrderTable.php           you add, commit
+│   └── rules.yaml               you add, commit
 ├── public
 │   └── index.php
 ├── src
@@ -293,17 +453,18 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 ├── .env.dev
 ├── .env.test
 ├── .gitignore               you add the harness lines, commit
-├── .harness.yaml            you add the plugin, harness writes setup and gates (gates init), commit
+├── .harness.yaml            you add the plugins and the pack, harness writes setup and gates (gates init), commit
 ├── .php-cs-fixer.cache
 ├── .php-cs-fixer.dist.php
 ├── Makefile                 you add, commit
 ├── compose.yaml             you add, commit
 ├── composer.json
 ├── composer.lock
+├── deptrac.yaml             you add, commit
 ├── phpunit.dist.xml
 └── symfony.lock
 
-11 directories, 32 files
+25 directories, 41 files
 ```
 
 Git ignores `.phpunit.cache/` and `.php-cs-fixer.cache`. The tree leaves out `vendor/`, `var/` and `.git/`.

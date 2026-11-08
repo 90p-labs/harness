@@ -1,0 +1,24 @@
+version: 3
+workdir: internal
+allow:
+  depOnAnyVendor: false
+components:
+  order-domain: {in: order/domain/**}
+  order-application: {in: order/application/**}
+  order-infrastructure: {in: order/infrastructure/**}
+  billing-domain: {in: billing/domain/**}
+  billing-application: {in: billing/application/**}
+  billing-infrastructure: {in: billing/infrastructure/**}
+excludeFiles:
+  - ^.*_test\.go$
+deps:
+  order-application:
+    mayDependOn: [order-domain]
+  order-infrastructure:
+    mayDependOn: [order-domain, order-application]
+    anyVendorDeps: true
+  billing-application:
+    mayDependOn: [billing-domain]
+  billing-infrastructure:
+    mayDependOn: [billing-domain, billing-application]
+    anyVendorDeps: true

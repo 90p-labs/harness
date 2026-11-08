@@ -1,0 +1,34 @@
+[importlinter]
+root_package = shop
+include_external_packages = True
+
+[importlinter:contract:domain-purity]
+name = ddd/domain-purity
+type = forbidden
+source_modules =
+    shop.*.domain
+forbidden_modules =
+    shop.*.application
+    shop.*.infrastructure
+    sqlalchemy
+    django
+    flask
+    fastapi
+
+[importlinter:contract:layer-direction]
+name = ddd/layer-direction
+type = layers
+containers =
+    shop.*
+layers =
+    (infrastructure)
+    (application)
+
+[importlinter:contract:cross-context]
+name = ddd/cross-context
+type = independence
+modules =
+    shop.*
+unmatched_ignore_imports_alerting = none
+ignore_imports =
+    shop.** -> shop.*

@@ -1,0 +1,10 @@
+pack: ddd
+rules:
+  - id: ddd/domain-purity
+    canary: lint/canaries/ddd-domain-purity
+  - id: ddd/layer-direction
+    canary: lint/canaries/ddd-layer-direction
+  - id: ddd/cross-context
+    waived: deptrac needs one layer for each bounded context, and the project has one context. Add the layers and a canary with the second context.
+  - id: ddd/file-suffix
+    waived: deptrac checks the dependencies, not the file names.
