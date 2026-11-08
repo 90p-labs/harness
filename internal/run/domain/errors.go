@@ -7,4 +7,5 @@ var (
 	ErrRunNotFound       = errors.New("run not found")
 	ErrStaleRun          = errors.New("stale run")
 	ErrActiveRunExists   = errors.New("active run exists")
+	ErrTransitionVetoed  = errors.New("transition vetoed")
 )

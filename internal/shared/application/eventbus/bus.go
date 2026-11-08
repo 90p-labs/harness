@@ -13,11 +13,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jorge07/harness/internal/plugin/domain"
+	"github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
-	instrumentationName = "github.com/jorge07/harness/internal/plugin/application/eventbus"
+	instrumentationName = "github.com/jorge07/harness/internal/shared/application/eventbus"
 	spanPluginCall      = "plugin.call"
 	metricPluginSeconds = "harness.plugin.duration"
 	metricUnitSeconds   = "s"
@@ -34,16 +34,6 @@ const (
 var errUnknownVerdict = errors.New("unknown verdict")
 
 var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
-
-type Failure struct {
-	Plugin string
-	Err    error
-}
-
-type Result struct {
-	Verdict  domain.Verdict
-	Failures []Failure
-}
 
 type Bus struct {
 	plugins  []domain.Plugin
@@ -62,14 +52,14 @@ func NewBus(plugins []domain.Plugin, tracerProvider trace.TracerProvider, meterP
 	return Bus{plugins: sorted, tracer: tracerProvider.Tracer(instrumentationName), duration: duration}
 }
 
-func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (Result, error) {
+func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.DispatchResult, error) {
 	kind, known := domain.KindOf(envelope.Event)
 	if !known {
-		return Result{}, fmt.Errorf("%w: %q", domain.ErrUnknownEvent, envelope.Event)
+		return domain.DispatchResult{}, fmt.Errorf("%w: %q", domain.ErrUnknownEvent, envelope.Event)
 	}
 
 	var denies, contexts []string
-	var failures []Failure
+	var failures []domain.DispatchFailure
 	for _, plugin := range b.plugins {
 		if !slices.Contains(plugin.Subscribes(), envelope.Event) {
 			continue
@@ -77,7 +67,7 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (Result, er
 		verdict, err := b.call(ctx, plugin, envelope)
 		if err != nil {
 			if kind == domain.KindVeto || kind == domain.KindCollect {
-				failures = append(failures, Failure{Plugin: plugin.Name(), Err: err})
+				failures = append(failures, domain.DispatchFailure{Plugin: plugin.Name(), Err: err})
 			}
 			if kind == domain.KindVeto {
 				denies = []string{pluginFailedPrefix + err.Error()}
@@ -96,7 +86,7 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (Result, er
 		}
 	}
 
-	result := Result{
+	result := domain.DispatchResult{
 		Verdict:  domain.Verdict{Kind: domain.VerdictAllow, Context: strings.Join(contexts, "\n\n")},
 		Failures: failures,
 	}

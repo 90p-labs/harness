@@ -58,12 +58,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	root.SetArgs(append([]string{}, args...))
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	if err := root.ExecuteContext(ctx); err != nil {
+	if failed, err := root.ExecuteContextC(ctx); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		if !errors.As(err, new(usageError)) {
 			return exitRuntime
 		}
-		fmt.Fprint(stderr, root.UsageString())
+		fmt.Fprint(stderr, failed.UsageString())
 		return exitUsage
 	}
 	return exitOK
@@ -78,7 +78,6 @@ func reportTelemetry(stderr io.Writer, err error) {
 func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           commandName,
-		Args:          usageArgs(cobra.NoArgs),
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(*cobra.Command, []string) error {
@@ -90,13 +89,14 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().String(config.FlagConfig, "", "path of the config file")
 	root.PersistentFlags().String(config.FlagStateDSN, "", "state database DSN")
 	root.AddCommand(newConfigCommand())
+	root.AddCommand(newRunCommand(root.PersistentFlags()))
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",
-		Args:  usageArgs(cobra.NoArgs),
 		Run: func(cmd *cobra.Command, _ []string) {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", commandName, version)
 		},
 	})
+	wrapArgs(root)
 	return root
 }

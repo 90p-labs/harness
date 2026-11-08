@@ -99,12 +99,12 @@ harness/
 | 2.9 | `harness config` prints the effective config as YAML, with each plugin timeout as a duration string, and exits 0. | `go test ./cmd/harness -run TestConfigCommand -count=1` |
 | 2.10 | `harness config --config missing.yaml` exits 1 with an error that names the file. | `go test ./cmd/harness -run TestConfigFlagMissingFile -count=1` |
 | 2.11 | A usage error exits 2, and a runtime error exits 1. | `go test ./cmd/harness -run TestExitCodes -count=1` |
-| 2.12 | The envelope JSON stays the same after the host type moves to the shared domain. | `go test ./internal/plugin/domain -run TestEnvelopeJSON -count=1` |
+| 2.12 | The envelope JSON stays the same after the host type moves to the shared domain. | `go test ./internal/shared/domain -run TestEnvelopeJSON -count=1` |
 | 2.13 | The module is formatted, builds, vets and passes all tests with no error. | `make check` |
 
 Tasks:
 
-1. **Shared host and config loader.** Owned: `internal/shared/domain/`, `internal/shared/infrastructure/config/`, `internal/plugin/domain/envelope.go`, `./go.mod`, `./go.sum`. Test first: `config_test.go` with `TestLoadDefaults`, which fails because the package does not exist. DoD: criteria 2.1 to 2.7 and 2.12. Depends on: none.
+1. **Shared host and config loader.** Owned: `internal/shared/domain/`, `internal/shared/infrastructure/config/`, `internal/shared/domain/envelope.go`, `./go.mod`, `./go.sum`. Test first: `config_test.go` with `TestLoadDefaults`, which fails because the package does not exist. DoD: criteria 2.1 to 2.7 and 2.12. Depends on: none.
 2. **Git top level.** Owned: `internal/shared/infrastructure/git/`. Test first: `git_test.go` with `TestTopLevel`, which fails because the package does not exist. DoD: criterion 2.8. Depends on: none.
 3. **Config command and exit codes.** Owned: `cmd/harness/`, `./DESIGN.md`. Test first: `main_test.go` with `TestExitCodes`, which fails because every error exits 2. DoD: criteria 2.9 to 2.11 and 2.13. Depends on: tasks 1 and 2.
 
@@ -162,8 +162,8 @@ harness/
 | 3.11 | The status query returns a `Status` value, and `ErrRunNotFound` with no open run. | `go test ./internal/run/application/query/status -run TestStatusQuery -count=1` |
 | 3.12 | `Before` dispatches `run.transition.before` with the run reference and the payload, and maps a deny to `ErrTransitionVetoed`. | `go test ./internal/run/infrastructure/pluginhooks -run TestHooksBeforeDeny -count=1` |
 | 3.13 | `After` dispatches `run.transition.after` with the old and the new phase. | `go test ./internal/run/infrastructure/pluginhooks -run TestHooksAfterEnvelope -count=1` |
-| 3.14 | `NewBus` returns `ErrUnknownEvent` for a configured plugin with an unknown event name. | `go test ./internal/plugin -run TestNewBusUnknownEvent -count=1` |
-| 3.15 | A saved run reads back with its prompt after the migration `0002`. | `go test ./internal/run/infrastructure/persistence -run TestRunRepositoryContract/sqlite/Prompt -count=1` |
+| 3.14 | `FromConfig` returns `ErrUnknownEvent` for a configured plugin with an unknown event name. | `go test ./internal/shared/infrastructure/execplugin -run TestFromConfigUnknownEvent -count=1` |
+| 3.15 | A saved run reads back with its prompt after the migration `0002`. | `go test ./internal/run/infrastructure/persistence -run TestRunRepositoryContract/sqlite/SaveAndGet -count=1` |
 | 3.16 | The status output has the run line, the reason line only when set, and the `next:` hint of the phase. | `go test ./internal/run/ui/cli -run TestStatusLines -count=1` |
 | 3.17 | In a temp git repo, `start`, `plan`, `approve`, `review`, `ship` and `done` end the run, and `status` prints `active: no`. | `go test ./cmd/harness -run TestRunLifecycle -count=1` |
 | 3.18 | The default state file is `.harness/state.db` in the git common dir, also when the command runs in a linked worktree. | `go test ./cmd/harness -run TestStateInGitCommonDir -count=1` |
@@ -175,7 +175,7 @@ Tasks:
 1. **Repo key.** Owned: `internal/shared/infrastructure/git/`. Test first: `git_test.go` with `TestRepoKey`, which fails because `RepoKey` does not exist. DoD: criteria 3.1 and 3.2. Depends on: none.
 2. **Run prompt and hooks port.** Owned: `internal/run/domain/`, `internal/run/infrastructure/persistence/`. Test first: `repository_test.go` with the `Prompt` case, which fails because the column does not exist. DoD: criterion 3.15. Depends on: none.
 3. **Run use cases.** Owned: `internal/run/application/`. Test first: `transition/handler_test.go` with `TestTransitionOrder`, which fails because the package does not exist. DoD: criteria 3.3 to 3.11. Depends on: task 2.
-4. **Plugin hooks and bus from config.** Owned: `internal/run/infrastructure/pluginhooks/`, `internal/plugin/module.go`, `internal/plugin/module_test.go`. Test first: `pluginhooks/hooks_test.go` with `TestHooksBeforeDeny`, which fails because the package does not exist. DoD: criteria 3.12 to 3.14. Depends on: task 2.
+4. **Plugin hooks and bus from config.** Owned: `internal/run/infrastructure/pluginhooks/`, `internal/shared/infrastructure/execplugin/config.go`, `internal/shared/infrastructure/execplugin/config_test.go`. Test first: `pluginhooks/hooks_test.go` with `TestHooksBeforeDeny`, which fails because the package does not exist. DoD: criteria 3.12 to 3.14. Depends on: task 2.
 5. **Run CLI and wiring.** Owned: `internal/run/ui/`, `internal/run/module.go`, `cmd/harness/`, `./architecture_test.go`. Test first: `cmd/harness/main_test.go` with `TestRunLifecycle`, which fails because the `run` command does not exist. DoD: criteria 3.16 to 3.20. Depends on: tasks 1, 3 and 4.
 
 Commits:
@@ -335,7 +335,7 @@ harness/
 
 Tasks:
 
-1. **Host domain and payloads.** Owned: `internal/host/domain/`, `internal/plugin/domain/payload.go`. Test first: `capability_test.go` with `TestCapabilities`, which fails because the package does not exist. DoD: criterion 5.5. Depends on: none.
+1. **Host domain and payloads.** Owned: `internal/host/domain/`, `internal/shared/domain/payload.go`. Test first: `capability_test.go` with `TestCapabilities`, which fails because the package does not exist. DoD: criterion 5.5. Depends on: none.
 2. **Claude Code codec.** Owned: `internal/host/infrastructure/claudecode/`. Test first: `codec_test.go` with `TestClaudeDecode`, which fails because the package does not exist. DoD: criteria 5.1 and 5.2. Depends on: 1.
 3. **Codex codec.** Owned: `internal/host/infrastructure/codex/`. Test first: `codec_test.go` with `TestCodexDecode`, which fails because the package does not exist. DoD: criteria 5.3 and 5.4. Depends on: 1.
 4. **Hook handler and command.** Owned: `internal/host/application/`, `internal/host/ui/cli/hook.go`, `internal/host/ui/cli/hook_test.go`, `internal/host/module.go`, `cmd/harness/main.go`. Test first: `handler_test.go` with `TestHookFailsClosed`, which fails because the handler does not exist. DoD: criteria 5.6 to 5.10. Depends on: 2 and 3.

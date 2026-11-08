@@ -16,12 +16,13 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 
 - A `domain` package imports only the standard library and `internal/shared/domain`.
 - An `application` package imports no `go.opentelemetry.io/otel/sdk` package and no `infrastructure` package.
+- A `ui` package imports no `infrastructure` package.
 
 | Module | Path | Job |
 |---|---|---|
 | telemetry | `internal/shared/infrastructure/telemetry` | OpenTelemetry SDK setup, OTLP export, shutdown |
 | run | `internal/run/domain` | Run aggregate, phases, guarded transitions, stop decision |
-| plugin | `internal/plugin` | Event catalogue, envelope, verdicts, event bus, exec adapter |
+| shared bus | `internal/shared/{domain,application/eventbus,infrastructure/execplugin}` | Event catalogue, envelope, verdicts, event bus, exec adapter |
 | dbal | `internal/shared/infrastructure/dbal` | Dialects, migrations, transactions, optimistic locks |
 | run store | `internal/run/infrastructure/persistence` | `RunRepository` adapter on the DBAL |
 | config | `internal/shared/infrastructure/config` | File, env and flags with viper |
@@ -245,6 +246,7 @@ The exec adapter `ExecPlugin{PluginName, Events, Command, Timeout}`:
 
 - It runs `Command` with `exec.CommandContext`. The default timeout is 5 seconds. `WaitDelay` is 500 ms, because a child that keeps stdout open blocks `Wait` without it.
 - It writes the envelope on stdin and reads the verdict from stdout.
+- It runs the command in the envelope `cwd`, so a relative command such as `./scripts/gate.sh` works from any subfolder. A `cwd` that does not exist is a plugin failure.
 - The plugin stderr goes to the harness stderr. The adapter keeps its last 512 bytes.
 - A timeout, a non-zero exit or invalid JSON returns `ErrPluginFailed`, with the cause and the stderr tail.
 - It injects the W3C trace context into the env var `TRACEPARENT`.
@@ -433,7 +435,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
 | `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
 
-The plugin module checks the plugin event names, because `shared` cannot import it. The host constants live in `internal/shared/domain`, so the envelope and the role table use one set.
+`execplugin.FromConfig` checks the plugin event names and builds the exec plugins. The host constants live in `internal/shared/domain`, so the envelope and the role table use one set.
 
 `harness config` prints the effective config as YAML. Outside a git repo it writes `error: not in a git repository`.
 
@@ -443,7 +445,48 @@ Exit codes:
 |---|---|
 | 0 | Success |
 | 1 | A runtime error |
-| 2 | A usage error: an unknown command, an unknown flag or a wrong argument count. The usage text follows the error |
+| 2 | A usage error: an unknown command, an unknown flag, a wrong argument count or a missing required flag. The usage text of the failing command follows the error |
+
+## Run commands
+
+`harness run <command>` drives the active run of the repo and the worktree. The run key is the normalized `origin` URL and the worktree top level.
+
+| Command | Argument | Event |
+|---|---|---|
+| `start` | the prompt | `start` |
+| `status` | none | none, a query |
+| `plan` | none | `submit-plan` |
+| `approve` | none | `approve-plan` |
+| `amend` | none | `amend` |
+| `review` | none | `submit-for-review` |
+| `rework` | `--findings`, required | `request-rework` |
+| `ship` | none | `approve-review` |
+| `done` | none | `complete` |
+| `block` | `--reason`, required | `block` |
+| `resume` | none | `resume` |
+| `abandon` | none | `abandon` |
+
+Each command prints the run after its change on stdout:
+
+```text
+run 20261108-011805-add-the-login-page phase=working review_round=1 live_round=0
+reason: the tests miss the empty case
+next: implement test first, run harness verify, then harness run review
+```
+
+- The `reason:` line shows only when the reason is set.
+- The `next:` hint is a constant map from the phase to text in `internal/run/ui/cli`. Each phase has one.
+- With no active run, `status` prints `active: no` and exits 0. Each other command writes `error: run not found` and exits 1.
+- An illegal transition, a veto, a stale run or an active run on `start` writes `error:` and the cause on stderr, and exits 1.
+- A transition goes through `Flow.Move`: the span `run.transition`, `run.transition.before` (a deny vetoes), `Apply`, `Save`, then `run.transition.after`.
+
+The state file is `.harness/state.db` in the git common dir, so each linked worktree shares it. The DBAL base dir is the common dir, and the default DSN `sqlite:.harness/state.db` is relative to it.
+
+Only a `run` command loads the config and opens the store. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
+
+`cmd/harness` wraps the `Args` of every command in a usage error, and a command with no `Args` takes none. A `run` command checks its required flag in its `Args` function, because cobra checks `MarkFlagRequired` after the `Args` step.
+
+The `ui` layer: a `ui` package imports its own `application` and `domain` packages, and never an `infrastructure` package. `TestLayerImports` checks it.
 
 ## Gates and lint packs
 

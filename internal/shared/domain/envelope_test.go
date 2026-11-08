@@ -4,8 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/jorge07/harness/internal/plugin/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/domain"
 )
 
 const specEnvelope = `{"version":1,"event":"tool.before","host":"claude","cwd":"/repo","run":{"id":"r1","phase":"working"},"payload":{"tool":"Bash","input":{"command":"git push"}}}`
@@ -14,7 +13,7 @@ func TestEnvelopeJSON(t *testing.T) {
 	envelope := domain.Envelope{
 		Version: domain.EnvelopeVersion,
 		Event:   domain.EventToolBefore,
-		Host:    shareddomain.HostClaude,
+		Host:    domain.HostClaude,
 		Cwd:     "/repo",
 		Run:     domain.RunRef{ID: "r1", Phase: "working"},
 		Payload: json.RawMessage(`{"tool":"Bash","input":{"command":"git push"}}`),

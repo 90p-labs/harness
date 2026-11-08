@@ -13,7 +13,7 @@ import (
 
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/jorge07/harness/internal/plugin/domain"
+	"github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
@@ -56,6 +56,7 @@ func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domai
 	var stdout bytes.Buffer
 	var tail tailBuffer
 	cmd := exec.CommandContext(callCtx, p.Command[0], p.Command[1:]...)
+	cmd.Dir = envelope.Cwd
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Stdout = &stdout
 	cmd.Stderr = io.MultiWriter(os.Stderr, &tail)
