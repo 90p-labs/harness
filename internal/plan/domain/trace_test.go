@@ -30,8 +30,8 @@ func TestTraceLinks(t *testing.T) {
 			Proof:   "go test ./internal/ping/application/query/pingquery -run TestPingQuery -count=1",
 			Commits: []int{2, 3}, PR: 1,
 			Signal: &domain.SignalRow{
-				Criterion: 2, Metric: "`ping.query` span count", Panel: "ping calls",
-				Alert: "none", Threshold: "none", Window: "24h", Line: 43,
+				Criterion: 2, Signal: "ping calls", Source: "prometheus", Query: "ping:calls:rate5m",
+				Breach: "> 100", Window: "24h", Panel: "ping calls", Line: 43,
 			},
 		},
 		3: {

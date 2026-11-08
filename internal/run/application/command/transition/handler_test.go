@@ -19,6 +19,7 @@ import (
 
 const (
 	callActive = "active"
+	callGet    = "get"
 	callBefore = "before"
 	callSave   = "save"
 	callAfter  = "after"
@@ -54,7 +55,14 @@ func (f *fakeRepository) Active(context.Context, domain.RunKey) (domain.Run, err
 	return f.stored, nil
 }
 
-func (f *fakeRepository) Get(context.Context, string) (domain.Run, error) { return f.stored, nil }
+func (f *fakeRepository) Get(context.Context, string) (domain.Run, error) {
+	f.journal.calls = append(f.journal.calls, callGet)
+	return f.stored, nil
+}
+
+func (f *fakeRepository) ListByPhase(context.Context, string, []domain.Phase) ([]domain.Run, error) {
+	return nil, nil
+}
 
 func (f *fakeRepository) Save(_ context.Context, run domain.Run) (domain.Run, error) {
 	f.journal.calls = append(f.journal.calls, callSave)
@@ -134,6 +142,38 @@ func assertCalls(t *testing.T, f fixture, want ...string) {
 	if !reflect.DeepEqual(f.journal.calls, want) {
 		t.Fatalf("calls = %v, want %v", f.journal.calls, want)
 	}
+}
+
+func TestTransitionByRunID(t *testing.T) {
+	const url = "https://github.com/o/r/pull/9"
+	shipping := domain.Run{ID: runID, Key: key, Phase: domain.PhaseShipping, Version: startedAt}
+	complete := transition.Command{Event: domain.EventComplete, RunID: runID, Version: startedAt, PRURL: url}
+
+	t.Run("the run is loaded by id and records the PR", func(t *testing.T) {
+		f := newFixture(shipping)
+
+		if err := f.handler.Handle(context.Background(), complete); err != nil {
+			t.Fatal(err)
+		}
+
+		assertCalls(t, f, callGet, callBefore, callSave, callAfter)
+		if f.hooks.beforeCmd.PRURL != url || len(f.repo.saved) != 1 || f.repo.saved[0].PRURL != url {
+			t.Fatalf("before = %+v, saved = %+v", f.hooks.beforeCmd, f.repo.saved)
+		}
+	})
+
+	t.Run("a moved version is stale", func(t *testing.T) {
+		moved := shipping
+		moved.Version++
+		f := newFixture(moved)
+
+		err := f.handler.Handle(context.Background(), complete)
+
+		if !errors.Is(err, domain.ErrStaleRun) {
+			t.Fatalf("err = %v, want %v", err, domain.ErrStaleRun)
+		}
+		assertCalls(t, f, callGet)
+	})
 }
 
 func TestTransitionOrder(t *testing.T) {

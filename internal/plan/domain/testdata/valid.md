@@ -38,9 +38,9 @@ Track: full
 
 ## Signals
 
-| Criterion | Metric | Panel | Alert | Threshold | Window |
-|---|---|---|---|---|---|
-| 2 | `ping.query` span count | ping calls | none | none | `24h` |
+| Criterion | Signal | Source | Query | Breach | Window | Panel |
+|---|---|---|---|---|---|---|
+| 2 | ping calls | prometheus | `ping:calls:rate5m` | `> 100` | `24h` | ping calls |
 
 ## Decisions
 

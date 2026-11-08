@@ -36,6 +36,10 @@ func (f *fakeRepository) Active(context.Context, domain.RunKey) (domain.Run, err
 
 func (f *fakeRepository) Get(context.Context, string) (domain.Run, error) { return f.stored, nil }
 
+func (f *fakeRepository) ListByPhase(context.Context, string, []domain.Phase) ([]domain.Run, error) {
+	return nil, nil
+}
+
 func (f *fakeRepository) Save(_ context.Context, run domain.Run) (domain.Run, error) {
 	f.saved = append(f.saved, run)
 	return run, f.saveErr

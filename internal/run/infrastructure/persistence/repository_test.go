@@ -87,6 +87,45 @@ func transitionCount(t *testing.T, s store, id string) int {
 	return n
 }
 
+func TestListByPhase(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			const url = "https://github.com/o/r/pull/7"
+			shipping := newRun(t, "a-shipping", domain.EventStart)
+			shipping.Phase = domain.PhaseShipping
+			shipping.PRURL, shipping.PRs = url, []string{"https://github.com/o/r/pull/6", url}
+			releasing := newRun(t, "b-releasing", domain.EventStart)
+			releasing.Key.Worktree = "/second"
+			releasing.Phase = domain.PhaseReleasing
+			working := newRun(t, "c-working", domain.EventStart)
+			working.Key.Worktree = "/third"
+			working.Phase = domain.PhaseWorking
+			foreign := newRun(t, "d-foreign", domain.EventStart)
+			foreign.Key = domain.RunKey{Repo: "github.com/other/repo", Worktree: "/repo"}
+			foreign.Phase = domain.PhaseReleasing
+			want := []domain.Run{save(t, s, shipping), save(t, s, releasing)}
+			for _, run := range []domain.Run{working, foreign} {
+				save(t, s, run)
+			}
+
+			got, err := s.repo.ListByPhase(ctx, key.Repo, []domain.Phase{domain.PhaseShipping, domain.PhaseReleasing})
+
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %+v, %v, want %+v", got, err, want)
+			}
+			if got[0].PRURL != url || len(got[0].PRs) != 2 {
+				t.Fatalf("pr record = %q, %v", got[0].PRURL, got[0].PRs)
+			}
+			none, err := s.repo.ListByPhase(ctx, key.Repo, nil)
+			if err != nil || len(none) != 0 {
+				t.Fatalf("no phases: %+v, %v", none, err)
+			}
+		})
+	}
+}
+
 func TestRunRepositoryContract(t *testing.T) {
 	ctx := context.Background()
 	for _, c := range dialectCases {

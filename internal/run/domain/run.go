@@ -18,6 +18,8 @@ type Run struct {
 	StopBlocks  int
 	BlockedFrom Phase
 	Reason      string
+	PRURL       string
+	PRs         []string
 	Version     int
 	events      []Transitioned
 }
@@ -56,10 +58,17 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 	case cmd.Event == EventRequestRework:
 		next.ReviewRound++
 		next.Reason = cmd.Reason
-	case cmd.Event == EventRegress:
+	case cmd.Event == EventComplete:
+		next.PRURL = cmd.PRURL
+		next.PRs = append(slices.Clone(r.PRs), cmd.PRURL)
+	}
+	if cmd.Event == EventRegress {
 		next.LiveRound++
 		next.ReviewRound = 0
 		next.Reason = cmd.Reason
+	}
+	if cmd.Event == EventRegress && row.To == PhasePlanning {
+		next.PRURL = ""
 	}
 	return next, nil
 }

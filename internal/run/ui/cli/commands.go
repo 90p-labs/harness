@@ -22,6 +22,7 @@ const (
 
 	flagFindings = "findings"
 	flagReason   = "reason"
+	flagPR       = "pr"
 
 	runLineFormat  = "run %s phase=%s review_round=%d live_round=%d"
 	reasonPrefix   = "reason: "
@@ -35,7 +36,7 @@ var phaseHints = map[domain.Phase]string{
 	domain.PhaseAwaitingApproval: "wait for the approval, then harness run approve",
 	domain.PhaseWorking:          "implement test first, run harness verify, then harness run review",
 	domain.PhaseReviewing:        "review the change, then harness run ship, or harness run rework --findings",
-	domain.PhaseShipping:         "merge the change, then harness run done",
+	domain.PhaseShipping:         "merge the change, then harness run done --pr URL",
 	domain.PhaseReleasing:        "deploy the change and wait for the live check",
 	domain.PhaseObserving:        "watch the signals until the live check ends the run",
 	domain.PhaseBlocked:          "fix the cause, then harness run resume, or harness run abandon",
@@ -66,7 +67,7 @@ var transitionSpecs = []transitionSpec{
 	{"review", "Submit the change for review", domain.EventSubmitForReview, ""},
 	{"rework", "Send the change back with findings", domain.EventRequestRework, flagFindings},
 	{"ship", "Approve the review", domain.EventApproveReview, ""},
-	{"done", "Complete the run", domain.EventComplete, ""},
+	{"done", "Complete the run", domain.EventComplete, flagPR},
 	{"block", "Block the run", domain.EventBlock, flagReason},
 	{"resume", "Resume a blocked run", domain.EventResume, ""},
 	{"abandon", "Abandon the run", domain.EventAbandon, ""},
@@ -140,6 +141,10 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 			if spec.flag != "" && flagValue(cmd, spec.flag) == "" {
 				return fmt.Errorf(missingFlagMsg, spec.flag)
 			}
+			if spec.flag == flagPR {
+				_, err := shareddomain.ParsePRURL(flagValue(cmd, flagPR))
+				return err
+			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -148,8 +153,13 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				err = h.Transition.Handle(ctx, transition.Command{Key: h.Key, Event: spec.event, Reason: flagValue(cmd, spec.flag)})
-				if err != nil {
+				command := transition.Command{Key: h.Key, Event: spec.event}
+				if spec.flag == flagPR {
+					command.PRURL = flagValue(cmd, flagPR)
+				} else {
+					command.Reason = flagValue(cmd, spec.flag)
+				}
+				if err = h.Transition.Handle(ctx, command); err != nil {
 					return err
 				}
 				return printStatus(ctx, cmd.OutOrStdout(), h, status.Query{RunID: current.ID})

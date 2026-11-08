@@ -10,5 +10,6 @@ type Command struct {
 	Event  Event
 	Reason string
 	Track  shareddomain.Track
+	PRURL  string
 	At     time.Time
 }

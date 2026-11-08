@@ -129,11 +129,12 @@ type PR struct {
 
 type SignalRow struct {
 	Criterion int
-	Metric    string
-	Panel     string
-	Alert     string
-	Threshold string
+	Signal    string
+	Source    string
+	Query     string
+	Breach    string
 	Window    string
+	Panel     string
 	Line      int
 }
 

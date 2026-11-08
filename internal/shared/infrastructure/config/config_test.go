@@ -277,6 +277,37 @@ func TestLoadLint(t *testing.T) {
 	}
 }
 
+func TestLoadLive(t *testing.T) {
+	cases := []struct {
+		name string
+		file string
+		want config.Live
+	}{
+		{name: "defaults", want: config.Live{Environment: "production"}},
+		{
+			name: "file over defaults",
+			file: "live:\n  environment: staging\n  rollback: helm rollback api\n",
+			want: config.Live{Environment: "staging", Rollback: "helm rollback api"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := load(t, tc.file)
+
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if got.Live != tc.want {
+				t.Errorf("live = %+v, want %+v", got.Live, tc.want)
+			}
+		})
+	}
+
+	if _, err := load(t, "live:\n  rot: x\n"); err == nil {
+		t.Fatal("want an error for the unknown live key")
+	}
+}
+
 func TestLoadGateUnknownKey(t *testing.T) {
 	if _, err := load(t, "gates:\n  - {id: a, run: x, cmd: y}\n"); err == nil {
 		t.Fatal("want an error for the unknown gate key")

@@ -27,7 +27,7 @@ const (
 
 var (
 	criteriaHeader = []string{"#", "Criterion", "Proof"}
-	signalsHeader  = []string{"Criterion", "Metric", "Panel", "Alert", "Threshold", "Window"}
+	signalsHeader  = []string{"Criterion", "Signal", "Source", "Query", "Breach", "Window", "Panel"}
 	taskSides      = []string{SideBackend, SideFrontend, SideOther}
 	taskFields     = []string{FieldSide, FieldOwned, FieldTestFirst, FieldDoD, FieldDependsOn}
 	topHeadings    = []string{HeadingGoal, HeadingCriteria, HeadingTasks, HeadingDecisions, HeadingSpecs}
@@ -256,6 +256,9 @@ func checkSignals(doc Document, add report) {
 		add(doc.SignalsTable.Line, RuleSignalsTable, "header must be | %s |", strings.Join(signalsHeader, " | "))
 	}
 	for _, row := range doc.Signals {
+		if _, err := shareddomain.ParseBreach(row.Breach); err != nil {
+			add(row.Line, RuleSignalsTable, "breach %q must be an operator (>, >=, <, <=) and a number", row.Breach)
+		}
 		if _, err := time.ParseDuration(row.Window); err != nil {
 			add(row.Line, RuleSignalsTable, "window %q is not a Go duration", row.Window)
 		}

@@ -47,7 +47,7 @@ var (
 
 const (
 	criteriaCells = 3
-	signalsCells  = 6
+	signalsCells  = 7
 	maxRangeSpan  = 1000
 )
 
@@ -205,8 +205,8 @@ func (p *parser) addSignal(c []string, n int) {
 		return
 	}
 	p.doc.Signals = append(p.doc.Signals, SignalRow{
-		Criterion: criterion, Metric: c[1], Panel: c[2], Alert: c[3], Threshold: c[4],
-		Window: strings.Trim(c[5], "`"), Line: n,
+		Criterion: criterion, Signal: c[1], Source: c[2], Query: strings.Trim(c[3], "`"),
+		Breach: strings.Trim(c[4], "`"), Window: strings.Trim(c[5], "`"), Panel: c[6], Line: n,
 	})
 }
 
