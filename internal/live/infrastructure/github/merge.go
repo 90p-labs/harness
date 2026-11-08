@@ -1,15 +1,13 @@
 package github
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/jorge07/harness/internal/live/domain"
+	gh "github.com/jorge07/harness/internal/shared/infrastructure/github"
 )
 
 var _ domain.GitHub = (*Client)(nil)
@@ -53,12 +51,5 @@ func (c *Client) Merge(ctx context.Context, prURL string) (domain.Merge, error) 
 }
 
 func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
-	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, c.bin, args...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("gh %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return stdout.Bytes(), nil
+	return gh.Run(ctx, c.bin, nil, args...)
 }

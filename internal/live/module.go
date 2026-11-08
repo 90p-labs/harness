@@ -12,15 +12,13 @@ import (
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	gh "github.com/jorge07/harness/internal/shared/infrastructure/github"
 )
 
-const (
-	instrumentationName = "github.com/jorge07/harness/internal/live"
-	githubBinary        = "gh"
-)
+const instrumentationName = "github.com/jorge07/harness/internal/live"
 
 func NewCheck(db *dbal.DB, runs domain.Runs, bus shareddomain.Dispatcher, cfg config.Live) check.Handler {
-	return check.NewHandler(runs, persistence.NewSQLReleaseRepository(db), github.New(githubBinary), archive.New(), bus,
+	return check.NewHandler(runs, persistence.NewSQLReleaseRepository(db), github.New(gh.Binary), archive.New(), bus,
 		cfg.Environment, cfg.Rollback, otel.Tracer(instrumentationName), otel.Meter(instrumentationName))
 }
 
