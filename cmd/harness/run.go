@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
 
+	"github.com/jorge07/harness/internal/deploy"
 	"github.com/jorge07/harness/internal/guard"
 	livemodule "github.com/jorge07/harness/internal/live"
 	livecli "github.com/jorge07/harness/internal/live/ui/cli"
@@ -64,6 +66,10 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	if err != nil {
 		return environment{}, err
 	}
+	deployPlugins, err := deploy.NewPlugins(cfg.Deploy.Disabled, plugins)
+	if err != nil {
+		return environment{}, err
+	}
 	key := domain.RunKey{Repo: repo, Worktree: worktree}
 	guards, err := guard.NewPlugins(cfg.Guard.Disabled, cfg.Git.DefaultBranch, modelsByHost(cfg.Roles), worktree,
 		stopAdapter{cfg: cfg, commonDir: commonDir, key: key},
@@ -88,7 +94,7 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus})
 		return livecli.Lines(results), err
 	})
-	bus = eventbus.NewBus(append(append(plugins, guards...), review, planView, session), otel.GetTracerProvider(), otel.GetMeterProvider())
+	bus = eventbus.NewBus(slices.Concat(plugins, guards, deployPlugins, []shareddomain.Plugin{review, planView, session}), otel.GetTracerProvider(), otel.GetMeterProvider())
 	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, proofs: proofs, defaultBranch: defaultBranch}, nil
 }
 

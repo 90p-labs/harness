@@ -64,6 +64,20 @@ type StopPayload struct {
 	BackgroundAgents int  `json:"background_agents"`
 }
 
+type GatesDetectPayload struct {
+	Files []string `json:"files"`
+}
+
+type ProposedGate struct {
+	ID    string   `json:"id"`
+	Run   string   `json:"run"`
+	Paths []string `json:"paths,omitempty"`
+}
+
+type ChartRenderPayload struct {
+	Chart string `json:"chart"`
+}
+
 type SubagentPayload struct {
 	AgentID   string `json:"agent_id"`
 	AgentType string `json:"agent_type"`

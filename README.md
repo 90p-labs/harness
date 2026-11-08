@@ -72,7 +72,7 @@ The lint packs call external tools. Put them on the `PATH`:
 |---|---|---|
 | Biome | 2.0 or later (CI pins 2.6.6) | the packs `ddd`, `ddd-es`, `nextjs` and `shadcn` |
 | oxlint | CI pins 1.92.0 | the two oxlint rules of the pack `nextjs` |
-| helm, promtool | any | the pack `observability` and its gates |
+| helm, promtool | any | the chart rules of the pack `observability`, and the `helm-render` and `promtool-test` gates of the default deploy plugins |
 
 ```sh
 npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0

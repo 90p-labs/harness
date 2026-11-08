@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jorge07/harness/internal/deploy/infrastructure/toolplugin"
 	"github.com/jorge07/harness/internal/lint/domain"
 	"github.com/jorge07/harness/internal/lint/infrastructure/fixture"
 	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
@@ -54,7 +55,7 @@ func newTestEngine() *Engine {
 			Rules:      "deploy/**/*.rules.yaml",
 			Dashboards: "deploy/**/dashboards/*.json",
 		},
-	})
+	}, toolplugin.Template)
 }
 
 func TestHarnessEngineFixtures(t *testing.T) {
@@ -143,7 +144,7 @@ func TestObservabilityPathsFromSettings(t *testing.T) {
 			runbookRule = append(runbookRule, rule)
 		}
 	}
-	engine := New(domain.Settings{Observability: domain.Observability{Chart: "ops/chart", Rules: "ops/*.rules.yaml", Dashboards: "ops/dashboards/*.json"}})
+	engine := New(domain.Settings{Observability: domain.Observability{Chart: "ops/chart", Rules: "ops/*.rules.yaml", Dashboards: "ops/dashboards/*.json"}}, toolplugin.Template)
 
 	findings, err := engine.Run(context.Background(), dir, runbookRule)
 

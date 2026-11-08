@@ -29,7 +29,11 @@ var setupFiles = []string{".harness-lint/VERSION", ".claude/settings.json"}
 
 func writeRepoFile(t *testing.T, dir, name, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+	path := filepath.Join(dir, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -100,6 +104,8 @@ func TestInitTwiceKeepsTheSetup(t *testing.T) {
 	clearHarnessEnv(t)
 	dir := initRepo(t)
 	writeRepoFile(t, dir, configFile, observabilityConfig)
+	writeRepoFile(t, dir, "charts/api/Chart.yaml", "")
+	writeRepoFile(t, dir, "alerts/api.rules.test.yaml", "")
 
 	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
 	if code != exitOK || !strings.Contains(stdout, "lint packs: kept observability\n") || !strings.Contains(stdout, "gates: wrote lint, helm-render, promtool-test\n") {

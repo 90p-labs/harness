@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -488,6 +489,71 @@ func TestGatesInit(t *testing.T) {
 	code, _, stderr = execute(t, commandGates, commandInit)
 	if code != exitRuntime || !strings.Contains(stderr, "gates exist") {
 		t.Fatalf("second init: code = %d, stderr = %q, want %d and the gates exist error", code, stderr, exitRuntime)
+	}
+}
+
+func gatesInitConfig(t *testing.T, dir, cfg string, files ...string) string {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, stdout, stderr := execute(t, commandGates, commandInit)
+	if code != exitOK || stderr != "" {
+		t.Fatalf("gates init: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	written, err := os.ReadFile(filepath.Join(dir, configFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(written)
+}
+
+func TestGatesInitWritesAPluginGate(t *testing.T) {
+	clearHarnessEnv(t)
+	script, err := filepath.Abs(filepath.Join("testdata", "kubeconform-plugin.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := initRepo(t)
+
+	written := gatesInitConfig(t, dir, "plugins:\n  - name: kubeconform\n    command: [sh, "+strconv.Quote(script)+"]\n    events: [gates.detect]\n")
+
+	for _, want := range []string{"id: kubeconform", "run: kubeconform -summary deploy"} {
+		if !strings.Contains(written, want) {
+			t.Errorf(".harness.yaml = %q, want it to contain %q", written, want)
+		}
+	}
+}
+
+func TestGatesInitDefaultDeployPlugins(t *testing.T) {
+	const helmGate = "id: helm-render"
+	tests := map[string]struct {
+		cfg  string
+		want bool
+	}{
+		"helm on":  {cfg: "{}\n", want: true},
+		"helm off": {cfg: "deploy:\n  disabled: [helm]\n"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			clearHarnessEnv(t)
+			dir := initRepo(t)
+
+			written := gatesInitConfig(t, dir, tt.cfg, "deploy/chart/Chart.yaml")
+
+			if got := strings.Contains(written, helmGate); got != tt.want {
+				t.Errorf(".harness.yaml = %q, has %q = %v, want %v", written, helmGate, got, tt.want)
+			}
+		})
 	}
 }
 

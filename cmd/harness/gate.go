@@ -62,12 +62,7 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	}
 	verifier := gatemodule.NewVerify(db, env.bus, criterionSource{flags: flags}, time.Now)
 	commits := gatemodule.NewVerifyCommits(db, env.bus, time.Now)
-	initializer := gatemodule.NewInit(toolchain.Lint{
-		Packs:    env.cfg.Lint.Packs,
-		Chart:    env.cfg.Lint.Observability.Chart,
-		Rules:    env.cfg.Lint.Observability.Rules,
-		Baseline: lintmodule.BaselinePath,
-	})
+	initializer := gatemodule.NewInit(toolchain.Lint{Packs: env.cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus)
 	return gatecli.Handlers{
 		Verify: func(ctx context.Context) (verify.Result, error) {
 			return verifier.Handle(ctx, verify.Command{Repo: env.key.Repo, Dir: env.key.Worktree, Gates: gates})

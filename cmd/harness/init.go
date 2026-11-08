@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/jorge07/harness/internal/deploy"
 	gatemodule "github.com/jorge07/harness/internal/gate"
 	"github.com/jorge07/harness/internal/gate/application/command/initgates"
 	gatedomain "github.com/jorge07/harness/internal/gate/domain"
@@ -29,8 +30,6 @@ import (
 	"github.com/jorge07/harness/internal/lint/application/command/initlint"
 	lintdomain "github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
 )
 
 const (
@@ -77,18 +76,11 @@ func newInitCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 }
 
 func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost shareddomain.Host, version string, out io.Writer) error {
-	cwd, err := os.Getwd()
+	env, err := newEnvironment(ctx, flags)
 	if err != nil {
 		return err
 	}
-	worktree, err := git.TopLevel(ctx, cwd)
-	if err != nil {
-		return err
-	}
-	cfg, err := config.Load(flags, worktree)
-	if err != nil {
-		return err
-	}
+	cfg, worktree := env.cfg, env.key.Worktree
 	hostHandlers, err := host.NewHostConnect(func(context.Context) (string, error) { return worktree, nil })(ctx)
 	if err != nil {
 		return err
@@ -111,7 +103,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 			return fmt.Errorf("%w (chosen packs: %s)", errGatesBeforePacks, strings.Join(cfg.Lint.Packs, listSeparator))
 		}
 	}
-	lint, err := lintmodule.New(cfg.Lint, worktree, version)
+	lint, err := lintmodule.New(cfg.Lint, worktree, version, deploy.RenderChart(env.bus))
 	if err != nil {
 		return err
 	}
@@ -128,12 +120,8 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		fmt.Fprintf(out, packsWroteFormat, packs)
 	}
 
-	gates, err := gatemodule.NewInit(toolchain.Lint{
-		Packs:    cfg.Lint.Packs,
-		Chart:    cfg.Lint.Observability.Chart,
-		Rules:    cfg.Lint.Observability.Rules,
-		Baseline: lintmodule.BaselinePath,
-	}).Handle(ctx, initgates.Command{Dir: worktree})
+	gates, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath}, env.bus).
+		Handle(ctx, initgates.Command{Dir: worktree})
 	switch {
 	case errors.Is(err, gatedomain.ErrGatesExist):
 		fmt.Fprint(out, gatesKeptLine)
