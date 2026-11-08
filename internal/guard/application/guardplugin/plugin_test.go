@@ -139,16 +139,16 @@ func TestGuardPluginNames(t *testing.T) {
 			t.Errorf("%s subscribes to %v, want only %s", p.Name(), p.Subscribes(), event)
 		}
 	}
-	if len(want) != 13 || !slices.Equal(got, want) {
-		t.Fatalf("names = %v, want the 13 %v", got, want)
+	if len(want) != 14 || !slices.Equal(got, want) {
+		t.Fatalf("names = %v, want the 14 %v", got, want)
 	}
 }
 
 func TestGuardDisabled(t *testing.T) {
 	plugins := build(t, []string{domain.RuleGitNoForce, domain.RuleStopHoldsTurn}, deps(&fakeStop{}))
 
-	if len(plugins) != 11 {
-		t.Fatalf("plugins = %d, want 11", len(plugins))
+	if len(plugins) != 12 {
+		t.Fatalf("plugins = %d, want 12", len(plugins))
 	}
 	for _, p := range plugins {
 		if p.Name() == pluginPrefix+domain.RuleGitNoForce || p.Name() == pluginPrefix+domain.RuleStopHoldsTurn {
