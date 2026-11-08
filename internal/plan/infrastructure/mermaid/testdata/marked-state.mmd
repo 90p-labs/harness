@@ -1,0 +1,17 @@
+stateDiagram-v2
+    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e
+    classDef changed stroke:#e0a84a,stroke-width:3px,color:#e0a84a
+    %% the intake flow
+    direction LR
+    [*] --> a
+    state "Alpha intake" as a
+    a --> b: go (new)
+    b --> c
+    state c {
+        [*] --> d
+        d : Dee
+        d --> [*]: done (changed)
+    }
+    c --> [*]
+    class b changed
+    class d new

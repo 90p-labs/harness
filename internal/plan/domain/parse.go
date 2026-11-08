@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -38,6 +39,7 @@ var (
 	taskHeading    = regexp.MustCompile(`^(\d+)\.\s+(.+)$`)
 	commitLine     = regexp.MustCompile("^(\\d+)\\.\\s+`([^`]*)`\\s+\\((.+)\\)\\s*$")
 	prLine         = regexp.MustCompile("^(\\d+)\\.\\s+`([^`]+)`( \\(this run\\))?(?:, based on `([^`]+)`)?:\\s*(.*)$")
+	sketchLink     = regexp.MustCompile(`!\[([^\]]*)\]\(([^)\s]+` + regexp.QuoteMeta(SketchExt) + `)\)`)
 	ownedPath      = regexp.MustCompile("`([^`]+)`")
 	leadingNumber  = regexp.MustCompile(`^\d+`)
 	followingNum   = regexp.MustCompile(`^(,\s*and\s+|,\s*|\s+and\s+|\s+to\s+)(\d+)`)
@@ -127,6 +129,9 @@ func isFinalHeading(text string) bool {
 }
 
 func (p *parser) content(line string, n int) {
+	for _, m := range sketchLink.FindAllStringSubmatch(codeSpan.ReplaceAllString(line, codeSpanWord), -1) {
+		p.doc.Sketches = append(p.doc.Sketches, Sketch{Title: m[1], Path: path.Clean(m[2]), Line: n})
+	}
 	switch p.section {
 	case HeadingGoal:
 		if v, ok := strings.CutPrefix(line, trackPrefix); ok {

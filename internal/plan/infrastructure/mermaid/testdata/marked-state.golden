@@ -1,0 +1,18 @@
+flowchart LR
+    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e
+    classDef changed stroke:#e0a84a,stroke-width:3px,color:#e0a84a
+    %% the intake flow
+    start_root((" ")) --> a
+    a["Alpha intake"]
+    a -->|"go (new)"| b
+    b --> c
+    subgraph c
+        start_c((" ")) --> d
+        d["Dee"]
+        d -->|"done (changed)"| stop_c(((" ")))
+    end
+    c --> stop_root(((" ")))
+    class b changed
+    class d new
+linkStyle 1 stroke:#00b34e,stroke-width:3px,color:#00b34e
+linkStyle 4 stroke:#e0a84a,stroke-width:3px,color:#e0a84a

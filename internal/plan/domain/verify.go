@@ -23,18 +23,43 @@ const (
 )
 
 const (
+	ProofPass   = "pass"
+	ProofFail   = "fail"
+	ProofNotRun = "not run"
+
+	FileAdded    = "added"
+	FileModified = "modified"
+	FileDeleted  = "deleted"
+	FileMissing  = "missing"
+
+	CommitFound   = "found"
+	CommitMissing = "missing"
+)
+
+const (
 	testFuncFormat = "func %s("
 	pathSeparator  = "/"
 )
 
 var (
-	markStatus = map[string]string{
-		MarkNew:     StatusAdded,
-		MarkChanged: StatusModified,
-		MarkDeleted: StatusDeleted,
+	markState = map[string]string{
+		MarkNew:     FileAdded,
+		MarkChanged: FileModified,
+		MarkDeleted: FileDeleted,
+	}
+	statusState = map[string]string{
+		StatusAdded:    FileAdded,
+		StatusModified: FileModified,
+		StatusDeleted:  FileDeleted,
 	}
 	ignoredFolders = []string{".harness/", ".kodify/"}
 )
+
+type TraceStates struct {
+	Files   map[string]string
+	Commits map[int]string
+	Proofs  map[int]string
+}
 
 type FileChange struct {
 	Path   string
@@ -91,32 +116,86 @@ func VerifyTrace(doc Document, branch Branch, proofs map[int]bool) []Problem {
 	add := func(line int, rule RuleID, format string, args ...any) {
 		problems = append(problems, Problem{Line: line, Rule: rule, Message: fmt.Sprintf(format, args...)})
 	}
-	files := make([]FileChange, 0, len(branch.Files))
-	for _, f := range branch.Files {
-		if !ignored(f.Path) {
-			files = append(files, f)
-		}
-	}
-	verifyTree(doc, files, add)
-	verifyCommits(doc, branch.Commits, add)
+	states := TraceState(doc, &branch, proofs)
+	verifyTree(doc, branch.Files, states, add)
+	verifyCommits(doc, branch.Commits, states, add)
 	verifyTests(doc, branch.Tests, add)
 	for _, c := range doc.Criteria {
-		if !proofs[c.Number] {
+		if states.Proofs[c.Number] != ProofPass {
 			add(c.Line, RuleProofMissing, "criterion %d has no passed proof for the current files", c.Number)
 		}
 	}
 	return problems
 }
 
+func TraceState(doc Document, branch *Branch, proofs map[int]bool) TraceStates {
+	states := TraceStates{
+		Files:   map[string]string{},
+		Commits: map[int]string{},
+		Proofs:  make(map[int]string, len(doc.Criteria)),
+	}
+	status := map[string]string{}
+	if branch != nil {
+		for _, f := range branch.Files {
+			if ignored(f.Path) {
+				continue
+			}
+			state, known := statusState[f.Status]
+			if !known {
+				state = FileModified
+			}
+			status[f.Path] = state
+		}
+	}
+	for _, tree := range []Tree{doc.CodeTree, doc.TestTree} {
+		for _, e := range tree.Entries {
+			if !e.IsDir {
+				states.Files[e.Path] = fileState(e, branch, status)
+			}
+		}
+	}
+	for _, c := range doc.Commits {
+		states.Commits[c.Number] = commitState(c, branch)
+	}
+	for _, c := range doc.Criteria {
+		states.Proofs[c.Number] = proofState(proofs, c.Number)
+	}
+	return states
+}
+
+func fileState(e TreeEntry, branch *Branch, status map[string]string) string {
+	if branch == nil {
+		return markState[e.Mark]
+	}
+	if state, ok := status[e.Path]; ok {
+		return state
+	}
+	return FileMissing
+}
+
+func commitState(c Commit, branch *Branch) string {
+	if branch != nil && slices.ContainsFunc(branch.Commits, func(b BranchCommit) bool { return b.Subject == c.Subject }) {
+		return CommitFound
+	}
+	return CommitMissing
+}
+
+func proofState(proofs map[int]bool, number int) string {
+	passed, ran := proofs[number]
+	switch {
+	case !ran:
+		return ProofNotRun
+	case passed:
+		return ProofPass
+	}
+	return ProofFail
+}
+
 func ignored(file string) bool {
 	return slices.ContainsFunc(ignoredFolders, func(folder string) bool { return strings.HasPrefix(file, folder) })
 }
 
-func verifyTree(doc Document, files []FileChange, add report) {
-	status := make(map[string]string, len(files))
-	for _, f := range files {
-		status[f.Path] = f.Status
-	}
+func verifyTree(doc Document, files []FileChange, states TraceStates, add report) {
 	listed := map[string]bool{}
 	for _, tree := range []Tree{doc.CodeTree, doc.TestTree} {
 		for _, e := range tree.Entries {
@@ -124,33 +203,31 @@ func verifyTree(doc Document, files []FileChange, add report) {
 				continue
 			}
 			listed[e.Path] = true
-			if got := status[e.Path]; got != markStatus[e.Mark] {
-				add(e.Line, RuleTreeDiff, "%s is marked %s but the diff status is %q", e.Path, e.Mark, got)
+			if got := states.Files[e.Path]; got != markState[e.Mark] {
+				add(e.Line, RuleTreeDiff, "%s is marked %s but its state is %s", e.Path, e.Mark, got)
 			}
 		}
 	}
 	for _, f := range files {
-		if !listed[f.Path] {
+		if !ignored(f.Path) && !listed[f.Path] {
 			add(doc.CodeTree.Line, RuleFileUntracked, "%s is in the diff but in neither final tree", f.Path)
 		}
 	}
 }
 
-func verifyCommits(doc Document, commits []BranchCommit, add report) {
+func verifyCommits(doc Document, commits []BranchCommit, states TraceStates, add report) {
 	for _, planned := range doc.Commits {
-		found := false
 		for _, c := range commits {
 			if c.Subject != planned.Subject {
 				continue
 			}
-			found = true
 			for _, file := range c.Files {
 				if !ignored(file) && !ownedByTasks(doc, planned.Tasks, file) {
 					add(planned.Line, RuleCommitScope, "commit %q touches %s, outside the owned files of its tasks", planned.Subject, file)
 				}
 			}
 		}
-		if !found {
+		if states.Commits[planned.Number] == CommitMissing {
 			add(planned.Line, RuleCommitMissing, "commit %q is not in the branch log", planned.Subject)
 		}
 	}

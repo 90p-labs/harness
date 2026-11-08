@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 
 	planmodule "github.com/jorge07/harness/internal/plan"
+	"github.com/jorge07/harness/internal/plan/application/command/renderview"
 	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
 	plancli "github.com/jorge07/harness/internal/plan/ui/cli"
 	"github.com/jorge07/harness/internal/run/application/query/status"
@@ -22,9 +23,12 @@ func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
 		if err != nil {
 			return plancli.Handlers{}, nil, err
 		}
-		handlers := planmodule.NewModule(env.bus, env.key.Worktree)
+		handlers := planmodule.NewModule(env.bus, env.key.Worktree, env.proofs, env.defaultBranch)
 		handlers.DefaultPlan = func(ctx context.Context) (checkplan.Query, error) {
 			return activePlan(ctx, flags)
+		}
+		handlers.DefaultView = func(ctx context.Context) (renderview.Command, error) {
+			return activeView(ctx, flags)
 		}
 		return handlers, func() error { return nil }, nil
 	})
@@ -49,18 +53,34 @@ func planPath(worktree, runID string) string {
 	return filepath.Join(worktree, filepath.FromSlash(shareddomain.RunPlanFile(runID)))
 }
 
-func activePlan(ctx context.Context, flags *pflag.FlagSet) (query checkplan.Query, err error) {
+func activePlan(ctx context.Context, flags *pflag.FlagSet) (checkplan.Query, error) {
+	current, worktree, err := activeRun(ctx, flags)
+	if err != nil {
+		return checkplan.Query{}, err
+	}
+	return checkplan.Query{Path: planPath(worktree, current.ID), LiveRound: current.LiveRound}, nil
+}
+
+func activeView(ctx context.Context, flags *pflag.FlagSet) (renderview.Command, error) {
+	current, worktree, err := activeRun(ctx, flags)
+	if err != nil {
+		return renderview.Command{}, err
+	}
+	return renderview.Command{
+		Path: planPath(worktree, current.ID), LiveRound: current.LiveRound,
+		RunID: current.ID, Phase: string(current.Phase), Proofs: true,
+	}, nil
+}
+
+func activeRun(ctx context.Context, flags *pflag.FlagSet) (current status.Status, worktree string, err error) {
 	handlers, closeStore, err := connect(ctx, flags)
 	if err != nil {
-		return checkplan.Query{}, err
+		return status.Status{}, "", err
 	}
 	defer func() { err = errors.Join(err, closeStore()) }()
-	current, err := handlers.Status.Handle(ctx, status.Query{Key: handlers.Key})
+	current, err = handlers.Status.Handle(ctx, status.Query{Key: handlers.Key})
 	if errors.Is(err, domain.ErrRunNotFound) {
-		return checkplan.Query{}, usageError{plancli.ErrNoPlanFile}
+		return status.Status{}, "", usageError{plancli.ErrNoPlanFile}
 	}
-	if err != nil {
-		return checkplan.Query{}, err
-	}
-	return checkplan.Query{Path: planPath(handlers.Key.Worktree, current.ID), LiveRound: current.LiveRound}, nil
+	return current, handlers.Key.Worktree, err
 }

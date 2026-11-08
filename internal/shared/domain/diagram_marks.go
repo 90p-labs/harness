@@ -235,6 +235,53 @@ func CheckMarks(body string) []string {
 	return problems
 }
 
+type Marks struct {
+	Nodes map[string]Mark
+	Edges map[int]Mark
+}
+
+func ParseMarks(body string) Marks {
+	marks := Marks{Nodes: map[string]Mark{}, Edges: map[int]Mark{}}
+	lines := strings.Split(body, "\n")
+	h := headerIndex(lines)
+	if h < 0 {
+		return marks
+	}
+	g, ok := markableKinds[firstWord(lines[h])]
+	if !ok {
+		return marks
+	}
+	for i := h + 1; i < len(lines); i++ {
+		text := strings.TrimSpace(lines[i])
+		if isText(g, text) {
+			continue
+		}
+		if ids, mark, ok := classAssignment(text); ok {
+			if _, fixed := MarkStyles[mark]; fixed {
+				for _, id := range ids {
+					marks.Nodes[id] = mark
+				}
+			}
+			continue
+		}
+		if m := labelMarkText.FindString(text); m != "" && isEdge(g, text) {
+			marks.Edges[i] = Mark(strings.Trim(m, "()"))
+		}
+	}
+	return marks
+}
+
+func classAssignment(text string) (ids []string, mark Mark, ok bool) {
+	m := classUseLine.FindStringSubmatch(text)
+	if m == nil {
+		m = cssClassLine.FindStringSubmatch(text)
+	}
+	if m == nil {
+		return nil, "", false
+	}
+	return strings.Split(strings.Trim(strings.Fields(text)[1], `"`), ","), Mark(m[1]), true
+}
+
 func classUses(text string) []string {
 	if m := classUseLine.FindStringSubmatch(text); m != nil {
 		return m[1:]

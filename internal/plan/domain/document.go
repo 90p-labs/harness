@@ -53,6 +53,28 @@ type Document struct {
 	Signals       []SignalRow
 	Specs         []Spec
 	Diagrams      []Diagram
+	Sketches      []Sketch
+}
+
+const SketchExt = ".excalidraw"
+
+type Sketch struct {
+	Title string
+	Path  string
+	Line  int
+}
+
+func (d Document) RunPR() PR {
+	for _, pr := range d.PRs {
+		if pr.ThisRun {
+			return pr
+		}
+	}
+	return PR{}
+}
+
+func (d Document) Base() string {
+	return d.RunPR().Base
 }
 
 type Heading struct {

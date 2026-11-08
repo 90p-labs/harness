@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -22,6 +23,7 @@ const (
 	pongSubject   = "feat: add the pong domain"
 	querySubject  = "feat: add the ping query"
 	missedSubject = "test: cover the ping query"
+	typeChange    = "T"
 )
 
 func readFixture(t *testing.T, name string) domain.Document {
@@ -144,6 +146,85 @@ func TestVerifyTrace(t *testing.T) {
 
 		if rules := problemRules(got); !slices.Equal(rules, []domain.RuleID{domain.RuleTreeDiff}) {
 			t.Fatalf("problems = %v", got)
+		}
+	})
+}
+
+func TestTraceState(t *testing.T) {
+	doc := readFixture(t, "verify_clean.md")
+
+	t.Run("a branch gives the diff state of each file and the log state of each commit", func(t *testing.T) {
+		b := cleanBranch()
+		b.Files[0].Status = domain.StatusModified
+		b.Files = slices.DeleteFunc(b.Files, func(f domain.FileChange) bool { return f.Path == moduleFile })
+		for i, f := range b.Files {
+			if f.Path == handlerTest {
+				b.Files[i].Status = typeChange
+			}
+		}
+		b.Commits = b.Commits[:1]
+
+		got := domain.TraceState(doc, &b, map[int]bool{1: true, 2: false})
+
+		wantFiles := map[string]string{
+			pongFile:     domain.FileModified,
+			pongTestFile: domain.FileAdded,
+			legacyFile:   domain.FileDeleted,
+			handlerFile:  domain.FileAdded,
+			handlerTest:  domain.FileModified,
+			moduleFile:   domain.FileMissing,
+		}
+		if !maps.Equal(got.Files, wantFiles) {
+			t.Errorf("files = %v, want %v", got.Files, wantFiles)
+		}
+		wantCommits := map[int]string{1: domain.CommitFound, 2: domain.CommitMissing}
+		if !maps.Equal(got.Commits, wantCommits) {
+			t.Errorf("commits = %v, want %v", got.Commits, wantCommits)
+		}
+		wantProofs := map[int]string{1: domain.ProofPass, 2: domain.ProofFail}
+		if !maps.Equal(got.Proofs, wantProofs) {
+			t.Errorf("proofs = %v, want %v", got.Proofs, wantProofs)
+		}
+	})
+
+	t.Run("no branch gives the plan mark of each file and a missing commit", func(t *testing.T) {
+		got := domain.TraceState(doc, nil, nil)
+
+		wantFiles := map[string]string{
+			pongFile:     domain.FileAdded,
+			pongTestFile: domain.FileAdded,
+			legacyFile:   domain.FileDeleted,
+			handlerFile:  domain.FileAdded,
+			handlerTest:  domain.FileAdded,
+			moduleFile:   domain.FileModified,
+		}
+		if !maps.Equal(got.Files, wantFiles) {
+			t.Errorf("files = %v, want %v", got.Files, wantFiles)
+		}
+		wantCommits := map[int]string{1: domain.CommitMissing, 2: domain.CommitMissing}
+		if !maps.Equal(got.Commits, wantCommits) {
+			t.Errorf("commits = %v, want %v", got.Commits, wantCommits)
+		}
+		wantProofs := map[int]string{1: domain.ProofNotRun, 2: domain.ProofNotRun}
+		if !maps.Equal(got.Proofs, wantProofs) {
+			t.Errorf("proofs = %v, want %v", got.Proofs, wantProofs)
+		}
+	})
+
+	t.Run("VerifyTrace reports the same file and commit states", func(t *testing.T) {
+		b := brokenBranch()
+		b.Commits = b.Commits[:1]
+
+		states := domain.TraceState(doc, &b, nil)
+		problems := domain.VerifyTrace(doc, b, nil)
+
+		if states.Files[pongFile] != domain.FileModified || states.Commits[2] != domain.CommitMissing {
+			t.Fatalf("states = %+v", states)
+		}
+		for _, rule := range []domain.RuleID{domain.RuleTreeDiff, domain.RuleCommitMissing} {
+			if !slices.Contains(problemRules(problems), rule) {
+				t.Errorf("rules = %v, want %s", problemRules(problems), rule)
+			}
 		}
 	})
 }

@@ -2,6 +2,8 @@ package domain_test
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -223,6 +225,99 @@ func TestSignalsRequired(t *testing.T) {
 			got := byRule(checkText(mutate(t, valid, tc.edits...), domain.CheckInput{}), domain.RuleSignalsMissing)
 			if len(got) != tc.want {
 				t.Errorf("signals-missing = %v, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func lineOf(t *testing.T, text, needle string) int {
+	t.Helper()
+	for i, l := range strings.Split(text, "\n") {
+		if strings.Contains(l, needle) {
+			return i + 1
+		}
+	}
+	t.Fatalf("text has no line with %q", needle)
+	return 0
+}
+
+func TestDiagramRequiredRule(t *testing.T) {
+	raw, err := os.ReadFile("testdata/diagrams-missing.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := string(raw)
+	wantFile := []struct{ at, msg string }{
+		{"![The list]", "sketch ui/list.excalidraw is not a file"},
+		{"001_pings.sql", "erDiagram"},
+		{"clock.go", "3 new files in domain/ need a classDiagram"},
+		{"handler.go", "sequenceDiagram"},
+		{"openapi.yaml", "classDiagram"},
+		{"openapi.yaml", "sequenceDiagram"},
+	}
+
+	got := byRule(checkText(missing, domain.CheckInput{}), domain.RuleDiagramRequired)
+
+	if len(got) != len(wantFile) {
+		t.Fatalf("diagram-required = %v, want %d problems", got, len(wantFile))
+	}
+	for i, w := range wantFile {
+		if got[i].Line != lineOf(t, missing, w.at) || !strings.Contains(got[i].Message, w.msg) {
+			t.Errorf("problem %d = %v, want line of %q and %q", i, got[i], w.at, w.msg)
+		}
+	}
+
+	const (
+		sketchPath = "ui/x.excalidraw"
+		sketchLink = " ![x](" + sketchPath + ")"
+		pongLine   = "└── pong.go                    new"
+		httpLines  = "        ├── infrastructure/\n        │   └── http/\n        │       └── ping.go                %s\n"
+		manyFiles  = "├── pong.go                    new\n        │   ├── a.go                       new\n        │   └── b.go                       new"
+	)
+	withDiagram := func(kind, body string) edit {
+		return edit{"### Final code tree", "```mermaid\n" + kind + "\n    " + body + "\n```\n\n### Final code tree"}
+	}
+	withoutClass := edit{"classDiagram\n", "flowchart TD\n"}
+	tests := []struct {
+		name     string
+		edits    []edit
+		sketches []string
+		at, msg  string
+	}{
+		{"sql file with no erDiagram", []edit{{pongLine, "└── 001.sql                    new"}}, nil, "001.sql", "erDiagram"},
+		{"sql file with an erDiagram", []edit{{pongLine, "└── 001.sql                    new"}, withDiagram("erDiagram", "a ||--o{ b : has")}, nil, "", ""},
+		{"migrations folder with no erDiagram", []edit{{pongLine, "└── migrations/\n        │       └── 001.txt            changed"}}, nil, "001.txt", "erDiagram"},
+		{"proto file with no classDiagram", []edit{withoutClass, {pongLine, "└── ping.proto                 changed"}}, nil, "ping.proto", "classDiagram"},
+		{"proto file with a classDiagram", []edit{{pongLine, "└── ping.proto                 changed"}}, nil, "", ""},
+		{"graphql file", []edit{withoutClass, {pongLine, "└── ping.graphql               changed"}}, nil, "ping.graphql", "classDiagram"},
+		{"infix openapi file", []edit{withoutClass, {pongLine, "└── ping.openapi.json          changed"}}, nil, "ping.openapi.json", "classDiagram"},
+		{"asyncapi file", []edit{withoutClass, {pongLine, "└── asyncapi.yaml              changed"}}, nil, "asyncapi.yaml", "classDiagram"},
+		{"new http file with no sequenceDiagram", []edit{{"        └── application/", fmt.Sprintf(httpLines, "new") + "        └── application/"}}, nil, "ping.go", "sequenceDiagram"},
+		{"new http file with a sequenceDiagram", []edit{{"        └── application/", fmt.Sprintf(httpLines, "new") + "        └── application/"}, withDiagram("sequenceDiagram", "A->>B: go")}, nil, "", ""},
+		{"new http proto file with a classDiagram", []edit{{"        └── application/", "        ├── infrastructure/\n        │   └── http/\n        │       └── api.proto              new\n        └── application/"}}, nil, "api.proto", "sequenceDiagram"},
+		{"changed http file", []edit{{"        └── application/", fmt.Sprintf(httpLines, "changed") + "        └── application/"}}, nil, "", ""},
+		{"three new domain files with no classDiagram", []edit{withoutClass, {pongLine, manyFiles}}, nil, "b.go", "3 new files in domain/"},
+		{"three new domain files with a classDiagram", []edit{{pongLine, manyFiles}}, nil, "", ""},
+		{"two new domain files", []edit{withoutClass, {pongLine, "├── pong.go                    new\n        │   └── a.go                       new"}}, nil, "", ""},
+		{"frontend task with no sketch link", []edit{{"- Side: backend\n- Owned files: `internal/ping/application", "- Side: frontend\n- Owned files: `internal/ping/application"}}, nil, "### 2. Ping query", "task 2 is frontend"},
+		{"frontend task with a sketch link", []edit{{"- Side: backend\n- Owned files: `internal/ping/application", "- Side: frontend\n- Owned files: `internal/ping/application"}, {"returns.\n", "returns." + sketchLink + "\n"}}, []string{sketchPath}, "", ""},
+		{"sketch link with no file", []edit{{"returns.\n", "returns." + sketchLink + "\n"}}, nil, "![x]", "sketch ui/x.excalidraw is not a file"},
+		{"sketch link with a file", []edit{{"returns.\n", "returns." + sketchLink + "\n"}}, []string{sketchPath}, "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			text := mutate(t, readValid(t), tc.edits...)
+
+			got := byRule(checkText(text, domain.CheckInput{Sketches: tc.sketches}), domain.RuleDiagramRequired)
+
+			if tc.at == "" {
+				if len(got) != 0 {
+					t.Fatalf("diagram-required = %v, want none", got)
+				}
+				return
+			}
+			if len(got) != 1 || got[0].Line != lineOf(t, text, tc.at) || !strings.Contains(got[0].Message, tc.msg) {
+				t.Fatalf("diagram-required = %v, want one on the line of %q with %q", got, tc.at, tc.msg)
 			}
 		})
 	}

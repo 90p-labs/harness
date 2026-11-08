@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -17,12 +18,28 @@ type Report struct {
 	Problems []Problem
 	Notes    []string
 	Track    shareddomain.Track
+	Doc      Document
 }
 
 const (
 	SideBackend  = "backend"
 	SideFrontend = "frontend"
 	SideOther    = "other"
+)
+
+const (
+	diagramER       = "erDiagram"
+	diagramSequence = "sequenceDiagram"
+
+	folderMigrations = "migrations/"
+	suffixSQL        = ".sql"
+	prefixOpenAPI    = "openapi."
+	prefixAsyncAPI   = "asyncapi."
+	infixOpenAPI     = ".openapi."
+	suffixProto      = ".proto"
+	suffixGraphQL    = ".graphql"
+
+	newDomainFilesForClass = 3
 )
 
 var (
@@ -42,6 +59,7 @@ type CheckInput struct {
 	LiveRound     int
 	ArchivedPlans []string
 	Diagrams      DiagramParser
+	Sketches      []string
 }
 
 type report func(line int, rule RuleID, format string, args ...any)
@@ -60,6 +78,7 @@ func Check(doc Document, in CheckInput) []Problem {
 	checkSignals(doc, add)
 	checkRegression(doc, in, add)
 	checkDiagrams(doc, in, add)
+	checkRequiredDiagrams(doc, in, add)
 	checkSentences(doc, add)
 	checkTrace(doc, add)
 	slices.SortStableFunc(problems, func(a, b Problem) int {
@@ -284,6 +303,60 @@ func checkRegression(doc Document, in CheckInput, add report) {
 	section := strings.Join(doc.Lines[heading:end], "\n")
 	if !slices.ContainsFunc(in.ArchivedPlans, func(p string) bool { return strings.Contains(section, p) }) {
 		add(heading, RuleRegressionImpact, "the section names no archived plan file")
+	}
+}
+
+func hasDiagram(doc Document, kind string) bool {
+	return slices.ContainsFunc(doc.Diagrams, func(d Diagram) bool { return d.Kind == kind })
+}
+
+func isContract(name string) bool {
+	return strings.HasPrefix(name, prefixOpenAPI) || strings.HasPrefix(name, prefixAsyncAPI) ||
+		strings.Contains(name, infixOpenAPI) || strings.HasSuffix(name, suffixProto) || strings.HasSuffix(name, suffixGraphQL)
+}
+
+func requiredDiagrams(e TreeEntry) []string {
+	name := path.Base(e.Path)
+	var kinds []string
+	if strings.Contains(e.Path, folderMigrations) || strings.HasSuffix(name, suffixSQL) {
+		kinds = append(kinds, diagramER)
+	}
+	if isContract(name) {
+		kinds = append(kinds, DiagramClass)
+	}
+	if e.Mark == MarkNew && (strings.Contains(e.Path, FolderHTTP) || strings.Contains(e.Path, FolderConsumer)) {
+		kinds = append(kinds, diagramSequence)
+	}
+	return kinds
+}
+
+func checkRequiredDiagrams(doc Document, in CheckInput, add report) {
+	newDomainFiles := 0
+	for _, e := range doc.CodeTree.Entries {
+		if e.IsDir {
+			continue
+		}
+		for _, kind := range requiredDiagrams(e) {
+			if !hasDiagram(doc, kind) {
+				add(e.Line, RuleDiagramRequired, "%s needs a %s", e.Path, kind)
+			}
+		}
+		if e.Mark == MarkNew && strings.Contains(e.Path, FolderDomain) {
+			newDomainFiles++
+			if newDomainFiles == newDomainFilesForClass && !hasDiagram(doc, DiagramClass) {
+				add(e.Line, RuleDiagramRequired, "%d new files in %s need a %s", newDomainFiles, FolderDomain, DiagramClass)
+			}
+		}
+	}
+	for _, t := range doc.Tasks {
+		if t.Side == SideFrontend && len(doc.Sketches) == 0 {
+			add(t.Line, RuleDiagramRequired, "task %d is frontend and needs a sketch link", t.Number)
+		}
+	}
+	for _, s := range doc.Sketches {
+		if !slices.Contains(in.Sketches, s.Path) {
+			add(s.Line, RuleDiagramRequired, "sketch %s is not a file in the plan folder", s.Path)
+		}
 	}
 }
 
