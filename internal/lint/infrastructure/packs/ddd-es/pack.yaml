@@ -1,0 +1,19 @@
+name: ddd-es
+requires: [ddd]
+rules:
+  - id: ddd-es/apply-handler
+    engine: harness
+    severity: error
+    scope: "src/**/*.aggregate.ts"
+    message: An aggregate raises an event and has no apply method for it.
+  - id: ddd-es/event-version
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.event.ts"
+    message: An event class needs a readonly version field.
+    plugin: rules/event-version.grit
+  - id: ddd-es/projection-read-only
+    engine: harness
+    severity: error
+    scope: "src/**/*.projection.ts"
+    message: A projection imports a repository port, an aggregate or a commands path.

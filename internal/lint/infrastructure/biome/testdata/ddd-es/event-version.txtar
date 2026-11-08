@@ -1,0 +1,18 @@
+-- src/orders/domain/order-placed.event.ts --
+export class OrderPlacedEvent {
+  readonly orderId: string;
+  version = 1;
+
+  constructor(orderId: string) {
+    this.orderId = orderId;
+  }
+}
+-- src/orders/domain/order-paid.event.ts --
+export class OrderPaidEvent {
+  readonly orderId: string;
+  readonly version = 1;
+
+  constructor(orderId: string) {
+    this.orderId = orderId;
+  }
+}

@@ -1,0 +1,8 @@
+-- src/components/page-head.tsx --
+export const PageHead = () => (
+  <head>
+    <title>Orders</title>
+  </head>
+);
+-- src/components/page-title.tsx --
+export const PageTitle = () => <h1>Orders</h1>;

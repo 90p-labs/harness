@@ -1,0 +1,78 @@
+-- package.json --
+{
+  "name": "shop",
+  "dependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-node": "0.57.0"
+  }
+}
+-- src/main.ts --
+import { NodeSDK } from '@opentelemetry/sdk-node'
+
+new NodeSDK({}).start()
+-- src/contexts/kernel.ts --
+import { SalesModule } from './sales/sales.module'
+import { TracingMiddleware } from './sales/middleware/tracing.middleware'
+
+export const modules = [SalesModule]
+export const middlewares = [TracingMiddleware]
+-- src/contexts/sales/sales.module.ts --
+export class SalesModule {}
+-- src/contexts/sales/middleware/tracing.middleware.ts --
+import { trace } from '@opentelemetry/api'
+
+export class TracingMiddleware {
+  handle(name: string): void {
+    trace.getTracer('bus').startSpan(name).end()
+  }
+}
+-- src/contexts/sales/domain/order-placed.event.ts --
+export class OrderPlaced {
+  readonly version = 1
+
+  constructor(readonly orderId: string) {}
+}
+-- src/contexts/sales/infrastructure/order-summary.projection.ts --
+import type { OrderPlaced } from '../domain/order-placed.event'
+
+export class OrderSummaryProjection {
+  readonly placed: string[] = []
+
+  on(event: OrderPlaced): void {
+    this.placed.push(event.orderId)
+  }
+}
+-- deploy/availability.rules.yaml --
+groups:
+  - name: availability
+    rules:
+      - record: slo:availability:ratio
+        expr: sum(rate(http_requests_total{code!~"5.."}[5m])) / sum(rate(http_requests_total[5m]))
+        labels:
+          slo: api
+      - alert: AvailabilityBudgetBurn
+        expr: slo:availability:ratio < 0.99
+        for: 10m
+        annotations:
+          runbook_url: https://runbooks.example.com/availability
+-- deploy/availability.rules.test.yaml --
+rule_files:
+  - availability.rules.yaml
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{code="500"}'
+        values: '0+10x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AvailabilityBudgetBurn
+    promql_expr_test:
+      - expr: slo:availability:ratio
+        eval_time: 5m
+-- deploy/dashboards/overview.json --
+{
+  "title": "Overview",
+  "panels": [
+    { "title": "Availability", "targets": [{ "expr": "slo:availability:ratio" }] }
+  ]
+}

@@ -1,0 +1,20 @@
+-- src/orders/domain/order-placed.event.ts --
+export class OrderPlacedEvent {
+  readonly orderId: string;
+  total: number;
+
+  constructor(orderId: string, total: number) {
+    this.orderId = orderId;
+    this.total = total;
+  }
+}
+-- src/orders/domain/order-paid.event.ts --
+export class OrderPaidEvent {
+  readonly orderId: string;
+  readonly total: number;
+
+  constructor(orderId: string, total: number) {
+    this.orderId = orderId;
+    this.total = total;
+  }
+}

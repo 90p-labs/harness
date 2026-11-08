@@ -1,0 +1,19 @@
+-- src/orders/application/queries/find-order/find-order.handler.ts --
+export class FindOrderHandler {
+  constructor(private readonly repository: OrderRepository) {}
+
+  async execute(query: FindOrder): Promise<Order> {
+    const order = await this.repository.find(query.orderId);
+    await this.repository.save(order);
+    return order;
+  }
+}
+-- src/orders/application/queries/list-orders/list-orders.handler.ts --
+export class ListOrdersHandler {
+  constructor(private readonly repository: OrderRepository) {}
+
+  async execute(query: ListOrders): Promise<Order[]> {
+    const orders = await this.repository.findAll();
+    return orders.filter((order) => order.isOpen());
+  }
+}

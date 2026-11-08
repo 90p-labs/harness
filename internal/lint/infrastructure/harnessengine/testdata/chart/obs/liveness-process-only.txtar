@@ -1,0 +1,54 @@
+-- deploy/chart/Chart.yaml --
+apiVersion: v2
+name: shop
+version: 0.1.0
+-- deploy/chart/templates/api.yaml --
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/acme/api:1.4.2
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8080
+-- deploy/chart/templates/worker.yaml --
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/acme/worker:1.4.2
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081

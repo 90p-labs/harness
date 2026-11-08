@@ -362,11 +362,11 @@ func TestVerifyConfiguredGatesSkipCriteria(t *testing.T) {
 }
 
 func TestVerifyBaseline(t *testing.T) {
-	known := domain.Finding{Rule: "no-any", Severity: domain.SeverityError, File: "a.ts", Line: 3, Message: "any is banned"}
-	fresh := domain.Finding{Rule: "no-eval", Severity: domain.SeverityError, File: "b.ts", Line: 9, Message: "eval is banned"}
-	warning := domain.Finding{Rule: "style", Severity: "warning", File: "c.ts", Line: 1, Message: "style"}
-	report := func(findings ...domain.Finding) string {
-		raw, _ := json.Marshal(domain.Report{Version: domain.ReportVersion, Findings: findings})
+	known := shareddomain.Finding{Rule: "no-any", Severity: shareddomain.SeverityError, File: "a.ts", Line: 3, Message: "any is banned"}
+	fresh := shareddomain.Finding{Rule: "no-eval", Severity: shareddomain.SeverityError, File: "b.ts", Line: 9, Message: "eval is banned"}
+	warning := shareddomain.Finding{Rule: "style", Severity: shareddomain.SeverityWarn, File: "c.ts", Line: 1, Message: "style"}
+	report := func(findings ...shareddomain.Finding) string {
+		raw, _ := json.Marshal(shareddomain.Report{Version: shareddomain.ReportVersion, Findings: findings})
 		return string(raw)
 	}
 	cases := []struct {

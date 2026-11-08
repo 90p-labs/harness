@@ -1,0 +1,34 @@
+-- deploy/checkout.rules.yaml --
+groups:
+  - name: checkout
+    rules:
+      - record: job:http_requests:rate5m
+        expr: sum(rate(http_requests_total[5m])) by (job)
+      - alert: CheckoutDown
+        expr: up{job="checkout"} == 0
+        for: 5m
+        annotations:
+          runbook_url: https://runbooks.example.com/checkout-down
+-- deploy/checkout.rules.test.yaml --
+rule_files:
+  - checkout.rules.yaml
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="checkout"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CheckoutDown
+    promql_expr_test:
+      - expr: job:http_requests:rate5m
+        eval_time: 5m
+-- deploy/billing.rules.yaml --
+groups:
+  - name: billing
+    rules:
+      - alert: BillingDown
+        expr: up{job="billing"} == 0
+        for: 5m
+        annotations:
+          runbook_url: https://runbooks.example.com/billing-down

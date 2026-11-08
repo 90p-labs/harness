@@ -1,42 +1,18 @@
 package domain
 
-const (
-	ReportVersion = 1
-	SeverityError = "error"
-)
+import shareddomain "github.com/jorge07/harness/internal/shared/domain"
 
-type Finding struct {
-	Rule     string `json:"rule"`
-	Severity string `json:"severity"`
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Message  string `json:"message"`
-}
-
-type Report struct {
-	Version  int       `json:"version"`
-	Findings []Finding `json:"findings"`
-}
-
-type findingKey struct {
-	rule, file, message string
-}
-
-func keyOf(f Finding) findingKey {
-	return findingKey{rule: f.Rule, file: f.File, message: f.Message}
-}
-
-func NewFindings(found, baseline []Finding) []Finding {
-	known := make(map[findingKey]struct{}, len(baseline))
+func NewFindings(found, baseline []shareddomain.Finding) []shareddomain.Finding {
+	known := make(map[shareddomain.FindingKey]struct{}, len(baseline))
 	for _, f := range baseline {
-		known[keyOf(f)] = struct{}{}
+		known[f.Key()] = struct{}{}
 	}
-	var fresh []Finding
+	var fresh []shareddomain.Finding
 	for _, f := range found {
-		if f.Severity != SeverityError {
+		if f.Severity != shareddomain.SeverityError {
 			continue
 		}
-		if _, ok := known[keyOf(f)]; !ok {
+		if _, ok := known[f.Key()]; !ok {
 			fresh = append(fresh, f)
 		}
 	}

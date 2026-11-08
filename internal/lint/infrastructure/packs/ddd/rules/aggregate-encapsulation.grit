@@ -1,0 +1,6 @@
+language js
+
+JsPropertyClassMember(modifiers=$modifiers) as $prop where {
+  not $modifiers <: contains or { TsReadonlyModifier(), `private`, `protected` },
+  register_diagnostic(span=$prop, message="[ddd/aggregate-encapsulation] a public aggregate property must be readonly")
+}

@@ -1,0 +1,50 @@
+-- tsconfig.json --
+{
+  // TypeScript reads comments and trailing commas
+  "compilerOptions": {
+    "baseUrl": ".",
+    /* "@/*" maps to src */
+    "paths": {
+      "@/*": ["./src/*"],
+      "~ui": ["./src/ui/index.ts"],
+    },
+  },
+}
+-- src/main.ts --
+// import { ignored } from './ignored'
+import { first } from './first'
+import type { Shape } from "@/types/shape"
+import {
+  second,
+  type Third,
+} from '@/second'
+import React from 'react'
+import './side-effect'
+export { named } from './lib'
+export * from '~ui'
+export type { Kind } from './kinds'
+export const local = 1
+
+const lazy = () => import('./lazy')
+const fs = require('node:fs')
+const view = require("./view")
+export type { Shape }
+import { first as again } from './first'
+-- src/first.ts --
+export const first = 1
+-- src/types/shape.ts --
+export type Shape = string
+-- src/second.ts --
+export const second = 2
+-- src/side-effect.ts --
+export {}
+-- src/lib/index.ts --
+export const named = 1
+-- src/ui/index.ts --
+export {}
+-- src/kinds.ts --
+export type Kind = string
+-- src/lazy.ts --
+export {}
+-- src/view.tsx --
+export {}

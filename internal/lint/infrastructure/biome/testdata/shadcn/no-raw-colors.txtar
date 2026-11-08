@@ -1,0 +1,12 @@
+-- src/components/alert.tsx --
+export const Alert = () => (
+  <a href="#top" className="rounded bg-red-500 p-2">
+    top
+  </a>
+);
+-- src/components/notice.tsx --
+export const Notice = () => (
+  <a href="#top" className="rounded bg-primary p-2 text-primary-foreground">
+    top
+  </a>
+);

@@ -1,12 +1,16 @@
 package toolchain
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/jorge07/harness/internal/gate/domain"
 )
@@ -32,6 +36,17 @@ const (
 	runNpmScript  = "npm run "
 	runPnpmBiome  = "pnpm exec biome ci ."
 	runNpxBiome   = "npx biome ci ."
+
+	idLint         = "lint"
+	idHelmRender   = "helm-render"
+	idPromtoolTest = "promtool-test"
+
+	runLint         = "harness lint --json"
+	runHelmRender   = "helm template %s > /dev/null"
+	runPromtoolTest = "find %s -name '*.rules.test.yaml' -exec promtool test rules {} +"
+
+	packObservability = "observability"
+	currentDir        = "."
 )
 
 var (
@@ -39,7 +54,44 @@ var (
 	nodeScripts = []string{"typecheck", "lint", "test"}
 )
 
-func Detect(dir string) ([]domain.Gate, error) {
+type Lint struct {
+	Packs    []string
+	Chart    string
+	Rules    string
+	Baseline string
+}
+
+func (l Lint) gates() ([]domain.Gate, error) {
+	if len(l.Packs) == 0 {
+		return nil, nil
+	}
+	lint, err := domain.NewGate(idLint, runLint, nil, 0, l.Baseline)
+	if err != nil {
+		return nil, err
+	}
+	gates := []domain.Gate{lint}
+	if !slices.Contains(l.Packs, packObservability) {
+		return gates, nil
+	}
+	observability, err := newGates(
+		gateSpec{idHelmRender, fmt.Sprintf(runHelmRender, l.Chart), nil},
+		gateSpec{idPromtoolTest, fmt.Sprintf(runPromtoolTest, literalDir(l.Rules)), nil},
+	)
+	return append(gates, observability...), err
+}
+
+func literalDir(glob string) string {
+	var dir []string
+	for _, segment := range strings.Split(glob, "/") {
+		if strings.Contains(segment, "*") {
+			break
+		}
+		dir = append(dir, segment)
+	}
+	return cmp.Or(path.Join(dir...), currentDir)
+}
+
+func Detect(dir string, lint Lint) ([]domain.Gate, error) {
 	var gates []domain.Gate
 	if exists(dir, fileGoMod) {
 		goGates, err := newGates(
@@ -73,7 +125,11 @@ func Detect(dir string) ([]domain.Gate, error) {
 		}
 		gates = append(gates, biome...)
 	}
-	return gates, nil
+	lintGates, err := lint.gates()
+	if err != nil {
+		return nil, err
+	}
+	return append(gates, lintGates...), nil
 }
 
 type gateSpec struct {

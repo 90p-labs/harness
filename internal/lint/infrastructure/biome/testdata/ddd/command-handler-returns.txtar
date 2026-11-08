@@ -1,0 +1,29 @@
+-- src/orders/application/commands/place-order/place-order.handler.ts --
+export class PlaceOrderHandler {
+  constructor(private readonly repository: OrderRepository) {}
+
+  async execute(command: PlaceOrder): Promise<string> {
+    const order = Order.place(command.orderId);
+    await this.repository.save(order);
+    return order.id;
+  }
+}
+-- src/orders/application/commands/pay-order/pay-order.handler.ts --
+export class PayOrderHandler {
+  constructor(private readonly repository: OrderRepository) {}
+
+  async execute(command: PayOrder): Promise<void> {
+    const order = await this.repository.find(command.orderId);
+    order.pay();
+    await this.repository.save(order);
+  }
+}
+-- src/orders/application/commands/cancel-order/cancel-order.handler.ts --
+export class CancelOrderHandler {
+  constructor(private readonly repository: OrderRepository) {}
+
+  execute(command: CancelOrder) {
+    this.repository.remove(command.orderId);
+    return;
+  }
+}

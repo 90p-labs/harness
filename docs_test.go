@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
 	"github.com/jorge07/harness/internal/run/domain"
 )
 
@@ -17,11 +18,14 @@ const (
 	diagramClose     = "```"
 	phaseNoneMarker  = "[*]"
 	diagramBlockWant = 1
+	lintHeading      = "\n### Lint packs\n"
 )
 
 var (
 	edgeLine     = regexp.MustCompile(`^\s*(\S+) --> (\S+): (\S+)(?: \[(.+)\])?$`)
 	terminalLine = regexp.MustCompile(`^\s*(\S+) --> \[\*\]$`)
+	ruleRow      = regexp.MustCompile("^\\| `([a-z-]+/[a-z-]+)` \\|")
+	lintEnd      = regexp.MustCompile(`\n#{2,3} `)
 )
 
 type edge struct {
@@ -86,6 +90,47 @@ func parseDiagram(section string) (map[edge]bool, []string) {
 		}
 	}
 	return drawn, terminals
+}
+
+func TestDesignLintRulesMatchCatalogue(t *testing.T) {
+	raw, err := os.ReadFile(designFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, found := strings.Cut(string(raw), lintHeading)
+	if !found {
+		t.Fatalf("%s has no Lint packs section", designFile)
+	}
+	section := rest
+	if next := lintEnd.FindStringIndex(rest); next != nil {
+		section = rest[:next[0]]
+	}
+
+	documented := map[string]bool{}
+	for _, line := range strings.Split(section, "\n") {
+		if m := ruleRow.FindStringSubmatch(line); m != nil {
+			documented[m[1]] = true
+		}
+	}
+
+	all, err := packs.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	shipped := map[string]bool{}
+	for _, pack := range all {
+		for _, rule := range pack.Rules {
+			shipped[rule.ID] = true
+			if !documented[rule.ID] {
+				t.Errorf("rule %s is not in the DESIGN.md tables", rule.ID)
+			}
+		}
+	}
+	for id := range documented {
+		if !shipped[id] {
+			t.Errorf("DESIGN.md rule %s is not in the catalogue", id)
+		}
+	}
 }
 
 func phaseName(label string) string {

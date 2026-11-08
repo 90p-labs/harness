@@ -1,0 +1,125 @@
+name: ddd
+requires: []
+rules:
+  - id: ddd/src-roots
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A folder in src has no place here. Use app, components or the business root, and list the files in ddd.src_files.
+  - id: ddd/context-layers
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A context has only one of domain, application and infrastructure.
+  - id: ddd/parent-no-code
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A folder that groups contexts holds a file. Move the file into its shared folder.
+  - id: ddd/shared-layers
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A shared folder holds a folder that is not domain, application or infrastructure.
+  - id: ddd/shared-base-only
+    engine: harness
+    severity: warn
+    scope: "src/**/shared/domain/**"
+    message: The root shared domain folder holds only the base of an aggregate root, entity, value object, domain event or error.
+  - id: ddd/file-suffix
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A file in a layer has no known suffix.
+  - id: ddd/cqrs-folders
+    engine: harness
+    severity: error
+    scope: "src/**/application/*"
+    message: The application folder holds a folder that is not commands, queries or event-handlers.
+  - id: ddd/handler-pair
+    engine: harness
+    severity: error
+    scope: "src/**/application/**"
+    message: A command or query folder needs exactly one message and one handler.
+  - id: ddd/module-per-context
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A context needs exactly one module file at its root.
+  - id: ddd/one-kernel
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A business root needs exactly one kernel.ts file.
+  - id: ddd/domain-purity
+    engine: harness
+    severity: error
+    scope: "src/**/domain/**"
+    message: A domain file imports a package that is not allowed, or an application or infrastructure path.
+  - id: ddd/layer-direction
+    engine: harness
+    severity: error
+    scope: "src/**/application/**"
+    message: An application file imports an infrastructure path.
+  - id: ddd/cross-context
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A file imports another context. Import only its module from a module file, or its event from an event handler.
+  - id: ddd/repository-port
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A repository port is outside domain, or a repository adapter is outside infrastructure.
+  - id: ddd/mapper-location
+    engine: harness
+    severity: error
+    scope: "src/**"
+    message: A mapper file is outside infrastructure.
+  - id: ddd/event-past-tense
+    engine: harness
+    severity: warn
+    scope: "src/**/*.event.ts"
+    message: The name of an event file must end with a past tense verb.
+  - id: ddd/command-handler-returns
+    engine: biome-grit
+    severity: error
+    scope: "src/**/commands/**/*.handler.ts"
+    message: A command handler returns a value. It must return void.
+    plugin: rules/command-handler-returns.grit
+  - id: ddd/query-handler-no-write
+    engine: biome-grit
+    severity: warn
+    scope: "src/**/queries/**/*.handler.ts"
+    message: A query handler calls save, delete, persist, publish or dispatch.
+    plugin: rules/query-handler-no-write.grit
+  - id: ddd/event-readonly
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.event.ts"
+    message: An event property must be readonly.
+    plugin: rules/event-readonly.grit
+  - id: ddd/aggregate-encapsulation
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.aggregate.ts"
+    message: A public aggregate property must be readonly.
+    plugin: rules/aggregate-encapsulation.grit
+  - id: ddd/value-object-equals
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.value-object.ts"
+    message: A value object class needs an equals method.
+    plugin: rules/value-object-equals.grit
+  - id: ddd/value-object-factory
+    engine: biome-grit
+    severity: error
+    scope: "src/**/*.value-object.ts"
+    message: A value object has a public constructor. Use a static factory.
+    plugin: rules/value-object-factory.grit
+  - id: ddd/publish-after-save
+    engine: biome-grit
+    severity: warn
+    scope: "src/**/commands/**/*.handler.ts"
+    message: A command handler publishes before it saves.
+    plugin: rules/publish-after-save.grit

@@ -1,0 +1,20 @@
+-- src/orders/domain/money.value-object.ts --
+export class Money {
+  private constructor(readonly amount: number) {}
+
+  static of(amount: number): Money {
+    return new Money(amount);
+  }
+}
+-- src/orders/domain/quantity.value-object.ts --
+export class Quantity {
+  private constructor(readonly units: number) {}
+
+  static of(units: number): Quantity {
+    return new Quantity(units);
+  }
+
+  equals(other: Quantity): boolean {
+    return this.units === other.units;
+  }
+}

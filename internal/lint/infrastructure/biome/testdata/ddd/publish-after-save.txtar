@@ -1,0 +1,27 @@
+-- src/orders/application/commands/place-order/place-order.handler.ts --
+export class PlaceOrderHandler {
+  constructor(
+    private readonly repository: OrderRepository,
+    private readonly bus: EventBus,
+  ) {}
+
+  async execute(command: PlaceOrder): Promise<void> {
+    const order = Order.place(command.orderId);
+    this.bus.publish(order.pullEvents());
+    await this.repository.save(order);
+  }
+}
+-- src/orders/application/commands/pay-order/pay-order.handler.ts --
+export class PayOrderHandler {
+  constructor(
+    private readonly repository: OrderRepository,
+    private readonly bus: EventBus,
+  ) {}
+
+  async execute(command: PayOrder): Promise<void> {
+    const order = await this.repository.find(command.orderId);
+    order.pay();
+    await this.repository.save(order);
+    this.bus.publish(order.pullEvents());
+  }
+}

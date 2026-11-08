@@ -1,0 +1,18 @@
+name: nextjs-ddd-shadcn
+requires: [ddd, nextjs, shadcn]
+rules:
+  - id: combo/components-no-business
+    engine: harness
+    severity: error
+    scope: "src/components/**"
+    message: A component imports a business root path.
+  - id: combo/app-through-kernel
+    engine: harness
+    severity: error
+    scope: "src/app/**"
+    message: An app file imports a business root path other than kernel.ts.
+  - id: combo/utils-location
+    engine: harness
+    severity: error
+    scope: "components.json"
+    message: The utils alias of components.json is outside src/components.

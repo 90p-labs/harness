@@ -1,0 +1,6 @@
+language js
+
+JsConstructorClassMember(modifiers=$modifiers) as $constructor where {
+  not $modifiers <: contains or { `private`, `protected` },
+  register_diagnostic(span=$constructor, message="[ddd/value-object-factory] a value object constructor must not be public, use a static factory")
+}

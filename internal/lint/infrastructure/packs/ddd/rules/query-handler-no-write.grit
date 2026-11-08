@@ -1,0 +1,6 @@
+language js
+
+`$object.$method($args)` as $call where {
+  $method <: or { `save`, `delete`, `persist`, `publish`, `dispatch` },
+  register_diagnostic(span=$call, message="[ddd/query-handler-no-write] a query handler must not write")
+}

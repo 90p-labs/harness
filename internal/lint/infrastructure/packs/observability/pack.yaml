@@ -1,0 +1,53 @@
+name: observability
+requires: []
+rules:
+  - id: obs/otel-sdk
+    engine: harness
+    severity: error
+    scope: "package.json"
+    message: The app needs @opentelemetry/api and @opentelemetry/sdk-node, and one file that starts a NodeSDK.
+  - id: obs/bus-instrumented
+    engine: harness
+    severity: warn
+    scope: "src/**/kernel.ts"
+    message: The kernel imports no middleware that uses @opentelemetry/api.
+  - id: obs/probes
+    engine: harness
+    severity: error
+    scope: "deploy/**"
+    message: A Deployment container needs a readiness probe and a liveness probe.
+  - id: obs/liveness-process-only
+    engine: harness
+    severity: warn
+    scope: "deploy/**"
+    message: The liveness probe has the same path as the readiness probe.
+  - id: obs/immutable-tags
+    engine: harness
+    severity: error
+    scope: "deploy/**"
+    message: An image has no tag, or has the tag latest.
+  - id: obs/hpa-target
+    engine: harness
+    severity: error
+    scope: "deploy/**"
+    message: An HPA names no Deployment of the render.
+  - id: obs/rule-tests
+    engine: harness
+    severity: error
+    scope: "deploy/**/*.rules.yaml"
+    message: A rule file has no test file that names each alert and each recorded series.
+  - id: obs/slo-alert
+    engine: harness
+    severity: error
+    scope: "deploy/**/*.rules.yaml"
+    message: A recording rule with the label slo has no alert that uses it.
+  - id: obs/runbook
+    engine: harness
+    severity: error
+    scope: "deploy/**/*.rules.yaml"
+    message: An alert has no annotations.runbook_url.
+  - id: obs/dashboard-series
+    engine: harness
+    severity: warn
+    scope: "deploy/**/dashboards/*.json"
+    message: A dashboard query uses a series that no rule file records.

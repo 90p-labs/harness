@@ -1,0 +1,46 @@
+-- deploy/availability.rules.yaml --
+groups:
+  - name: availability
+    rules:
+      - record: slo:availability:ratio
+        expr: sum(rate(http_requests_total{code!~"5.."}[5m])) / sum(rate(http_requests_total[5m]))
+        labels:
+          slo: api
+      - alert: AvailabilityBudgetBurn
+        expr: slo:availability:ratio < 0.99
+        for: 10m
+        annotations:
+          runbook_url: https://runbooks.example.com/availability
+-- deploy/availability.rules.test.yaml --
+rule_files:
+  - availability.rules.yaml
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{code="500"}'
+        values: '0+10x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AvailabilityBudgetBurn
+    promql_expr_test:
+      - expr: slo:availability:ratio
+        eval_time: 5m
+-- deploy/latency.rules.yaml --
+groups:
+  - name: latency
+    rules:
+      - record: slo:latency:p95
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+        labels:
+          slo: api
+-- deploy/latency.rules.test.yaml --
+rule_files:
+  - latency.rules.yaml
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{le="0.5"}'
+        values: '0+10x30'
+    promql_expr_test:
+      - expr: slo:latency:p95
+        eval_time: 5m

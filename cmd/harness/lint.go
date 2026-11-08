@@ -1,0 +1,51 @@
+package main
+
+import (
+	"context"
+	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+
+	lintmodule "github.com/jorge07/harness/internal/lint"
+	"github.com/jorge07/harness/internal/lint/application/command/baseline"
+	"github.com/jorge07/harness/internal/lint/application/command/initlint"
+	lintcommand "github.com/jorge07/harness/internal/lint/application/command/lint"
+	lintcli "github.com/jorge07/harness/internal/lint/ui/cli"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/config"
+	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+)
+
+func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {
+	return lintcli.NewLintCommand(func(ctx context.Context) (lintcli.Handlers, error) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return lintcli.Handlers{}, err
+		}
+		worktree, err := git.TopLevel(ctx, cwd)
+		if err != nil {
+			return lintcli.Handlers{}, err
+		}
+		cfg, err := config.Load(flags, worktree)
+		if err != nil {
+			return lintcli.Handlers{}, err
+		}
+		handlers, err := lintmodule.New(cfg.Lint, version)
+		if err != nil {
+			return lintcli.Handlers{}, err
+		}
+		return lintcli.Handlers{
+			Lint: func(ctx context.Context) (shareddomain.Report, error) {
+				return handlers.Lint.Handle(ctx, lintcommand.Command{Dir: worktree})
+			},
+			Init: func(ctx context.Context) error {
+				return handlers.Init.Handle(ctx, initlint.Command{Dir: worktree})
+			},
+			Baseline: func(ctx context.Context) error {
+				return handlers.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintmodule.BaselinePath})
+			},
+			NoPacks: len(cfg.Lint.Packs) == 0,
+		}, nil
+	})
+}

@@ -1,0 +1,12 @@
+-- src/app/violation.tsx --
+export default function Violation() {
+  const title = "About";
+  return <a href="/about">{title}</a>;
+}
+-- src/app/compliant.tsx --
+import Link from "next/link";
+
+export default function Compliant() {
+  const title = "About";
+  return <Link href="/about">{title}</Link>;
+}

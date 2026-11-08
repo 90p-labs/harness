@@ -1,0 +1,30 @@
+-- tsconfig.json --
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  }
+}
+-- components.json --
+{
+  "tailwind": { "cssVariables": true },
+  "aliases": { "utils": "@/components/lib/utils" }
+}
+-- src/components/lib/utils.ts --
+import { clsx, type ClassValue } from 'clsx'
+
+export function cn(...inputs: ClassValue[]): string {
+  return clsx(inputs)
+}
+-- src/components/ui/button.tsx --
+import { Slot } from '@radix-ui/react-slot'
+import { cva } from 'class-variance-authority'
+import * as React from 'react'
+
+import { cn } from '@/components/lib/utils'
+
+const variants = cva('inline-flex items-center', { variants: { size: { sm: 'h-8', md: 'h-10' } } })
+
+export function Button({ className, size }: { className?: string; size?: 'sm' | 'md' }) {
+  return <Slot className={cn(variants({ size }), className)} />
+}

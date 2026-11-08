@@ -19,7 +19,9 @@ import (
 	"github.com/jorge07/harness/internal/gate/application/command/verifycommits"
 	"github.com/jorge07/harness/internal/gate/application/query/evidencestatus"
 	gatedomain "github.com/jorge07/harness/internal/gate/domain"
+	"github.com/jorge07/harness/internal/gate/infrastructure/toolchain"
 	gatecli "github.com/jorge07/harness/internal/gate/ui/cli"
+	lintmodule "github.com/jorge07/harness/internal/lint"
 	plandomain "github.com/jorge07/harness/internal/plan/domain"
 	plancli "github.com/jorge07/harness/internal/plan/ui/cli"
 	"github.com/jorge07/harness/internal/run/domain"
@@ -60,7 +62,12 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	}
 	verifier := gatemodule.NewVerify(db, env.bus, criterionSource{flags: flags}, time.Now)
 	commits := gatemodule.NewVerifyCommits(db, env.bus, time.Now)
-	initializer := gatemodule.NewInit()
+	initializer := gatemodule.NewInit(toolchain.Lint{
+		Packs:    env.cfg.Lint.Packs,
+		Chart:    env.cfg.Lint.Observability.Chart,
+		Rules:    env.cfg.Lint.Observability.Rules,
+		Baseline: lintmodule.BaselinePath,
+	})
 	return gatecli.Handlers{
 		Verify: func(ctx context.Context) (verify.Result, error) {
 			return verifier.Handle(ctx, verify.Command{Repo: env.key.Repo, Dir: env.key.Worktree, Gates: gates})
