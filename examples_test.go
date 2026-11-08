@@ -47,9 +47,9 @@ type example struct {
 
 var examples = []example{
 	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}, canaries: true},
-	{name: "go", lockfile: "go.sum", setup: "go-mod"},
+	{name: "go", lockfile: "go.sum", setup: "go-mod", canaries: true},
 	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install"},
-	{name: "python", lockfile: "uv.lock", setup: "py-install"},
+	{name: "python", lockfile: "uv.lock", setup: "py-install", canaries: true},
 }
 
 func TestExamples(t *testing.T) {
