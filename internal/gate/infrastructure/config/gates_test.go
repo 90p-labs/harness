@@ -18,6 +18,8 @@ import (
 
 const configFile = ".harness.yaml"
 
+var opaquePacks = []string{"pack-one", "pack-two"}
+
 func TestDecodeGates(t *testing.T) {
 	t.Run("good list", func(t *testing.T) {
 		got, err := gateconfig.Decode([]sharedconfig.Gate{
@@ -102,6 +104,69 @@ func TestWriterMissingFile(t *testing.T) {
 	}
 	if has, err := w.HasGates(dir); err != nil || !has {
 		t.Errorf("HasGates = %v, %v, want true", has, err)
+	}
+}
+
+func TestWriteLintPacks(t *testing.T) {
+	packs := opaquePacks
+	cases := []struct {
+		name     string
+		original string
+		keep     []string
+	}{
+		{name: "no file"},
+		{
+			name:     "other keys and lint settings",
+			original: "# project config\nrun:\n  approval: false # keep\nlint:\n  ddd:\n    root: src/core\n",
+			keep:     []string{"# project config\n", "approval: false # keep", "root: src/core"},
+		},
+		{name: "empty packs list", original: "lint:\n  packs: []\n  shadcn:\n    ui_allow: [src/x]\n", keep: []string{"ui_allow:"}},
+		{name: "null lint value", original: "lint:\nstate:\n  dsn: sqlite:x.db\n", keep: []string{"dsn: sqlite:x.db"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.original != "" {
+				if err := os.WriteFile(filepath.Join(dir, configFile), []byte(tc.original), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := (gateconfig.Writer{}).WriteLintPacks(dir, packs); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			raw, err := os.ReadFile(filepath.Join(dir, configFile))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, kept := range tc.keep {
+				if !strings.Contains(string(raw), kept) {
+					t.Errorf("lost %q:\n%s", kept, raw)
+				}
+			}
+			loaded, err := sharedconfig.Load(pflag.NewFlagSet("test", pflag.ContinueOnError), dir)
+			if err != nil {
+				t.Fatalf("load written config: %v\n%s", err, raw)
+			}
+			if !reflect.DeepEqual(loaded.Lint.Packs, packs) {
+				t.Errorf("lint.packs = %v, want %v\n%s", loaded.Lint.Packs, packs, raw)
+			}
+		})
+	}
+}
+
+func TestWriteLintPacksRefusesAScalarLint(t *testing.T) {
+	dir := t.TempDir()
+	original := "lint: oops\n"
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := (gateconfig.Writer{}).WriteLintPacks(dir, opaquePacks)
+	if !errors.Is(err, gateconfig.ErrLintNotMapping) {
+		t.Fatalf("err = %v, want ErrLintNotMapping", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, configFile))
+	if string(raw) != original {
+		t.Errorf("file changed to %q", raw)
 	}
 }
 
