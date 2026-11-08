@@ -43,7 +43,8 @@ func NewCommitChecks(db *dbal.DB) domain.CommitCheckRepository {
 	return persistence.NewSQLCommitCheckRepository(db)
 }
 
-func NewInit() initgates.Handler {
+func NewInit(lint toolchain.Lint) initgates.Handler {
 	writer := gateconfig.Writer{}
-	return initgates.NewHandler(toolchain.Detect, writer.HasGates, writer.WriteGates)
+	detect := func(dir string) ([]domain.Gate, error) { return toolchain.Detect(dir, lint) }
+	return initgates.NewHandler(detect, writer.HasGates, writer.WriteGates)
 }

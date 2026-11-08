@@ -83,7 +83,7 @@ func TestDetectToolchain(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := toolchain.Detect(repo(t, tt.files))
+			got, err := toolchain.Detect(repo(t, tt.files), toolchain.Lint{})
 			if err != nil {
 				t.Fatalf("detect: %v", err)
 			}
@@ -95,8 +95,56 @@ func TestDetectToolchain(t *testing.T) {
 }
 
 func TestDetectBrokenPackageJSON(t *testing.T) {
-	_, err := toolchain.Detect(repo(t, map[string]string{packageJSON: "{", pnpmLock: ""}))
+	_, err := toolchain.Detect(repo(t, map[string]string{packageJSON: "{", pnpmLock: ""}), toolchain.Lint{})
 	if err == nil {
 		t.Fatal("want an error for a broken package.json")
+	}
+}
+
+func TestDetectLintGates(t *testing.T) {
+	const baseline = ".harness-baseline/lint.json"
+	lintGate := func() domain.Gate {
+		g, err := domain.NewGate("lint", "harness lint --json", nil, 0, baseline)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	tests := map[string]struct {
+		lint toolchain.Lint
+		want []domain.Gate
+	}{
+		"no pack": {lint: toolchain.Lint{Chart: "deploy/chart", Baseline: baseline}},
+		"packs": {
+			lint: toolchain.Lint{Packs: []string{"ddd", "nextjs"}, Chart: "deploy/chart", Rules: "deploy/**/*.rules.yaml", Baseline: baseline},
+			want: []domain.Gate{lintGate()},
+		},
+		"observability": {
+			lint: toolchain.Lint{Packs: []string{"ddd", "observability"}, Chart: "deploy/chart", Rules: "deploy/**/*.rules.yaml", Baseline: baseline},
+			want: []domain.Gate{
+				lintGate(),
+				gate(t, "helm-render", "helm template deploy/chart > /dev/null", nil),
+				gate(t, "promtool-test", "find deploy -name '*.rules.test.yaml' -exec promtool test rules {} +", nil),
+			},
+		},
+		"observability rules at the root": {
+			lint: toolchain.Lint{Packs: []string{"observability"}, Chart: "chart", Rules: "**/*.rules.yaml", Baseline: baseline},
+			want: []domain.Gate{
+				lintGate(),
+				gate(t, "helm-render", "helm template chart > /dev/null", nil),
+				gate(t, "promtool-test", "find . -name '*.rules.test.yaml' -exec promtool test rules {} +", nil),
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := toolchain.Detect(repo(t, nil), tt.lint)
+			if err != nil {
+				t.Fatalf("detect: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("gates = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }

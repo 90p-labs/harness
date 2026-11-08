@@ -95,7 +95,7 @@ func newRootCommand() *cobra.Command {
 	root.PersistentFlags().String(config.FlagConfig, "", "path of the config file")
 	root.PersistentFlags().String(config.FlagStateDSN, "", "state database DSN")
 	root.AddCommand(newConfigCommand(), newRunCommand(root.PersistentFlags()), newPlanCommand(root.PersistentFlags()), newDiagramCommand(), newHostCommand(root.PersistentFlags()))
-	root.AddCommand(newVerifyCommand(root.PersistentFlags()), newGatesCommand(root.PersistentFlags()))
+	root.AddCommand(newVerifyCommand(root.PersistentFlags()), newGatesCommand(root.PersistentFlags()), newLintCommand(root.PersistentFlags(), version))
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",
