@@ -18,19 +18,25 @@ const (
 	commandInit      = "init"
 	commandBaseline  = "baseline"
 	commandCatalogue = "catalogue"
+	commandCanaries  = "canaries"
 	flagJSON         = "json"
 
 	findingFormat       = "%s %s %s:%d %s\n"
 	catalogueRuleFormat = "%s %s\n"
+	canaryLineFormat    = "%s %s\n"
 	noPacksLine         = "no lint pack is set: set lint.packs in .harness.yaml\n"
 )
 
-var ErrFindings = errors.New("lint found error findings")
+var (
+	ErrFindings       = errors.New("lint found error findings")
+	ErrCanariesFailed = errors.New("a lint canary failed")
+)
 
 type Handlers struct {
 	Lint     func(ctx context.Context) (shareddomain.Report, error)
 	Init     func(ctx context.Context) error
 	Baseline func(ctx context.Context) error
+	Canaries func(ctx context.Context) ([]domain.CanaryResult, error)
 	NoPacks  bool
 }
 
@@ -86,8 +92,43 @@ func NewLintCommand(connect Connect, catalogue func() (domain.RuleCatalogue, err
 			},
 		},
 		newCatalogueCommand(catalogue),
+		&cobra.Command{
+			Use:   commandCanaries,
+			Short: "Prove that the engine catches the canary of each architecture rule",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
+					results, err := h.Canaries(ctx)
+					if err != nil {
+						return err
+					}
+					return printCanaries(cmd.OutOrStdout(), results)
+				})
+			},
+		},
 	)
 	return cmd
+}
+
+func printCanaries(out io.Writer, results []domain.CanaryResult) error {
+	failed := false
+	for _, result := range results {
+		line := result.Rule
+		if result.Canary != "" {
+			line += " " + result.Canary
+		}
+		if result.Detail != "" {
+			line += ": " + result.Detail
+		}
+		if _, err := fmt.Fprintf(out, canaryLineFormat, result.Status, line); err != nil {
+			return err
+		}
+		failed = failed || result.Status == domain.CanaryFail
+	}
+	if failed {
+		return ErrCanariesFailed
+	}
+	return nil
 }
 
 func newCatalogueCommand(load func() (domain.RuleCatalogue, error)) *cobra.Command {

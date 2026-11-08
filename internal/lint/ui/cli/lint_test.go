@@ -19,6 +19,7 @@ const (
 	subInit       = "init"
 	subBaseline   = "baseline"
 	subCatalogue  = "catalogue"
+	subCanaries   = "canaries"
 	errorLine     = "error ddd/src-roots contexts/a.ts:3 move the file\n"
 	warnLine      = "warn next/img src/app/page.tsx:12 use next/image\n"
 	missingEngine = "biome is missing"
@@ -192,6 +193,46 @@ func TestCatalogueCommand(t *testing.T) {
 
 		if _, err := runWith(t, noConnect, failing, subCatalogue); !errors.Is(err, errEngine) {
 			t.Fatalf("err = %v, want the load error", err)
+		}
+	})
+}
+
+func canariesOf(results []domain.CanaryResult, err error) cli.Handlers {
+	return cli.Handlers{Canaries: func(context.Context) ([]domain.CanaryResult, error) { return results, err }}
+}
+
+func TestCanariesCommand(t *testing.T) {
+	pass := domain.CanaryResult{Rule: "ddd/domain-purity", Canary: "lint/canaries/ddd-domain-purity", Status: domain.CanaryPass}
+	waived := domain.CanaryResult{Rule: "ddd/file-suffix", Status: domain.CanaryWaived, Detail: "deptrac checks dependencies"}
+	passLine := "PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n"
+	waivedLine := "WAIVED ddd/file-suffix: deptrac checks dependencies\n"
+
+	t.Run("passes with each canary caught or waived", func(t *testing.T) {
+		out, err := run(t, canariesOf([]domain.CanaryResult{pass, waived}, nil), subCanaries)
+
+		if err != nil || out != passLine+waivedLine {
+			t.Fatalf("out = %q, err = %v, want %q", out, err, passLine+waivedLine)
+		}
+	})
+
+	t.Run("fails with a FAIL line", func(t *testing.T) {
+		missed := domain.CanaryResult{Rule: "ddd/layer-direction", Canary: "lint/canaries/ddd-layer-direction", Status: domain.CanaryFail, Detail: "the engine deptrac gave no ddd/layer-direction finding"}
+		absent := domain.CanaryResult{Rule: "ddd/cross-context", Status: domain.CanaryFail, Detail: "not in lint/rules.yaml"}
+
+		out, err := run(t, canariesOf([]domain.CanaryResult{pass, missed, absent, waived}, nil), subCanaries)
+
+		want := passLine +
+			"FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding\n" +
+			"FAIL ddd/cross-context: not in lint/rules.yaml\n" +
+			waivedLine
+		if !errors.Is(err, cli.ErrCanariesFailed) || out != want {
+			t.Fatalf("out = %q, err = %v, want %q and ErrCanariesFailed", out, err, want)
+		}
+	})
+
+	t.Run("a config error is returned", func(t *testing.T) {
+		if _, err := run(t, canariesOf(nil, errEngine), subCanaries); !errors.Is(err, errEngine) {
+			t.Fatalf("err = %v, want the handler error", err)
 		}
 	})
 }
