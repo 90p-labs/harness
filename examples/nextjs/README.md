@@ -382,7 +382,7 @@ Tune a rule in `.harness.yaml`, in the `lint.ddd` keys. The built-in rules have 
 | `domain_allow` | The packages that the domain may import. |
 | `src_files` | The files that may sit directly in `src/`. |
 
-`lint.disabled` turns off a lint engine, not one rule.
+`lint.disabled` turns off a lint engine or one rule. An entry with a `/` is a rule id, such as `next/no-lib-folder`. An unknown rule id is an error.
 
 The proof allowed `date-fns` in the domain:
 
