@@ -52,27 +52,31 @@ const (
 	listSeparator = ", "
 	noItems       = "none"
 
-	packsWroteFormat    = "lint packs: wrote %s\n"
-	packsKeptFormat     = "lint packs: kept %s\n"
-	packsNoneLine       = "lint packs: none detected\n"
-	lintSetupPrefix     = "next: run the lint-setup skill"
-	lintSetupFormat     = lintSetupPrefix + " to set up the architecture rules for %s\n"
+	packsWroteFormat     = "lint packs: wrote %s\n"
+	packsKeptFormat      = "lint packs: kept %s\n"
+	packsNoneLine        = "lint packs: none detected\n"
+	lintSetupPrefix      = "next: run the lint-setup skill"
+	lintSetupFormat      = lintSetupPrefix + " to set up the architecture rules for %s\n"
+	lintSetupLimitFormat = lintSetupPrefix + " to set up the architecture rules for %s; " +
+		lintdomain.ManifestFile + " holds one canary for each rule, so its canaries prove one language only\n"
 	gatesWroteFormat    = "gates: wrote %s\n"
 	setupWroteFormat    = "setup: wrote %s\n"
 	gatesKeptLine       = "gates: kept\n"
+	gatesNoneLine       = "gates: none detected\n"
 	lintInitFormat      = "lint init: wrote %s\n"
-	baselineFormat      = "lint baseline: wrote %s\n"
+	baselineFormat      = "lint baseline: wrote %s (%d findings, run harness lint to see them)\n"
 	baselineSkippedLine = "lint baseline: skipped, no lint pack\n"
 	hostFormat          = "host: wrote %s\n"
 )
 
 var languagesWithNoPack = []struct {
-	name    string
-	markers []string
+	name      string
+	extension string
+	markers   []string
 }{
-	{languagePHP, []string{composerJSON}},
-	{languagePython, []string{pyprojectTOML, requirementsTXT}},
-	{languageGo, []string{goMod}},
+	{languagePHP, ".php", []string{composerJSON}},
+	{languagePython, ".py", []string{pyprojectTOML, requirementsTXT}},
+	{languageGo, ".go", []string{goMod}},
 }
 
 var errGatesBeforePacks = errors.New("gates init cannot add the lint gate")
@@ -141,12 +145,12 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		}
 		fmt.Fprintf(out, packsWroteFormat, packs)
 	}
-	languages, err := detectLanguagesWithNoManifest(worktree)
+	lines, err := lintSetupLines(worktree, lint.PluginRules)
 	if err != nil {
 		return err
 	}
-	for _, language := range languages {
-		fmt.Fprintf(out, lintSetupFormat, language)
+	for _, line := range lines {
+		fmt.Fprint(out, line)
 	}
 
 	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintmodule.BaselinePath, Manifest: lintdomain.ManifestFile}, env.bus).
@@ -156,6 +160,8 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		fmt.Fprint(out, gatesKeptLine)
 	case err != nil:
 		return err
+	case len(written.Setup) == 0 && len(written.Gates) == 0:
+		fmt.Fprint(out, gatesNoneLine)
 	default:
 		if len(written.Setup) > 0 {
 			steps := make([]string, len(written.Setup))
@@ -178,10 +184,11 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 	if packs == "" {
 		fmt.Fprint(out, baselineSkippedLine)
 	} else {
-		if err := lint.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintmodule.BaselinePath}); err != nil {
+		kept, err := lint.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintmodule.BaselinePath})
+		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, baselineFormat, lintmodule.BaselinePath)
+		fmt.Fprintf(out, baselineFormat, lintmodule.BaselinePath, kept)
 	}
 	path, err := hostHandlers.Install(ctx, agentHost)
 	if err != nil {
@@ -191,29 +198,41 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 	return err
 }
 
-func detectLanguagesWithNoManifest(dir string) ([]string, error) {
+func lintSetupLines(dir string, pluginRules []lintdomain.Rule) ([]string, error) {
 	_, err := os.Stat(filepath.Join(dir, lintdomain.ManifestFile))
-	if err == nil {
-		return nil, nil
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("read %s: %w", lintdomain.ManifestFile, err)
 	}
-	var found []string
+	hasManifest := err == nil
+	var lines []string
 	for _, language := range languagesWithNoPack {
-		for _, marker := range language.markers {
-			_, err := os.Stat(filepath.Join(dir, marker))
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			if err != nil {
-				return nil, fmt.Errorf("read %s: %w", marker, err)
-			}
-			found = append(found, language.name)
-			break
+		found, err := anyFile(dir, language.markers)
+		if err != nil {
+			return nil, err
+		}
+		covered := slices.ContainsFunc(pluginRules, func(r lintdomain.Rule) bool { return strings.HasSuffix(r.Scope, language.extension) })
+		switch {
+		case !found || (hasManifest && covered):
+		case hasManifest:
+			lines = append(lines, fmt.Sprintf(lintSetupLimitFormat, language.name))
+		default:
+			lines = append(lines, fmt.Sprintf(lintSetupFormat, language.name))
 		}
 	}
-	return found, nil
+	return lines, nil
+}
+
+func anyFile(dir string, names []string) (bool, error) {
+	for _, name := range names {
+		_, err := os.Stat(filepath.Join(dir, name))
+		if err == nil {
+			return true, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return false, fmt.Errorf("read %s: %w", name, err)
+		}
+	}
+	return false, nil
 }
 
 func choosePacks(dir string) ([]string, error) {

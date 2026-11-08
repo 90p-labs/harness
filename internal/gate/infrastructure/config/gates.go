@@ -128,19 +128,20 @@ func (Writer) WriteGates(dir string, setup []domain.Setup, gates []domain.Gate) 
 		}
 		setKey(root, KeySetup, &seq)
 	}
-
-	entries := make([]gateEntry, len(gates))
-	for i, gate := range gates {
-		entries[i] = gateEntry{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Baseline: gate.Baseline, Needs: gate.Needs}
-		if gate.Timeout != domain.DefaultTimeout {
-			entries[i].Timeout = gate.Timeout.Round(time.Millisecond).String()
+	if len(gates) > 0 {
+		entries := make([]gateEntry, len(gates))
+		for i, gate := range gates {
+			entries[i] = gateEntry{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Baseline: gate.Baseline, Needs: gate.Needs}
+			if gate.Timeout != domain.DefaultTimeout {
+				entries[i].Timeout = gate.Timeout.Round(time.Millisecond).String()
+			}
 		}
+		var seq yaml.Node
+		if err := seq.Encode(entries); err != nil {
+			return fmt.Errorf("encode gates: %w", err)
+		}
+		setKey(root, KeyGates, &seq)
 	}
-	var seq yaml.Node
-	if err := seq.Encode(entries); err != nil {
-		return fmt.Errorf("encode gates: %w", err)
-	}
-	setKey(root, KeyGates, &seq)
 	return writeDocument(dir, doc)
 }
 

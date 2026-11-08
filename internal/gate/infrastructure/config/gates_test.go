@@ -331,15 +331,22 @@ func TestBlockingKeyEmptyKeysAreReplaced(t *testing.T) {
 }
 
 func TestBlockingKeyNothingToWriteAddsNoKey(t *testing.T) {
-	dir := t.TempDir()
-	if err := (gateconfig.Writer{}).WriteGates(dir, nil, nil); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, configFile))
-	if err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), gateconfig.KeyGates) {
-		t.Errorf("want no gates key, got:\n%s", raw)
+	for name, setup := range map[string][]domain.Setup{
+		"nothing":           nil,
+		"only a setup step": {{ID: "deps", Run: "npm ci"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := (gateconfig.Writer{}).WriteGates(dir, setup, nil); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			raw, err := os.ReadFile(filepath.Join(dir, configFile))
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(raw), gateconfig.KeyGates) {
+				t.Errorf("want no gates key, got:\n%s", raw)
+			}
+		})
 	}
 }

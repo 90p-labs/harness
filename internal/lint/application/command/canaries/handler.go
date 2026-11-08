@@ -40,20 +40,13 @@ type activeRule struct {
 }
 
 func NewHandler(catalogue domain.RuleCatalogue, read ReadManifest, rules map[domain.EngineName][]domain.Rule, engines domain.EngineSet, fresh CheckVersion) Handler {
-	known := map[string]bool{}
-	for _, pack := range catalogue.Packs {
-		for _, rule := range pack.Rules {
-			known[rule.ID] = true
-		}
-	}
 	active := map[string]activeRule{}
-	needsManifest := false
 	for engine, list := range rules {
 		for _, rule := range list {
 			active[rule.ID] = activeRule{rule: rule, engine: engine}
-			needsManifest = needsManifest || (engine.IsPlugin() && known[rule.ID])
 		}
 	}
+	needsManifest := len(catalogue.PluginRules(rules)) > 0
 	return Handler{catalogue: catalogue, read: read, active: active, engines: engines, fresh: fresh, needsManifest: needsManifest}
 }
 

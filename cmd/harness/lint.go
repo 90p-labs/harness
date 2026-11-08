@@ -37,7 +37,8 @@ func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 				return handlers.Init.Handle(ctx, initlint.Command{Dir: worktree})
 			},
 			Baseline: func(ctx context.Context) error {
-				return handlers.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintmodule.BaselinePath})
+				_, err := handlers.Baseline.Handle(ctx, baseline.WriteBaseline{Dir: worktree, Path: lintmodule.BaselinePath})
+				return err
 			},
 			Canaries: func(ctx context.Context) ([]lintdomain.CanaryResult, error) {
 				return handlers.Canaries.Handle(ctx, canaries.Command{Dir: worktree})

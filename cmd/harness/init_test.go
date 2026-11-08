@@ -126,7 +126,7 @@ func TestInitTwiceKeepsTheSetup(t *testing.T) {
 	if code != exitOK || stderr != "" {
 		t.Fatalf("second run: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
 	}
-	for _, line := range []string{"lint packs: kept observability\n", "gates: kept\n", "lint baseline: wrote .harness-baseline/lint.json\n"} {
+	for _, line := range []string{"lint packs: kept observability\n", "gates: kept\n", "lint baseline: wrote .harness-baseline/lint.json (0 findings, run harness lint to see them)\n"} {
 		if !strings.Contains(stdout, line) {
 			t.Errorf("second run stdout = %q, want %q", stdout, line)
 		}
@@ -144,8 +144,8 @@ func TestInitWithAManifest(t *testing.T) {
 
 	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
 
-	if code != exitOK || strings.Contains(stdout, lintSetupPrefix) {
-		t.Fatalf("code = %d, stdout = %q, stderr = %q, want no lint-setup line with %s", code, stdout, stderr, lintdomain.ManifestFile)
+	if want := fmt.Sprintf(lintSetupLimitFormat, languageGo); code != exitOK || !strings.Contains(stdout, want) {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q, because no plugin rule covers Go", code, stdout, stderr, want)
 	}
 	if !strings.Contains(stdout, "gates: wrote go-fmt, go-vet, go-test, lint-canaries\n") {
 		t.Errorf("stdout = %q, want the lint-canaries gate", stdout)
@@ -211,6 +211,66 @@ func TestInitNamesEachLanguageWithNoBuiltInPack(t *testing.T) {
 	want := "lint packs: wrote " + packNextjs + "\n" + fmt.Sprintf(lintSetupFormat, languagePHP)
 	if !strings.HasPrefix(stdout, want) || strings.Count(stdout, lintSetupPrefix) != 1 {
 		t.Fatalf("stdout = %q, want it to start with %q and hold one lint-setup line", stdout, want)
+	}
+}
+
+func TestInitPrintsBaselineCount(t *testing.T) {
+	clearHarnessEnv(t)
+	script, err := filepath.Abs(todoLintScript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: lint plugin repo", map[string]string{
+		configFile: "plugins:\n  - name: todo-lint\n    command: [sh, " + script + "]\n    events: [lint.check]\nlint:\n  packs: [./lint/team]\n",
+		"lint/team/pack.yaml": "name: team\nrules:\n  - id: team/no-todo\n    engine: todo-lint\n    severity: error\n" +
+			"    scope: \"src/**/*.ts\"\n    message: A TODO is left in the code.\n",
+		todoSourceFile: "// TODO: add the tax\n// TODO: round the total\n",
+	})
+
+	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+	want := "lint baseline: wrote .harness-baseline/lint.json (2 findings, run harness lint to see them)\n"
+	if code != exitOK || !strings.Contains(stdout, want) {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, want)
+	}
+}
+
+func TestInitWritesNoEmptyGates(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+
+	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+	if code != exitOK || !strings.Contains(stdout, gatesNoneLine) {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, gatesNoneLine)
+	}
+	if config, err := os.ReadFile(filepath.Join(dir, configFile)); strings.Contains(string(config), "gates") {
+		t.Errorf(".harness.yaml = %q, %v, want no gates key", config, err)
+	}
+}
+
+func TestInitNextLinePerUncoveredLanguage(t *testing.T) {
+	clearHarnessEnv(t)
+	script, err := filepath.Abs(canaryLintScript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: a PHP and Go repo", map[string]string{
+		configFile: "plugins:\n  - name: canary-lint\n    command: [sh, " + script + "]\n    events: [lint.check]\nlint:\n  packs: [./lint/architecture]\n",
+		"lint/architecture/pack.yaml": "name: architecture\nrules:\n  - id: ddd/domain-purity\n    engine: canary-lint\n    severity: error\n" +
+			"    scope: \"src/**/*.php\"\n    message: The domain depends only on itself.\n",
+		lintdomain.ManifestFile: canaryManifest,
+		composerJSON:            "{}\n",
+		goMod:                   goModuleFile,
+	})
+
+	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+	want := fmt.Sprintf(lintSetupLimitFormat, languageGo)
+	if code != exitOK || !strings.Contains(stdout, want) || strings.Count(stdout, lintSetupPrefix) != 1 {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want one lint-setup line %q", code, stdout, stderr, want)
 	}
 }
 
