@@ -40,6 +40,105 @@ func TestTopLevel(t *testing.T) {
 	}
 }
 
+func initRepo(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	return root
+}
+
+func TestRepoKey(t *testing.T) {
+	const github = "github.com/jorge07/harness"
+	cases := map[string]struct{ url, want string }{
+		"scp":             {"git@github.com:jorge07/harness.git", github},
+		"https with user": {"https://user@github.com/jorge07/harness.git", github},
+		"https":           {"https://github.com/jorge07/harness", github},
+		"ssh with port":   {"ssh://git@github.com:22/jorge07/harness", github},
+		"at sign in path": {"https://host.example/team/repo@v2.git", "host.example/team/repo@v2"},
+		"scp at sign":     {"git@host.example:repo@v2.git", "host.example/repo@v2"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := initRepo(t)
+			if out, err := exec.Command("git", "-C", root, "remote", "add", "origin", tc.url).CombinedOutput(); err != nil {
+				t.Fatalf("git remote add: %v: %s", err, out)
+			}
+			sub := filepath.Join(root, "a")
+			if err := os.MkdirAll(sub, 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			repo, worktree, err := git.RepoKey(context.Background(), sub)
+
+			if err != nil || repo != tc.want || worktree != root {
+				t.Fatalf("RepoKey = %q, %q, %v, want %q, %q", repo, worktree, err, tc.want, root)
+			}
+		})
+	}
+}
+
+func TestRepoKeyGitWithoutPathFormat(t *testing.T) {
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shimDir := t.TempDir()
+	shim := "#!/bin/sh\nfor arg do\n  shift\n  if [ \"$arg\" = --path-format=absolute ]; then echo \"$arg\"; else set -- \"$@\" \"$arg\"; fi\ndone\nexec " + realGit + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(shimDir, "git"), []byte(shim), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	root := initRepo(t)
+	sub := filepath.Join(root, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	repo, worktree, err := git.RepoKey(context.Background(), sub)
+
+	wantCommon := filepath.Join(root, ".git")
+	if err != nil || repo != wantCommon || worktree != root {
+		t.Fatalf("RepoKey = %q, %q, %v, want %q, %q", repo, worktree, err, wantCommon, root)
+	}
+	common, err := git.CommonDir(context.Background(), sub)
+	if err != nil || common != wantCommon {
+		t.Fatalf("CommonDir = %q, %v, want %q", common, err, wantCommon)
+	}
+}
+
+func TestRepoKeyNoOrigin(t *testing.T) {
+	root := initRepo(t)
+
+	repo, worktree, err := git.RepoKey(context.Background(), root)
+
+	wantCommon := filepath.Join(root, ".git")
+	if err != nil || repo != wantCommon || worktree != root {
+		t.Fatalf("RepoKey = %q, %q, %v, want %q, %q", repo, worktree, err, wantCommon, root)
+	}
+	common, err := git.CommonDir(context.Background(), root)
+	if err != nil || common != wantCommon {
+		t.Fatalf("CommonDir = %q, %v, want %q", common, err, wantCommon)
+	}
+}
+
+func TestRepoKeyOutsideRepository(t *testing.T) {
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = git.RepoKey(context.Background(), outside)
+
+	if !errors.Is(err, git.ErrNotRepository) {
+		t.Fatalf("outside a repo: %v, want ErrNotRepository", err)
+	}
+}
+
 func TestTopLevelOtherGitError(t *testing.T) {
 	bare := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
