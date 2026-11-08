@@ -30,10 +30,10 @@ Language: `$ARGUMENTS`. When it is empty, the `linter` agent finds the languages
 
 | Language | Tool | Rules that it can catch |
 |---|---|---|
-| PHP | deptrac | the layer and context rules, from its layers and its ruleset |
-| Python | import-linter | the layer and context rules, from its `layers` and `forbidden` contracts |
-| Go | go-arch-lint or depguard | the layer and context rules, from the allowed imports of each component |
-| TypeScript | the built-in `ddd` pack | each rule. Add `ddd` to `lint.packs` and stop: the binary tests prove this pack, so it needs no canary |
+| PHP | deptrac | the layer and context rules, from its layers and its ruleset. `--report-uncovered` gives the unplaced classes and dependencies |
+| Python | import-linter | the layer and context rules. Exhaustive `layers` contracts give `ddd/src-roots`, an `independence` contract gives `ddd/cross-context`, and a custom contract type with an allow list gives `ddd/domain-purity`, because a `forbidden` contract cannot hold an allow list |
+| Go | go-arch-lint or depguard | the layer and context rules, from the allowed imports of each component. go-arch-lint reports an unplaced file |
+| TypeScript | the built-in `ddd` pack | each rule. Add `ddd` to `lint.packs` and stop: the binary tests prove this pack, so the canary is optional. With no `lint/rules.yaml`, `harness lint canaries` prints one line and passes |
 
 For a language that is not in the table, the agent searches for a tool and proposes it. The user chooses.
 
@@ -49,8 +49,8 @@ A tool that checks only imports cannot catch `ddd/file-suffix`. Then the rule is
    - the custom pack `lint/architecture/pack.yaml` with the catalogue ids and the wrapper as engine, and its entry in `lint.packs`.
    - one canary folder for each rule under `lint/canaries/`, and the manifest `lint/rules.yaml`.
 4. The agent runs `harness lint init`, `harness lint canaries` and `harness lint`. `harness lint` must give no finding in `lint/canaries/`.
-5. A rule that the tool cannot catch comes back as a waiver question. Ask it. On a yes, the agent writes `waived: <reason>` for the rule. On a no, the agent tunes the tool config and runs the check again.
-6. Run `harness gates init` to add the `lint-canaries` gate. When `.harness.yaml` has a `gates` key, add `{id: lint-canaries, run: harness lint canaries}` to it by hand.
+5. A rule that the tool cannot catch comes back as a waiver question. Ask it. On a yes, the agent writes `waived: <reason>` for the rule, with a reason of 3 words or more. On a no, the agent tunes the tool config and runs the check again. A manifest that waives each rule fails: at least one rule needs a canary.
+6. Run `harness gates init` to add the `lint-canaries` gate. When `.harness.yaml` has a `gates` key with a gate, the command refuses and names the key: add `{id: lint-canaries, run: harness lint canaries}` to it by hand. An empty `gates: []` counts as absent.
 7. Show the last output of `harness lint canaries` to the user.
 
 ## Files
@@ -95,11 +95,20 @@ A canary folder mirrors the source layout, for example `lint/canaries/ddd-layer-
 ## Wrapper contract
 
 - Read the envelope from stdin. Analyse the files of `payload.files` under the envelope `cwd`. Under `harness lint canaries`, `cwd` is the canary folder: point the tool at `cwd`, not at the repository `src/`.
-- Give each finding a `rule` from `payload.rules` and a `file` relative to `cwd`. Keep only findings whose file is in `payload.files`.
+- Give each finding a `rule` from `payload.rules` and a `file` relative to `cwd`. Keep only findings whose file is in `payload.files`. A canary passes only on a finding for a file inside the canary folder.
+- Map each file that the tool cannot place to `ddd/src-roots`, and each dependency that it cannot place to the rule of the layer that holds the dependant file. Never drop an unplaced file or dependency.
+- End each pack rule scope with the file extension of the language, such as `src/**/*.php`. `harness init` uses the extension to find the languages that the pack covers.
 - Print one verdict: `{"verdict":"allow","findings":[...]}`. A non-zero exit is a plugin failure.
-- Set a `timeout` above the 5 second default.
+- Set a `timeout` above the 5 second default. On a timeout, the harness stops the process group of the plugin. A container keeps running after its client stops, so a wrapper that starts one names it and kills it on SIGTERM:
+
+```sh
+name="shop-lint-$$"
+trap 'docker kill "$name" >/dev/null 2>&1; exit 143' TERM
+docker compose run --rm -T --name "$name" php vendor/bin/deptrac analyse --formatter=json &
+wait $!
+```
 
 ## Limits
 
-- A repository has one manifest for one catalogue pack. When `lint/rules.yaml` exists for another language, stop and tell the user.
+- A repository has one manifest for one catalogue pack, so its canaries prove one language only. When `lint/rules.yaml` exists for another language, stop and tell the user. `harness init` prints a `next:` line with this limit for each language that no plugin rule covers.
 - A custom pack cannot use the catalogue ids while the built-in `ddd` pack is in `lint.packs`. When both are needed, stop and tell the user.

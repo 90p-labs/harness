@@ -292,11 +292,12 @@ Dispatch rules:
 
 The exec adapter `ExecPlugin{PluginName, Events, Command, Timeout}`:
 
-- It runs `Command` with `exec.CommandContext`. The default timeout is 5 seconds. `WaitDelay` is 500 ms, because a child that keeps stdout open blocks `Wait` without it.
+- It runs `Command` with `exec.CommandContext` in a new process group. The default timeout is 5 seconds. `WaitDelay` is 500 ms, because a child that keeps stdout open blocks `Wait` without it.
+- On a timeout, it sends SIGTERM to the process group, waits 2 seconds, then sends SIGKILL to the group. So a child, such as a `docker` client, does not stay alive. A plugin that starts a container must also stop it: `docker compose run` exits on SIGTERM but leaves its container running.
 - It writes the envelope on stdin and reads the verdict from stdout.
 - It runs the command in the envelope `cwd`, so a relative command such as `./scripts/gate.sh` works from any subfolder. A `cwd` that does not exist is a plugin failure.
-- The plugin stderr goes to the harness stderr. The adapter keeps its last 512 bytes.
-- A timeout, a non-zero exit or invalid JSON returns `ErrPluginFailed`, with the cause and the stderr tail.
+- The plugin stderr goes to the harness stderr as it comes, once.
+- A timeout, a non-zero exit or invalid JSON returns `ErrPluginFailed` with the cause. The error holds no copy of the stderr.
 - It injects the W3C trace context into the env var `TRACEPARENT`.
 
 ```mermaid
@@ -736,13 +737,13 @@ Commands:
 
 - `harness verify` runs the setup steps first, then the gates by their `needs`, at most `verify.parallel` at the same time. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate, in file order. A skipped gate prints `SKIPPED <id> needs <need>`. It exits 1 when one gate fails, is vetoed or is skipped.
 - `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree, with the same setup steps, `needs` and `verify.parallel`. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
-- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing `gates` or `setup` key. It also adds the `lint` gate when `lint.packs` is set, and the `lint-canaries` gate (`harness lint canaries`, no `paths`) when `lint/rules.yaml` exists. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. A line with `"setup":true` goes to the `setup` key, with its `creates`, before the `gates` key. The built-in detection writes no `needs` and no setup step. A plugin failure, a deny, a bad line, a duplicate id, a bad `needs`, a setup line with `needs` or a gate line with `creates` stops it before it writes.
+- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change a `gates` or `setup` key that holds an item, and the error names that key. An empty list or a null value counts as absent, and the write replaces it. With no gate to write, it writes no `gates` key. It also adds the `lint` gate when `lint.packs` is set, and the `lint-canaries` gate (`harness lint canaries`, no `paths`) when `lint/rules.yaml` exists. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. A line with `"setup":true` goes to the `setup` key, with its `creates`, before the `gates` key. The built-in detection writes no `needs` and no setup step. A plugin failure, a deny, a bad line, a duplicate id, a bad `needs`, a setup line with `needs` or a gate line with `creates` stops it before it writes.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
 - A veto stops at the first deny, and `guard.commits-checked` sorts first. A test of another rule disables `commits-checked`.
 - The `GateSource` port adds one gate for each criterion of the active plan, with the id `criterion-N`. Each criterion gets its own evidence record. The criterion gates go through the same scheduler as the configured gates.
-- `harness init --host H` sets up a repository in one step and prints one line for each step. First it keeps `lint.packs`, or it writes the packs that the repository files show: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it runs `gates init` with these packs, `lint init`, `lint baseline` and `host install`. With no pack, it skips the baseline, so a later pack gets a full first baseline. When it chooses packs but the `gates` key exists, it stops before the first write, because the kept gates have no `lint` gate. A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. When a lint engine is missing, it stops at the baseline step, and the steps before it stay.
+- `harness init --host H` sets up a repository in one step and prints one line for each step. First it keeps `lint.packs`, or it writes the packs that the repository files show: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it runs `gates init` with these packs, `lint init`, `lint baseline` and `host install`. With no pack, it skips the baseline, so a later pack gets a full first baseline. The baseline line gives the number of findings and the command that shows them: `lint baseline: wrote .harness-baseline/lint.json (3 findings, run harness lint to see them)`. With no gate to write, it prints `gates: none detected`. When it chooses packs but the `gates` key exists, it stops before the first write, because the kept gates have no `lint` gate. A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. When a lint engine is missing, it stops at the baseline step, and the steps before it stay.
 
 Before the review, an in-process plugin on `run.transition.before` verifies the trace of the plan against the branch. The pure function `VerifyTrace` checks these rules:
 
@@ -854,7 +855,7 @@ rules:
 - `pack.yaml` has the same keys as a built-in pack. `plugin` is a path in the pack folder.
 - The name matches `^[a-z0-9][a-z0-9-]*$`. A built-in name, or the name of another custom pack, is an error.
 - `requires` names only built-in packs. Each required pack must also be in `lint.packs`.
-- A rule id, `biome` value or `oxlint` value that a built-in pack in `lint.packs`, another custom pack or an earlier rule of the pack uses is an error. The engines map a diagnostic to one rule. A built-in pack that is not in `lint.packs` claims nothing, so a custom pack can use the catalogue ids.
+- A rule id, `biome` value or `oxlint` value that a built-in pack in `lint.packs`, another custom pack or an earlier rule of the pack uses is an error. The error names both packs and the rule. The engines map a diagnostic to one rule. A built-in pack that is not in `lint.packs` claims nothing, so a custom pack can use the catalogue ids.
 - With a custom pack, `.harness-lint/VERSION` holds the binary version, a `+` and a hash of the custom pack files. An edit to a custom pack makes `harness lint` stop with "run harness lint init".
 - A rule has the engine `biome-grit`, `biome-rule`, `oxlint` or the name of a lint plugin. The engine `harness` is an error, because its checks are Go code in the binary. An empty engine is an error.
 - A severity other than `error`, `warn` or `info`, or no severity, is an error.
@@ -866,7 +867,7 @@ Pack `ddd`, after the Hollywood concepts, in the NestJS style:
 
 | Rule | Matches | Engine | Severity |
 |---|---|---|---|
-| `ddd/src-roots` | a folder in `src/` other than `app/`, `components/` and the business root, or a file not in `ddd.src_files` | harness | error |
+| `ddd/src-roots` | a folder in `src/` other than `app/`, `components/` and the business root that holds a TypeScript or JavaScript file, or a file not in `ddd.src_files` | harness | error |
 | `ddd/context-layers` | a context folder with only one of `domain/`, `application/` and `infrastructure/` | harness | error |
 | `ddd/parent-no-code` | a file in a folder that groups contexts, outside its `shared/` folder | harness | error |
 | `ddd/shared-layers` | a folder in a `shared/` folder other than the three layers | harness | error |
@@ -959,11 +960,21 @@ The shadcn `cn` helper lives in `src/components/lib/utils.ts`.
 
 A project in another language checks the architecture rules with its own tool, through a lint plugin (ADR 0013). The `lint-setup` skill and the `linter` agent write the setup. The binary proves it on each run.
 
-- The rule catalogue is a data file embedded in the binary. Each rule has an id and a one-line description. Pack `ddd` holds `ddd/domain-purity`, `ddd/layer-direction`, `ddd/cross-context` and `ddd/file-suffix`, the ids of the built-in `ddd` pack.
+- The rule catalogue is a data file embedded in the binary. Each rule has an id and a one-line description. Pack `ddd` holds `ddd/src-roots`, `ddd/domain-purity`, `ddd/layer-direction`, `ddd/cross-context` and `ddd/file-suffix`, the ids of the built-in `ddd` pack.
+- `ddd/src-roots` is the coverage rule: the tool reports each source file and each dependency that it cannot place in a context or a layer, and never drops one. A tool that cannot report an unplaced file leaves a gap that no canary shows.
 - `harness lint catalogue` prints one `id description` line for each rule, and `--json` prints the catalogue. It needs no `.harness.yaml` and no repo.
 - The setup writes the native tool config, a wrapper plugin on `lint.check`, a custom pack with the catalogue ids and the wrapper as engine, one canary folder for each rule and the manifest `lint/rules.yaml`.
 - A canary folder breaks one rule on purpose. It mirrors the source layout, such as `lint/canaries/ddd-layer-direction/src/...`, so the rule scope matches its files. The tool config and the pack scopes exclude `lint/canaries/`.
 - The wrapper command finds its script from the repo root, because the exec plugin runs in the envelope `cwd`: `[sh, -c, 'exec sh "$(git rev-parse --show-toplevel)/.harness/plugins/<name>.sh"']`.
+- The wrapper maps an unplaced file to `ddd/src-roots`, and an unplaced dependency to the rule of the layer that holds the dependant file. A pack rule scope ends with the file extension of its language, such as `src/**/*.php`.
+- A wrapper that starts a container names it, traps SIGTERM and kills the container, because the harness stops only its own process group on a timeout:
+
+```sh
+name="shop-lint-$$"
+trap 'docker kill "$name" >/dev/null 2>&1; exit 143' TERM
+docker compose run --rm -T --name "$name" php vendor/bin/deptrac analyse --formatter=json &
+wait $!
+```
 
 The manifest gives each rule of one catalogue pack a canary or a waiver. The engine and the scope come from the active pack rule.
 
@@ -979,18 +990,24 @@ rules:
 `harness lint canaries` reads the manifest and prints one line for each catalogue rule, in the catalogue order:
 
 ```text
+PASS ddd/src-roots lint/canaries/ddd-src-roots
 PASS ddd/domain-purity lint/canaries/ddd-domain-purity
 FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding
 FAIL ddd/cross-context: not in lint/rules.yaml
 WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
 ```
 
-- For each canary, the check sends `lint.check` to the engine of the active rule, with the canary folder as `cwd`, the one rule, and the git files of the canary folder in the rule scope. Untracked files count. A finding with the rule id is a `PASS`.
-- No finding with the rule id, and a catalogue rule that is not in the manifest, are a `FAIL`. A `FAIL` exits 1.
-- These are config errors, and exit 1 before an engine runs: no `lint/rules.yaml` (the error names the `lint-setup` skill), a file that is not YAML, an unknown pack, an unknown or duplicate rule id, a rule with both or neither of `canary` and `waived`, a canary path outside the repo, a missing canary folder, and a canary rule that no active pack holds.
+- For each canary, the check sends `lint.check` to the engine of the active rule, with the canary folder as `cwd`, the one rule, and the git files of the canary folder in the rule scope. Untracked files count.
+- A finding is a `PASS` only when it has the rule id and its `file`, relative to the canary folder, exists inside the canary folder. A file or a folder of the canary counts.
+- A finding with the rule id for a file outside the canary is a `FAIL` that names the file: `the engine deptrac gave a ddd/domain-purity finding for ../../../src/Kernel.php, which is outside the canary`. So a wrapper that points the tool at the repository `src/` cannot pass.
+- No finding with the rule id, and a catalogue rule that is not in the manifest, are a `FAIL`. A `FAIL` exits 1. For the engine `harness`, the `FAIL` adds `and the built-in engine reads only TypeScript and JavaScript`.
+- The manifest decodes strictly. These are config errors, and exit 1 before an engine runs: no `lint/rules.yaml` (the error names the `lint-setup` skill), a file that is not YAML, an unknown key, an empty file or no `pack` key, an unknown pack, an unknown or duplicate rule id, a rule with both or neither of `canary` and `waived`, a waiver reason of fewer than 3 words, a manifest that lists rules and waives each of them, a canary path outside the repo, a missing canary folder, a canary that is a file, and a canary rule that no active pack holds.
+- Stale lint files stop the check with the error of `harness lint`: run `harness lint init`.
 - An engine error stops the check.
-- The built-in `ddd` pack has no canaries: its embedded fixtures prove each rule in the binary tests.
-- `harness init` prints `next: run the lint-setup skill to set up the architecture rules for <language>` for each detected language with no built-in pack: PHP (`composer.json`), Python (`pyproject.toml` or `requirements.txt`) and Go (`go.mod`). A repository with `lint/rules.yaml` gets no such line.
+- The built-in `ddd` pack has no canaries: its embedded fixtures prove each rule in the binary tests. When no active plugin rule has a catalogue id, `harness lint canaries` with no `lint/rules.yaml` prints `lint canaries: only built-in rules are active, so there is no canary to run` and exits 0. With no lint pack, the missing manifest stays an error.
+- A waiver shows only in `lint/rules.yaml` and in the `WAIVED` lines of `harness lint canaries`. The `lint-canaries` gate passes with waivers, and `harness verify` prints only the gate status.
+- `harness init` prints `next: run the lint-setup skill to set up the architecture rules for <language>` for each detected language with no built-in pack: PHP (`composer.json`), Python (`pyproject.toml` or `requirements.txt`) and Go (`go.mod`). A language is covered when an active plugin rule with a catalogue id has a scope that ends with its extension (`.php`, `.py` or `.go`). With `lint/rules.yaml`, a covered language gets no line, and an uncovered language gets the line with the limit: `next: run the lint-setup skill to set up the architecture rules for Go; lint/rules.yaml holds one canary for each rule, so its canaries prove one language only`.
+- A repository has one manifest, and a catalogue rule id belongs to one active pack. A clash names both packs. So a repository with two languages that both need the catalogue rules can prove one language only.
 
 ## Go-live
 

@@ -23,10 +23,10 @@ Return the languages, the contexts and layers with their paths, the proposed too
 ## Write
 
 1. Write the native tool config from the answers of the lead. Exclude `lint/canaries/`.
-2. Write the wrapper plugin `.harness/plugins/<tool>.sh` to the wrapper contract, and its `plugins` entry.
-3. Write `lint/architecture/pack.yaml` with each catalogue id that gets a canary, and add it to `lint.packs`.
-4. Write one canary folder for each rule that the tool can catch, and `lint/rules.yaml`.
+2. Write the wrapper plugin `.harness/plugins/<tool>.sh` to the wrapper contract, and its `plugins` entry. The wrapper maps each unplaced file to `ddd/src-roots` and each unplaced dependency to the rule of the dependant layer. It never drops one. When it starts a container, it names the container, traps SIGTERM and kills it.
+3. Write `lint/architecture/pack.yaml` with each catalogue id that gets a canary, and add it to `lint.packs`. Each scope ends with the file extension of the language.
+4. Write one canary folder for each rule that the tool can catch, and `lint/rules.yaml`. Each finding of a canary must be for a file inside its folder.
 5. Run `<harness> lint init`, `<harness> lint canaries` and `<harness> lint`.
 6. When a canary fails, fix the tool config or the canary, then run the check again. When the tool cannot catch a rule, do not write a canary for it.
 
-Return the files that you wrote, the last output of `<harness> lint canaries`, and one waiver question for each rule that the tool cannot catch, with the reason. Do not commit.
+Return the files that you wrote, the last output of `<harness> lint canaries`, and one waiver question for each rule that the tool cannot catch, with a reason of 3 words or more. At least one rule must have a canary. Do not commit.

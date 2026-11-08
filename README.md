@@ -91,11 +91,13 @@ $ harness init --host claude
 lint packs: wrote ddd
 gates: wrote node-typecheck, node-test, lint
 lint init: wrote .harness-lint
-lint baseline: wrote .harness-baseline/lint.json
+lint baseline: wrote .harness-baseline/lint.json (3 findings, run harness lint to see them)
 host: wrote /home/dev/shop/.claude/settings.json
 ```
 
-A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. With no pack, it skips the baseline. When it chooses packs but the `gates` key exists, it stops before it writes: set `lint.packs` and the `lint` gate by hand, or remove the `gates` key. Without a lint engine on the `PATH`, it stops at the baseline step: install the engine and run it again. After a full run, do step 5 below.
+The baseline keeps the findings that exist today, so the `lint` gate fails only on new ones. Run `harness lint` to see them. Commit the host config .claude/settings.json (or `.codex/hooks.json`) with `.harness.yaml`, `.harness-lint/` and `.harness-baseline/`, so each clone gets the hooks.
+
+A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. With no pack, it skips the baseline. With no gate to write, it prints `gates: none detected` and writes no `gates` key. An empty `gates` or `setup` list counts as absent. When it chooses packs but the `gates` key holds a gate, it stops before it writes: set `lint.packs` and the `lint` gate by hand, or remove the `gates` key. Without a lint engine on the `PATH`, it stops at the baseline step: install the engine and run it again. After a full run, do step 5 below.
 
 ### Step by step
 
@@ -216,23 +218,29 @@ Run `harness lint init` after each edit of a custom pack. A finding takes the se
 
 ### Architecture rules in any language
 
-The built-in `ddd` pack checks the layers and the contexts of a TypeScript project. For PHP, Python or Go, `harness init` prints a next step, such as `next: run the lint-setup skill to set up the architecture rules for PHP`. The `lint-setup` skill asks the open choices, and the `linter` agent writes the setup with the tool of the language: deptrac, import-linter, go-arch-lint or depguard. It writes the tool config, a wrapper lint plugin, a custom pack with the ids of `harness lint catalogue`, one canary folder that breaks each rule, and the manifest `lint/rules.yaml`. [`DESIGN.md`](DESIGN.md#architecture-rules-in-any-language) gives the formats.
+The built-in `ddd` pack checks the layers and the contexts of a TypeScript project. For TypeScript, a canary is optional: the binary tests prove the built-in rules, and with no `lint/rules.yaml`, `harness lint canaries` prints `lint canaries: only built-in rules are active, so there is no canary to run`. For PHP, Python or Go, `harness init` prints a next step, such as `next: run the lint-setup skill to set up the architecture rules for PHP`. The `lint-setup` skill asks the open choices, and the `linter` agent writes the setup with the tool of the language: deptrac, import-linter, go-arch-lint or depguard. It writes the tool config, a wrapper lint plugin, a custom pack with the ids of `harness lint catalogue`, one canary folder that breaks each rule, and the manifest `lint/rules.yaml`. [`DESIGN.md`](DESIGN.md#architecture-rules-in-any-language) gives the formats.
 
 `harness lint canaries` proves that the tool still catches each rule, with no agent, so it runs as the gate `lint-canaries`. A config edit that misses a rule fails it, and a rule that the tool cannot catch shows its waiver:
 
 ```console
 $ harness lint canaries
+PASS ddd/src-roots lint/canaries/ddd-src-roots
 PASS ddd/domain-purity lint/canaries/ddd-domain-purity
 PASS ddd/layer-direction lint/canaries/ddd-layer-direction
 FAIL ddd/cross-context lint/canaries/ddd-cross-context: the engine fake-arch gave no ddd/cross-context finding
 PASS ddd/file-suffix lint/canaries/ddd-file-suffix
 error: a lint canary failed
 $ harness lint canaries
+PASS ddd/src-roots lint/canaries/ddd-src-roots
 PASS ddd/domain-purity lint/canaries/ddd-domain-purity
 PASS ddd/layer-direction lint/canaries/ddd-layer-direction
 WAIVED ddd/cross-context: the tool cannot see the context boundaries in this project.
 PASS ddd/file-suffix lint/canaries/ddd-file-suffix
 ```
+
+A canary passes only when the finding is for a file inside the canary folder. `ddd/src-roots` makes the tool report each file or dependency that it cannot place, so no source folder drops out of the check. A waiver needs a reason of 3 words or more, and a manifest that waives each rule fails. The waiver shows in lint/rules.yaml and in the `WAIVED` lines of `harness lint canaries`. `harness verify` prints only the gate status, so run `harness lint canaries` to see the waivers.
+
+A repository has one `lint/rules.yaml`, so its canaries prove one language only. With a manifest, `harness init` prints a `next:` line for each other language that no plugin rule covers.
 
 ### Signals plugin
 
