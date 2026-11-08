@@ -8,18 +8,32 @@ import (
 	"strings"
 	"testing"
 
+	lintdomain "github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
 	commandLint      = "lint"
 	commandBaseline  = "baseline"
+	commandCatalogue = "catalogue"
 	flagLintJSON     = "--json"
 	todoLintScript   = "testdata/todo-lint.sh"
 	todoRuleID       = "team/no-todo"
 	todoSourceFile   = "src/orders/order.ts"
 	lintBaselineFile = ".harness-baseline/lint.json"
 )
+
+func TestLintCatalogue(t *testing.T) {
+	clearHarnessEnv(t)
+	t.Chdir(t.TempDir())
+
+	code, stdout, stderr := execute(t, commandLint, commandCatalogue, flagLintJSON)
+
+	var catalogue lintdomain.RuleCatalogue
+	if code != exitOK || json.Unmarshal([]byte(stdout), &catalogue) != nil || len(catalogue.Packs) == 0 {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want the catalogue outside a repository", code, stdout, stderr)
+	}
+}
 
 func TestLintExecPlugin(t *testing.T) {
 	clearHarnessEnv(t)

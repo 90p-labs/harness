@@ -1,0 +1,11 @@
+packs:
+  - name: ddd
+    rules:
+      - id: ddd/domain-purity
+        description: The domain layer depends only on itself, the shared domain and the allowed libraries, never on the application or infrastructure layer or a framework.
+      - id: ddd/layer-direction
+        description: The application layer depends on the domain layer, never on the infrastructure layer.
+      - id: ddd/cross-context
+        description: A bounded context depends on another context only through its public entry point or its published events.
+      - id: ddd/file-suffix
+        description: A file in a layer has a name that tells its role, such as a command, a handler, an aggregate or a repository.

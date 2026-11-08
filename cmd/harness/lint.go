@@ -11,6 +11,7 @@ import (
 	"github.com/jorge07/harness/internal/lint/application/command/baseline"
 	"github.com/jorge07/harness/internal/lint/application/command/initlint"
 	lintcommand "github.com/jorge07/harness/internal/lint/application/command/lint"
+	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
 	lintcli "github.com/jorge07/harness/internal/lint/ui/cli"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
@@ -38,5 +39,5 @@ func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 			},
 			NoPacks: len(cfg.Lint.Packs) == 0,
 		}, nil
-	})
+	}, rulecatalogue.Load)
 }

@@ -9,17 +9,20 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
-	commandLint     = "lint"
-	commandInit     = "init"
-	commandBaseline = "baseline"
-	flagJSON        = "json"
+	commandLint      = "lint"
+	commandInit      = "init"
+	commandBaseline  = "baseline"
+	commandCatalogue = "catalogue"
+	flagJSON         = "json"
 
-	findingFormat = "%s %s %s:%d %s\n"
-	noPacksLine   = "no lint pack is set: set lint.packs in .harness.yaml\n"
+	findingFormat       = "%s %s %s:%d %s\n"
+	catalogueRuleFormat = "%s %s\n"
+	noPacksLine         = "no lint pack is set: set lint.packs in .harness.yaml\n"
 )
 
 var ErrFindings = errors.New("lint found error findings")
@@ -33,7 +36,7 @@ type Handlers struct {
 
 type Connect func(ctx context.Context) (Handlers, error)
 
-func NewLintCommand(connect Connect) *cobra.Command {
+func NewLintCommand(connect Connect, catalogue func() (domain.RuleCatalogue, error)) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandLint,
 		Short: "Check the code against the lint packs",
@@ -82,7 +85,36 @@ func NewLintCommand(connect Connect) *cobra.Command {
 				})
 			},
 		},
+		newCatalogueCommand(catalogue),
 	)
+	return cmd
+}
+
+func newCatalogueCommand(load func() (domain.RuleCatalogue, error)) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   commandCatalogue,
+		Short: "Print the architecture rule catalogue",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			catalogue, err := load()
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if asJSON, _ := cmd.Flags().GetBool(flagJSON); asJSON {
+				return json.NewEncoder(out).Encode(catalogue)
+			}
+			for _, pack := range catalogue.Packs {
+				for _, rule := range pack.Rules {
+					if _, err := fmt.Fprintf(out, catalogueRuleFormat, rule.ID, rule.Description); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool(flagJSON, false, "print the catalogue as JSON")
 	return cmd
 }
 
