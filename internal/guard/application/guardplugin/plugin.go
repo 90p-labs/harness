@@ -24,6 +24,7 @@ type Deps struct {
 	ReadFile      func(path string) ([]byte, error)
 	DefaultBranch func(ctx context.Context, dir string) (string, error)
 	Stop          domain.StopDecider
+	CommitChecked func(ctx context.Context, dir string) (bool, error)
 	Models        map[shareddomain.Host]map[string]string
 	Worktree      string
 	Meter         metric.Meter
@@ -96,6 +97,9 @@ func (p toolPlugin) Handle(ctx context.Context, envelope shareddomain.Envelope) 
 		TextErr:     textErr,
 		DefaultBranch: func() (string, error) {
 			return p.deps.DefaultBranch(ctx, envelope.Cwd)
+		},
+		CommitChecked: func() (bool, error) {
+			return p.deps.CommitChecked(ctx, envelope.Cwd)
 		},
 	})
 	if !denied {

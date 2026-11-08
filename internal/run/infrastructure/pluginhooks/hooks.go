@@ -9,13 +9,6 @@ import (
 	plugindomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
-type transitionPayload struct {
-	Event  string `json:"event"`
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Reason string `json:"reason"`
-}
-
 type Hooks struct {
 	bus plugindomain.Dispatcher
 	cwd string
@@ -28,7 +21,7 @@ func NewHooks(bus plugindomain.Dispatcher, cwd string) Hooks {
 }
 
 func (h Hooks) Before(ctx context.Context, run domain.Run, cmd domain.Command) error {
-	result, err := h.dispatch(ctx, plugindomain.EventRunTransitionBefore, run, transitionPayload{
+	result, err := h.dispatch(ctx, plugindomain.EventRunTransitionBefore, run, plugindomain.TransitionPayload{
 		Event: string(cmd.Event), From: string(run.Phase), Reason: cmd.Reason,
 	})
 	if err != nil {
@@ -41,7 +34,7 @@ func (h Hooks) Before(ctx context.Context, run domain.Run, cmd domain.Command) e
 }
 
 func (h Hooks) After(ctx context.Context, from domain.Run, to domain.Run) {
-	body := transitionPayload{From: string(from.Phase), To: string(to.Phase)}
+	body := plugindomain.TransitionPayload{From: string(from.Phase), To: string(to.Phase)}
 	if events := to.Events(); len(events) > 0 {
 		last := events[len(events)-1]
 		body.Event, body.Reason = string(last.Event), last.Reason
@@ -49,7 +42,7 @@ func (h Hooks) After(ctx context.Context, from domain.Run, to domain.Run) {
 	_, _ = h.dispatch(ctx, plugindomain.EventRunTransitionAfter, from, body)
 }
 
-func (h Hooks) dispatch(ctx context.Context, event plugindomain.EventName, run domain.Run, body transitionPayload) (plugindomain.DispatchResult, error) {
+func (h Hooks) dispatch(ctx context.Context, event plugindomain.EventName, run domain.Run, body plugindomain.TransitionPayload) (plugindomain.DispatchResult, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return plugindomain.DispatchResult{}, err

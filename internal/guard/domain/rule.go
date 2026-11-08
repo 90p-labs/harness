@@ -20,6 +20,7 @@ const (
 	RuleShellWriteSource  = "shell-write-source"
 	RuleWritingStyle      = "writing-style"
 	RuleAgentModelRouting = "agent-model-routing"
+	RuleCommitsChecked    = "commits-checked"
 )
 
 const (
@@ -62,6 +63,7 @@ type RuleContext struct {
 	DefaultBranch func() (string, error)
 	AgentModels   map[string]string
 	TextErr       error
+	CommitChecked func() (bool, error)
 }
 
 func Rules() []Rule {
@@ -77,6 +79,7 @@ func Rules() []Rule {
 		{RuleShellWriteSource, denyShellWriteSource},
 		{RuleWritingStyle, denyWritingStyle},
 		{RuleAgentModelRouting, denyAgentModel},
+		{RuleCommitsChecked, denyUncheckedPublish},
 	}
 }
 

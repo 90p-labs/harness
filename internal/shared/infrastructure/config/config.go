@@ -49,6 +49,15 @@ type Config struct {
 	Roles   map[string]RoleHost `mapstructure:"roles"`
 	Guard   Guard               `mapstructure:"guard"`
 	Git     Git                 `mapstructure:"git"`
+	Gates   []Gate              `mapstructure:"gates"`
+}
+
+type Gate struct {
+	ID       string        `mapstructure:"id"`
+	Run      string        `mapstructure:"run"`
+	Paths    []string      `mapstructure:"paths"`
+	Timeout  time.Duration `mapstructure:"timeout"`
+	Baseline string        `mapstructure:"baseline"`
 }
 
 type Guard struct {

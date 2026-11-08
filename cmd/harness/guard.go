@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	gatepersistence "github.com/jorge07/harness/internal/gate/infrastructure/persistence"
 	runmodule "github.com/jorge07/harness/internal/run"
 	"github.com/jorge07/harness/internal/run/application/command/decidestop"
 	"github.com/jorge07/harness/internal/run/domain"
@@ -35,7 +36,11 @@ func openState(ctx context.Context, cfg config.Config, commonDir string) (*dbal.
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Migrate(ctx, persistence.Module, persistence.Migrations); err != nil {
+	err = db.Migrate(ctx, persistence.Module, persistence.Migrations)
+	if err == nil {
+		err = db.Migrate(ctx, gatepersistence.Module, gatepersistence.Migrations)
+	}
+	if err != nil {
 		_ = db.Close()
 		return nil, err
 	}

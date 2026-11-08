@@ -241,7 +241,252 @@ const (
 	commandPlan      = "plan"
 	commandDiagram   = "diagram"
 	commandCheck     = "check"
+	commandVerify    = "verify"
+	commandGates     = "gates"
+	commandInit      = "init"
+
+	pingBranch      = "feat/ping-query"
+	strayFile       = "stray.txt"
+	configFile      = ".harness.yaml"
+	commitsChecked  = "commits-checked"
+	gitUserName     = "user.name=t"
+	gitUserEmail    = "user.email=t@example.com"
+	trueProof       = "`true`"
+	noGateMessage   = "no gate is set"
+	goModuleFile    = "module example.com/x\n\ngo 1.22\n"
+	pushInput       = `{"cwd":".","tool_name":"Bash","tool_input":{"command":"git push origin feat/x"}}`
+	pongSource      = "internal/ping/domain/pong.go"
+	pongTest        = "internal/ping/domain/pong_test.go"
+	queryHandler    = "internal/ping/application/query/pingquery/handler.go"
+	queryHandlerTst = "internal/ping/application/query/pingquery/handler_test.go"
 )
+
+func commitFiles(t *testing.T, dir, subject string, files map[string]string) {
+	t.Helper()
+	for name, body := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, dir, "add", name)
+	}
+	gitIn(t, dir, "-c", gitUserName, "-c", gitUserEmail, "commit", "--quiet", "--allow-empty", "-m", subject)
+}
+
+func tracedRepo(t *testing.T) (dir, plan string) {
+	t.Helper()
+	plan = validPlan(t)
+	dir = initRepo(t)
+	gitIn(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFiles(t, dir, "chore: start the repo", nil)
+	gitIn(t, dir, "checkout", "--quiet", "-b", pingBranch)
+	commitFiles(t, dir, "feat: add the pong domain", map[string]string{
+		pongSource: "package domain\n",
+		pongTest:   "package domain\n\nfunc TestPong(t *testing.T) {}\n",
+	})
+	commitFiles(t, dir, "feat: add the ping query", map[string]string{
+		queryHandler:    "package pingquery\n",
+		queryHandlerTst: "package pingquery\n\nfunc TestPingQuery(t *testing.T) {}\n",
+	})
+	commitFiles(t, dir, "docs: describe the ping flow", map[string]string{pongSource: "package domain\n\n// Pong is the word.\n"})
+
+	for _, proof := range []string{
+		"`go test ./internal/ping/domain -run TestPong -count=1`",
+		"`go test ./internal/ping/application/query/pingquery -run TestPingQuery -count=1`",
+		"`make check`",
+	} {
+		plan = strings.Replace(plan, proof, trueProof, 1)
+	}
+	return dir, plan
+}
+
+func verifyPasses(t *testing.T) {
+	t.Helper()
+	code, stdout, stderr := execute(t, commandVerify)
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, "criterion-3") {
+		t.Fatalf("verify: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+}
+
+func startWithPlan(t *testing.T, dir, plan string) (runID string) {
+	t.Helper()
+	_, stdout, _ := execute(t, commandRun, "start", "Add the login page")
+	runID = startedRunID(t, stdout)
+	writeRunPlan(t, dir, runID, plan)
+	for _, step := range []string{commandPlan, "approve"} {
+		if code, _, stderr := execute(t, commandRun, step); code != exitOK {
+			t.Fatalf("run %s: code = %d, stderr = %q", step, code, stderr)
+		}
+	}
+	return runID
+}
+
+func TestReviewVerifiesTrace(t *testing.T) {
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	commitFiles(t, dir, "chore: add a stray file", map[string]string{strayFile: "stray\n"})
+	startWithPlan(t, dir, plan)
+	verifyPasses(t)
+
+	code, _, stderr := execute(t, commandRun, "review")
+
+	if code != exitRuntime || !strings.Contains(stderr, "file-untracked") || !strings.Contains(stderr, strayFile) {
+		t.Fatalf("review with a stray file: code = %d, stderr = %q, want %d and the file-untracked problem", code, stderr, exitRuntime)
+	}
+	_, stdout, _ := execute(t, commandRun, "status")
+	if want := " phase=" + string(domain.PhaseWorking) + " "; !strings.Contains(stdout, want) {
+		t.Fatalf("status = %q, want it to contain %q", stdout, want)
+	}
+
+	gitIn(t, dir, "rm", "--quiet", strayFile)
+	gitIn(t, dir, "-c", gitUserName, "-c", gitUserEmail, "commit", "--quiet", "-m", "chore: drop the stray file")
+	verifyPasses(t)
+	code, stdout, stderr = execute(t, commandRun, "review")
+
+	if want := " phase=" + string(domain.PhaseReviewing) + " "; code != exitOK || !strings.Contains(stdout, want) {
+		t.Fatalf("review after the fix: code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, want)
+	}
+}
+
+func TestReviewNeedsProofEvidence(t *testing.T) {
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	startWithPlan(t, dir, plan)
+
+	code, _, stderr := execute(t, commandRun, "review")
+
+	if code != exitRuntime || !strings.Contains(stderr, "proof-missing") {
+		t.Fatalf("review before verify: code = %d, stderr = %q, want %d and the proof-missing problem", code, stderr, exitRuntime)
+	}
+}
+
+func TestVerifyCriterionGateHashesTheWholeTree(t *testing.T) {
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	startWithPlan(t, dir, strings.Replace(plan, trueProof, "`go version`", 1))
+	verifyPasses(t)
+
+	commitFiles(t, dir, "test: add a fixture", map[string]string{"internal/ping/domain/testdata/pong.txt": "pong\n"})
+	_, stdout, _ := execute(t, commandVerify)
+
+	if !strings.Contains(stdout, "PASS criterion-1 ") {
+		t.Fatalf("stdout = %q, want criterion-1 to run again after a testdata change", stdout)
+	}
+}
+
+func TestVerifyRefusesAPlanWithProblems(t *testing.T) {
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	writeRunPlan(t, dir, startWithPlan(t, dir, plan), strings.Replace(plan, "| 1 |", "| one |", 1))
+
+	code, _, stderr := execute(t, commandVerify)
+
+	if code != exitRuntime || !strings.Contains(stderr, `"one"`) {
+		t.Fatalf("code = %d, stderr = %q, want %d and the parse problem", code, stderr, exitRuntime)
+	}
+}
+
+func TestVerifyExitCodes(t *testing.T) {
+	t.Run("no gate is set", func(t *testing.T) {
+		clearHarnessEnv(t)
+		initRepo(t)
+
+		code, stdout, stderr := execute(t, commandVerify)
+
+		if code != exitOK || !strings.Contains(stdout, noGateMessage) || stderr != "" {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+	})
+
+	t.Run("a failed gate", func(t *testing.T) {
+		clearHarnessEnv(t)
+		dir := initRepo(t)
+		cfg := "gates:\n  - id: fine\n    run: \"true\"\n  - id: broken\n    run: \"echo boom; exit 3\"\n"
+		if err := os.WriteFile(filepath.Join(dir, configFile), []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		code, stdout, stderr := execute(t, commandVerify)
+
+		if code != exitRuntime || !strings.Contains(stdout, "PASS fine ") || !strings.Contains(stdout, "FAIL broken ") || !strings.Contains(stdout, "boom") {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and the gate lines", code, stdout, stderr, exitRuntime)
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, configFile), []byte("gates:\n  - id: fine\n    run: \"true\"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, _ = execute(t, commandVerify)
+		if code != exitOK || !strings.Contains(stdout, "PASS fine ") {
+			t.Fatalf("passing gate: code = %d, stdout = %q, want %d", code, stdout, exitOK)
+		}
+	})
+}
+
+func TestVerifyCommitsAllowsAPush(t *testing.T) {
+	clearHarnessEnv(t)
+	dir, _ := tracedRepo(t)
+	cfg := "git:\n  default_branch: main\ngates:\n  - id: fine\n    run: \"true\"\n"
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	denied := func() (int, string) {
+		code, stdout, _ := executeWithStdin(t, pushInput, "hook", "--host", "claude", "pre-tool-use")
+		return code, stdout
+	}
+
+	if code, stdout := denied(); code != exitOK || !strings.Contains(stdout, "guard."+commitsChecked) {
+		t.Fatalf("push before the check: code = %d, stdout = %q, want a commits-checked deny", code, stdout)
+	}
+	code, stdout, stderr := execute(t, commandVerify, "--commits", "main")
+	if code != exitOK || !strings.Contains(stdout, "PASS ") || stderr != "" {
+		t.Fatalf("verify --commits: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	if code, stdout := denied(); code != exitOK || strings.Contains(stdout, "deny") {
+		t.Fatalf("push after the check: code = %d, stdout = %q, want an allow", code, stdout)
+	}
+
+	other := t.TempDir()
+	gitIn(t, other, "init", "--quiet")
+	commitFiles(t, other, "feat: start another repo", nil)
+	otherPush := strings.Replace(pushInput, `"cwd":"."`, `"cwd":"`+other+`"`, 1)
+	if code, stdout, _ := executeWithStdin(t, otherPush, "hook", "--host", "claude", "pre-tool-use"); code != exitOK || !strings.Contains(stdout, "guard."+commitsChecked) {
+		t.Fatalf("push from an unchecked repo: code = %d, stdout = %q, want a commits-checked deny", code, stdout)
+	}
+}
+
+func TestHookCommitsCheckedWithoutHead(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+
+	code, stdout, stderr := executeWithStdin(t, pushInput, "hook", "--host", "claude", "pre-tool-use")
+
+	for _, want := range []string{`"permissionDecision":"deny"`, "guard." + commitsChecked, "commit, then run harness verify --commits"} {
+		if code != exitOK || !strings.Contains(stdout, want) {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, want)
+		}
+	}
+}
+
+func TestGatesInit(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goModuleFile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := execute(t, commandGates, commandInit)
+
+	if code != exitOK || !strings.Contains(stdout, "go test") || stderr != "" {
+		t.Fatalf("first init: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	code, _, stderr = execute(t, commandGates, commandInit)
+	if code != exitRuntime || !strings.Contains(stderr, "gates exist") {
+		t.Fatalf("second init: code = %d, stderr = %q, want %d and the gates exist error", code, stderr, exitRuntime)
+	}
+}
 
 func validPlanFile(t *testing.T) string {
 	t.Helper()
@@ -301,8 +546,7 @@ func initRepo(t *testing.T) string {
 
 func TestRunLifecycle(t *testing.T) {
 	clearHarnessEnv(t)
-	valid := validPlan(t)
-	dir := initRepo(t)
+	dir, valid := tracedRepo(t)
 
 	steps := []struct {
 		args      []string
@@ -316,6 +560,9 @@ func TestRunLifecycle(t *testing.T) {
 		{[]string{"done"}, domain.PhaseDone},
 	}
 	for _, step := range steps {
+		if step.args[0] == "review" {
+			verifyPasses(t)
+		}
 		code, stdout, stderr := execute(t, append([]string{commandRun}, step.args...)...)
 		if code != exitOK || stderr != "" {
 			t.Fatalf("%v: code = %d, stderr = %q", step.args, code, stderr)
@@ -520,7 +767,11 @@ func TestPlanCheckValidFixture(t *testing.T) {
 
 func TestHookGuardEndToEnd(t *testing.T) {
 	clearHarnessEnv(t)
-	initRepo(t)
+	dir := initRepo(t)
+	cfg := "guard:\n  disabled: [" + commitsChecked + "]\n"
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	const input = `{"cwd":".","tool_name":"Bash","tool_input":{"command":"git push --force origin feat/x"}}`
 
 	code, stdout, stderr := executeWithStdin(t, input, "hook", "--host", "claude", "pre-tool-use")

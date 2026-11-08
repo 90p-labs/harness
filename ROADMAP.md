@@ -451,7 +451,7 @@ harness/
             └── git.go                      changed
 ```
 
-## PR 7: `feat/gates-evidence`, based on `feat/guard-plugins`
+## PR 7: `feat/gates-evidence`, based on `main`
 
 - Scope: generic verification gates from YAML and one gate for each criterion, the evidence store for each input hash, and `harness verify`. It also adds the `commits-checked` guard rule and the trace verification before the review.
 - Fixes: K4, K6, K16.
@@ -472,24 +472,28 @@ harness/
 | 7.12 | `VerifyCommits` checks each commit in a temporary worktree, saves the commit check for `HEAD`, and removes the worktrees. | `go test ./internal/gate/application/command/verifycommits -run TestVerifyCommits -count=1` |
 | 7.13 | A Go repo gets three Go gates. A pnpm repo with scripts and Biome gets the pnpm and Biome gates. | `go test ./internal/gate/infrastructure/toolchain -run TestDetectToolchain -count=1` |
 | 7.14 | `InitGates` writes the gates when the key is absent, and returns `ErrGatesExist` when it exists. | `go test ./internal/gate/application/command/initgates -run TestInitGatesRefusesOverwrite -count=1` |
-| 7.15 | `commits-checked` denies `git push` and `gh pr create` without a passed commit check for `HEAD`, and allows them with one. | `go test ./internal/gate/infrastructure/guardplugin -run TestCommitsCheckedRule -count=1` |
+| 7.15 | `commits-checked` denies `git push` and `gh pr create` without a passed commit check for `HEAD`, and allows them with one. | `go test ./internal/guard/application/guardplugin -run TestCommitsCheckedRule -count=1` |
 | 7.16 | `harness verify` prints one status line for each gate, exits 0 when all pass, and exits 1 when one fails. | `go test ./internal/gate/ui/cli -run TestVerifyCommand -count=1` |
 | 7.17 | `Verify` adds one `criterion-N` gate for each gate of the `GateSource`, and saves the evidence of each one. | `go test ./internal/gate/application/command/verify -run TestVerifyCriterionGates -count=1` |
 | 7.18 | `VerifyCommits` runs only the YAML gates, and no `criterion-N` gate. | `go test ./internal/gate/application/command/verifycommits -run TestVerifyCommitsSkipsCriteria -count=1` |
 | 7.19 | `VerifyTrace` reports one problem for each of the six trace rules on its broken fixture, and none on the clean fixture. | `go test ./internal/plan/domain -run TestVerifyTrace -count=1` |
 | 7.20 | The `gitdiff` adapter reads the name status, the commits with their files and the test sources of a temporary git repo. | `go test ./internal/plan/infrastructure/gitdiff -run TestReadBranch -count=1` |
-| 7.21 | The review plugin denies the `review` event with the trace problems, allows a clean branch, and ignores the other events. | `go test ./internal/plan/infrastructure/reviewplugin -run TestReviewPlugin -count=1` |
+| 7.21 | The review plugin denies `submit-for-review` with the trace problems, allows a clean branch, and ignores the other events. | `go test ./internal/plan/infrastructure/reviewplugin -run TestReviewPlugin -count=1` |
 | 7.22 | In a temporary git repo, `harness run review` refuses a file outside the trees, and moves the run to `reviewing` after the fix. | `go test ./cmd/harness -run TestReviewVerifiesTrace -count=1` |
+| 7.23 | `EvidenceStatus` gives the result of each gate for its current input hash, and no result when the record is missing. | `go test ./internal/gate/application/query/evidencestatus -run TestEvidenceStatus -count=1` |
+| 7.24 | The config decodes the `gates` key into gates, and a bad gate is an error that names it. | `go test ./internal/gate/infrastructure/config -run TestDecodeGates -count=1` |
+| 7.25 | The module is formatted, builds, vets and passes all tests with no error. | `make check` |
+| 7.26 | `harness gates init` writes the detected gates, and exits 1 when the `gates` key exists. | `go test ./internal/gate/ui/cli -run TestGatesInitCommand -count=1` |
 
 Tasks:
 
 1. **Gate domain.** Owned: `internal/gate/domain/`. Test first: `gate_test.go` with `TestNewGateValidation`, which fails because `NewGate` does not exist. DoD: criteria 7.1 to 7.3. Depends on: none.
-2. **Git tree and shell runner.** Owned: `internal/gate/infrastructure/gittree/`, `internal/gate/infrastructure/runner/`. Test first: `tree_test.go` with `TestInputHash`, which fails because the package does not exist. DoD: criteria 7.4 and 7.5. Depends on: task 1.
+2. **Git tree and shell runner.** Owned: `internal/gate/infrastructure/gittree/`, `internal/gate/infrastructure/runner/`, `internal/shared/infrastructure/git/git.go`, `internal/shared/infrastructure/git/git_test.go`. Test first: `tree_test.go` with `TestInputHash`, which fails because the package does not exist. DoD: criteria 7.4 and 7.5. Depends on: task 1.
 3. **Evidence store.** Owned: `internal/gate/infrastructure/persistence/`. Test first: `evidence_repository_test.go` with `TestEvidenceRepositoryContract`, which fails because the adapter does not exist. DoD: criterion 7.6. Depends on: task 1.
-4. **Verify use cases.** Owned: `internal/gate/application/command/verify/`, `internal/gate/application/command/verifycommits/`. Test first: `handler_test.go` with `TestVerifyRunsGates`, which fails because the handler does not exist. DoD: criteria 7.7 to 7.12, 7.17 and 7.18. Depends on: tasks 2 and 3.
-5. **Gates init.** Owned: `internal/gate/infrastructure/toolchain/`, `internal/gate/infrastructure/config/`, `internal/gate/application/command/initgates/`. Test first: `detect_test.go` with `TestDetectToolchain`, which fails because `Detect` does not exist. DoD: criteria 7.13 and 7.14. Depends on: task 1.
-6. **CLI, module and guard rule.** Owned: `internal/gate/ui/cli/`, `internal/gate/module.go`, `internal/gate/infrastructure/guardplugin/`, `cmd/harness/main.go`, `cmd/harness/main_test.go`, `./DESIGN.md`. Test first: `commits_checked_test.go` with `TestCommitsCheckedRule`, which fails because the plugin does not exist. DoD: criteria 7.15, 7.16 and 7.22. Depends on: tasks 4, 5 and 7.
-7. **Trace verification.** Owned: `internal/plan/domain/verify.go`, `internal/plan/domain/verify_test.go`, `internal/plan/domain/rule.go`, `internal/plan/infrastructure/gitdiff/`, `internal/plan/infrastructure/reviewplugin/`, `internal/plan/module.go`. Test first: `verify_test.go` with `TestVerifyTrace`, which fails because `VerifyTrace` does not exist. DoD: criteria 7.19 to 7.21. Depends on: none.
+4. **Verify use cases.** Owned: `internal/gate/application/command/verify/`, `internal/gate/application/command/verifycommits/`, `internal/gate/application/query/evidencestatus/`. Test first: `handler_test.go` with `TestVerifyRunsGates`, which fails because the handler does not exist. DoD: criteria 7.7 to 7.12, 7.17, 7.18 and 7.23. Depends on: tasks 2 and 3.
+5. **Gates init.** Owned: `internal/gate/infrastructure/toolchain/`, `internal/gate/infrastructure/config/`, `internal/gate/application/command/initgates/`, `internal/shared/infrastructure/config/config.go`, `internal/shared/infrastructure/config/config_test.go`. Test first: `detect_test.go` with `TestDetectToolchain`, which fails because `Detect` does not exist. DoD: criteria 7.13, 7.14 and 7.24. Depends on: task 1.
+6. **CLI, module, guard rule and wiring.** Owned: `internal/gate/ui/cli/`, `internal/gate/module.go`, `internal/guard/`, `cmd/harness/gate.go`, `cmd/harness/guard.go`, `cmd/harness/main.go`, `cmd/harness/run.go`, `cmd/harness/main_test.go`, `./DESIGN.md`, `./ROADMAP.md`. Test first: `guardplugin/plugin_test.go` with `TestCommitsCheckedRule`, which fails because the rule does not exist. DoD: criteria 7.15, 7.16, 7.22, 7.25 and 7.26. Depends on: tasks 4, 5 and 7.
+7. **Trace verification.** Owned: `internal/plan/domain/verify.go`, `internal/plan/domain/verify_test.go`, `internal/plan/domain/document.go`, `internal/plan/domain/parse.go`, `internal/plan/domain/parse_test.go`, `internal/plan/domain/testdata/`, `internal/plan/infrastructure/gitdiff/`, `internal/plan/infrastructure/reviewplugin/`, `internal/plan/module.go`, `internal/shared/domain/transition.go`, `internal/run/domain/hooks.go`, `internal/run/domain/event.go`, `internal/run/infrastructure/pluginhooks/`, `internal/run/ui/cli/commands.go`, `cmd/harness/plan.go`. Test first: `verify_test.go` with `TestVerifyTrace`, which fails because `VerifyTrace` does not exist. DoD: criteria 7.19 to 7.21. Depends on: task 2.
 
 Commits:
 
@@ -506,17 +510,37 @@ Code tree:
 ```tree
 harness/
 ├── DESIGN.md                                       changed
+├── ROADMAP.md                                      changed
 ├── cmd/
 │   └── harness/
+│       ├── gate.go                                 new
+│       ├── guard.go                                changed
 │       ├── main.go                                 changed
-│       └── main_test.go                            changed
+│       ├── main_test.go                            changed
+│       ├── plan.go                                 changed
+│       └── run.go                                  changed
 └── internal/
-    ├── plan/
+    ├── guard/
     │   ├── module.go                               changed
     │   ├── domain/
     │   │   ├── rule.go                             changed
+    │   │   ├── rule_test.go                        changed
+    │   │   └── rules_commits.go                    new
+    │   └── application/
+    │       └── guardplugin/
+    │           ├── plugin.go                       changed
+    │           └── plugin_test.go                  changed
+    ├── plan/
+    │   ├── module.go                               changed
+    │   ├── domain/
+    │   │   ├── document.go                         changed
+    │   │   ├── parse.go                            changed
+    │   │   ├── parse_test.go                       changed
     │   │   ├── verify.go                           new
-    │   │   └── verify_test.go                      new
+    │   │   ├── verify_test.go                      new
+    │   │   └── testdata/
+    │   │       ├── verify_broken.md                new
+    │   │       └── verify_clean.md                 new
     │   └── infrastructure/
     │       ├── gitdiff/
     │       │   ├── branch.go                       new
@@ -524,6 +548,27 @@ harness/
     │       └── reviewplugin/
     │           ├── plugin.go                       new
     │           └── plugin_test.go                  new
+    ├── run/
+    │   ├── domain/
+    │   │   ├── event.go                            changed
+    │   │   └── hooks.go                            changed
+    │   ├── infrastructure/
+    │   │   └── pluginhooks/
+    │   │       ├── hooks.go                        changed
+    │   │       └── hooks_test.go                   changed
+    │   └── ui/
+    │       └── cli/
+    │           └── commands.go                     changed
+    ├── shared/
+    │   ├── domain/
+    │   │   └── transition.go                       new
+    │   └── infrastructure/
+    │       ├── config/
+    │       │   ├── config.go                       changed
+    │       │   └── config_test.go                  changed
+    │       └── git/
+    │           ├── git.go                          changed
+    │           └── git_test.go                     changed
     └── gate/
         ├── module.go                               new
         ├── domain/
@@ -538,17 +583,18 @@ harness/
         │   ├── repository.go                       new
         │   └── source.go                           new
         ├── application/
-        │   └── command/
-        │       ├── initgates/
-        │       │   ├── command.go                  new
-        │       │   ├── handler.go                  new
-        │       │   └── handler_test.go             new
-        │       ├── verify/
-        │       │   ├── command.go                  new
-        │       │   ├── handler.go                  new
-        │       │   └── handler_test.go             new
-        │       └── verifycommits/
-        │           ├── command.go                  new
+        │   ├── command/
+        │   │   ├── initgates/
+        │   │   │   ├── handler.go                  new
+        │   │   │   └── handler_test.go             new
+        │   │   ├── verify/
+        │   │   │   ├── handler.go                  new
+        │   │   │   └── handler_test.go             new
+        │   │   └── verifycommits/
+        │   │       ├── handler.go                  new
+        │   │       └── handler_test.go             new
+        │   └── query/
+        │       └── evidencestatus/
         │           ├── handler.go                  new
         │           └── handler_test.go             new
         ├── infrastructure/
@@ -558,16 +604,13 @@ harness/
         │   ├── gittree/
         │   │   ├── tree.go                         new
         │   │   └── tree_test.go                    new
-        │   ├── guardplugin/
-        │   │   ├── commits_checked.go              new
-        │   │   └── commits_checked_test.go         new
         │   ├── persistence/
         │   │   ├── commit_check_repository.go      new
         │   │   ├── evidence_repository.go          new
         │   │   ├── evidence_repository_test.go     new
         │   │   └── migrations/
         │   │       └── sqlite/
-        │   │           └── 0001_evidence.sql       new
+        │   │           └── 0001_create_evidence.sql new
         │   ├── runner/
         │   │   ├── shell.go                        new
         │   │   └── shell_test.go                   new
@@ -577,11 +620,12 @@ harness/
         └── ui/
             └── cli/
                 ├── gates.go                        new
+                ├── gates_test.go                   new
                 ├── verify.go                       new
                 └── verify_test.go                  new
 ```
 
-## PR 8: `feat/lint-packs`, based on `feat/gates-evidence`
+## PR 8: `feat/lint-packs`, based on `main`
 
 - Scope: the `lint` module with the six packs on Biome, oxlint and the harness layout engine, with the baseline ratchet.
 - Fixes: K3.
