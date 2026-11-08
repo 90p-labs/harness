@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
@@ -16,6 +17,8 @@ const (
 	linterAgent    = "agents/linter.md"
 	reviewerAgent  = "agents/reviewer.md"
 	frontmatterEnd = "\n---\n"
+
+	initLintSetupLine = "next: run the lint-setup skill"
 )
 
 var knownLintTools = []string{"deptrac", "import-linter", "go-arch-lint", "depguard", "`ddd` pack"}
@@ -48,8 +51,27 @@ func TestLintSetupSkill(t *testing.T) {
 			t.Errorf("%s does not name the known tool %s", lintSetupSkill, tool)
 		}
 	}
+	wants := []string{shareddomain.RecommendedSuffix[1:]}
+	for _, tool := range shareddomain.QuestionTools {
+		wants = append(wants, tool.Name)
+	}
+	for _, want := range wants {
+		if !strings.Contains(skill, want) {
+			t.Errorf("%s does not name %q for its questions", lintSetupSkill, want)
+		}
+	}
 	if keys := frontmatterKeys(t, lintSetupSkill); !slices.Contains(keys, "argument-hint") {
 		t.Errorf("%s frontmatter keys = %v, want argument-hint for the language", lintSetupSkill, keys)
+	}
+}
+
+func TestLintSetupStartsAfterInit(t *testing.T) {
+	skill := readDoc(t, skillFile)
+
+	for _, want := range []string{initLintSetupLine, "`lint-setup`"} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("%s does not name %q", skillFile, want)
+		}
 	}
 }
 

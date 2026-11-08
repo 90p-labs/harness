@@ -41,7 +41,7 @@ A tool that checks only imports cannot catch `ddd/file-suffix`. Then the rule is
 ## Steps
 
 1. Start the `linter` agent to survey the project. Give it the language, the repository root, the full path of `harness` and the path of this `SKILL.md`. It returns the languages, the folders or namespaces of the contexts and the layers, the proposed tool and its open questions.
-2. Ask the open questions with the host question tool (`AskUserQuestion` on Claude Code; a plain message on Codex). Typical questions: the tool, the context folders, the allowed libraries of the domain.
+2. Ask the open questions with the question tool of the host: `AskUserQuestion` on Claude Code (4 questions in one call, 2 to 4 options), `request_user_input` on Codex (3 questions, 2 to 3 options). Put the recommended option first, with the suffix ` (Recommended)`. A host with no question tool gets a numbered list in a plain message. Typical questions: the tool, the context folders, the allowed libraries of the domain.
 3. Start the `linter` agent again to write the setup, with the answers. It writes:
    - the native tool config. The user owns this file and can tune it after the setup.
    - the wrapper plugin `.harness/plugins/<tool>.sh` on `lint.check`, and its `plugins` entry in `.harness.yaml`.
