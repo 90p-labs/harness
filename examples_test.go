@@ -36,14 +36,15 @@ var (
 type example struct {
 	name     string
 	lockfile string
+	setup    string
 	detected []string
 }
 
 var examples = []example{
-	{name: "symfony", lockfile: "composer.lock", detected: []string{"make-test", "make-phpstan", "make-cs", "make-lint-container"}},
-	{name: "go", lockfile: "go.sum"},
-	{name: "nextjs", lockfile: "pnpm-lock.yaml"},
-	{name: "python", lockfile: "uv.lock"},
+	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}},
+	{name: "go", lockfile: "go.sum", setup: "go-mod"},
+	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install"},
+	{name: "python", lockfile: "uv.lock", setup: "py-install"},
 }
 
 func TestExamples(t *testing.T) {
@@ -58,15 +59,12 @@ func TestExamples(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gates, err := gateconfig.Decode(cfg.Gates)
-			if err != nil {
-				t.Fatal(err)
-			}
+			setup, gates := decodeExample(t, cfg.Setup, cfg.Gates)
 			if ex.detected != nil {
-				if len(gates) > 0 {
-					t.Fatalf("%s has a gates key, so harness gates init refuses to write the detected gates", exampleConfig)
+				if len(setup) > 0 || len(gates) > 0 {
+					t.Fatalf("%s has a setup or gates key, so harness gates init refuses to write the detected steps", exampleConfig)
 				}
-				gates = detectGates(t, dir, plugins)
+				setup, gates = detectGates(t, dir, plugins)
 				ids := make([]string, len(gates))
 				for i, gate := range gates {
 					ids[i] = gate.ID
@@ -75,14 +73,28 @@ func TestExamples(t *testing.T) {
 					t.Errorf("detected gates = %q, want %q", ids, ex.detected)
 				}
 			}
-			if len(gates) == 0 {
-				t.Fatal("the example has no gate")
+			if len(setup) != 1 || setup[0].ID != ex.setup {
+				t.Fatalf("setup = %+v, want the one step %s", setup, ex.setup)
+			}
+			if !slices.ContainsFunc(gates, func(gate domain.Gate) bool { return len(gate.Needs) > 0 }) {
+				t.Error("no gate has needs, so the tests do not wait for the fast checks")
+			}
+			if cfg.Verify.Parallel < 2 {
+				t.Errorf("verify.parallel = %d, want 2 or more", cfg.Verify.Parallel)
 			}
 			imageInputs := []string{exampleCompose, ex.lockfile}
 			if _, err := os.Stat(filepath.Join(dir, exampleDockerfile)); err == nil {
 				imageInputs = append(imageInputs, exampleDockerfile)
 			}
+			for _, path := range imageInputs {
+				if !slices.Contains(setup[0].Paths, path) {
+					t.Errorf("setup step %s runs in the container but its paths omit %s", ex.setup, path)
+				}
+			}
 			for _, gate := range gates {
+				if gate.ID == ex.setup {
+					t.Errorf("gate %s repeats the setup step", gate.ID)
+				}
 				if strings.HasPrefix(gate.Run, hostGatePrefix) {
 					continue
 				}
@@ -97,6 +109,19 @@ func TestExamples(t *testing.T) {
 	}
 }
 
+func decodeExample(t *testing.T, setupCfg []config.Setup, gatesCfg []config.Gate) ([]domain.Setup, []domain.Gate) {
+	t.Helper()
+	setup, err := gateconfig.DecodeSetup(setupCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gates, err := gateconfig.Decode(gatesCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return setup, gates
+}
+
 func loadExampleConfig(t *testing.T, dir string) config.Config {
 	t.Helper()
 	flags := pflag.NewFlagSet(exampleConfig, pflag.ContinueOnError)
@@ -108,12 +133,13 @@ func loadExampleConfig(t *testing.T, dir string) config.Config {
 	return cfg
 }
 
-func detectGates(t *testing.T, dir string, plugins []shareddomain.Plugin) []domain.Gate {
+func detectGates(t *testing.T, dir string, plugins []shareddomain.Plugin) ([]domain.Setup, []domain.Gate) {
 	t.Helper()
 	payload, err := json.Marshal(shareddomain.GatesDetectPayload{Files: []string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
+	var proposedSetup []config.Setup
 	var proposed []config.Gate
 	for _, plugin := range plugins {
 		if !slices.Contains(plugin.Subscribes(), shareddomain.EventGatesDetect) {
@@ -139,14 +165,14 @@ func detectGates(t *testing.T, dir string, plugins []shareddomain.Plugin) []doma
 			if err := json.Unmarshal([]byte(line), &gate); err != nil {
 				t.Fatalf("plugin %s line %q: %v", plugin.Name(), line, err)
 			}
-			proposed = append(proposed, config.Gate{ID: gate.ID, Run: gate.Run, Paths: gate.Paths})
+			if gate.Setup {
+				proposedSetup = append(proposedSetup, config.Setup{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Creates: gate.Creates})
+				continue
+			}
+			proposed = append(proposed, config.Gate{ID: gate.ID, Run: gate.Run, Paths: gate.Paths, Needs: gate.Needs})
 		}
 	}
-	gates, err := gateconfig.Decode(proposed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return gates
+	return decodeExample(t, proposedSetup, proposed)
 }
 
 func checkImagesPinned(t *testing.T, dir string) {

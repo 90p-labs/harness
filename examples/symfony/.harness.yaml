@@ -2,3 +2,5 @@ plugins:
   - name: make-gates
     command: [sh, .harness/plugins/make-gates.sh]
     events: [gates.detect]
+verify:
+  parallel: 3

@@ -1,16 +1,16 @@
-.PHONY: install test phpstan cs lint-container
+.PHONY: install cs phpstan lint-container test
 
-install:
+install: ## setup creates: vendor/autoload.php
 	docker compose run --rm -T php composer install --no-interaction --no-progress
 
-test: install ## gate
-	docker compose run --rm -T php vendor/bin/phpunit
-
-phpstan: install ## gate
-	docker compose run --rm -T php vendor/bin/phpstan analyse --no-progress --level=6 src
-
-cs: install ## gate
+cs: ## gate
 	docker compose run --rm -T php vendor/bin/php-cs-fixer fix --dry-run --diff
 
-lint-container: install ## gate
+phpstan: ## gate
+	docker compose run --rm -T php vendor/bin/phpstan analyse --no-progress --level=6 src
+
+lint-container: ## gate
 	docker compose run --rm -T php php bin/console lint:container
+
+test: ## gate needs: cs phpstan lint-container
+	docker compose run --rm -T php vendor/bin/phpunit
