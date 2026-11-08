@@ -26,7 +26,7 @@ const (
 
 func TestCustomPackFromFolder(t *testing.T) {
 	dir := fixture.Extract(t, filepath.Join("testdata", "custom-pack.txtar"))
-	handlers, err := lintmodule.New(config.Lint{Packs: []string{"./lint/team"}}, dir, customPackVersion, toolplugin.Template)
+	handlers, err := lintmodule.New(config.Lint{Packs: []string{"./lint/team"}}, nil, dir, customPackVersion, toolplugin.Template)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestCustomPackFromFolder(t *testing.T) {
 func TestCustomPackEditIsStale(t *testing.T) {
 	dir := fixture.Extract(t, filepath.Join("testdata", "custom-pack.txtar"))
 	cfg := config.Lint{Packs: []string{"./lint/team"}}
-	handlers, err := lintmodule.New(cfg, dir, customPackVersion, toolplugin.Template)
+	handlers, err := lintmodule.New(cfg, nil, dir, customPackVersion, toolplugin.Template)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestCustomPackEditIsStale(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	edited, err := lintmodule.New(cfg, dir, customPackVersion, toolplugin.Template)
+	edited, err := lintmodule.New(cfg, nil, dir, customPackVersion, toolplugin.Template)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

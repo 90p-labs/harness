@@ -8,10 +8,17 @@ var (
 	ErrStaleLintFiles = errors.New("lint files are stale, run harness lint init")
 	ErrEngineMissing  = errors.New("lint engine is missing")
 
+	ErrUnknownEngine       = errors.New("unknown lint engine")
+	ErrEngineTaken         = errors.New("lint plugin name is taken by a default lint plugin")
+	ErrPrepareWithoutCheck = errors.New("a lint plugin on lint.prepare needs lint.check")
+	ErrEngineDenied        = errors.New("lint plugin denied")
+	ErrBadFinding          = errors.New("lint plugin returned a bad finding")
+
 	ErrInvalidPackName   = errors.New("invalid pack name")
 	ErrPackNameTaken     = errors.New("pack name is taken")
 	ErrRuleTaken         = errors.New("rule id or engine rule is taken")
 	ErrPackOutsideRepo   = errors.New("pack folder is outside the repository")
-	ErrCustomPackEngine  = errors.New("a custom pack rule needs the engine biome-grit, biome-rule or oxlint")
+	ErrCustomPackEngine  = errors.New("a custom pack rule needs an engine other than harness")
 	ErrPluginOutsidePack = errors.New("plugin path is outside the pack folder")
+	ErrUnknownSeverity   = errors.New("rule severity must be error, warn or info")
 )

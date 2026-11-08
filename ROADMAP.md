@@ -641,7 +641,7 @@ harness/
 | 8.7 | Each GritQL and Biome built-in rule fixture gives exactly one finding with its rule id. | `go test ./internal/lint/infrastructure/biome -run TestBiomeEngineFixtures -count=1` |
 | 8.8 | Each oxlint rule fixture gives exactly one finding with its rule id, and each oxlint rule has a reason. | `go test ./internal/lint/infrastructure/oxlint -run TestOxlintEngineFixtures -count=1` |
 | 8.9 | `harness lint --json` prints the version 1 report and exits 0. Without the flag, an `error` finding exits 1 and a `warn` finding does not. | `go test ./internal/lint/ui/cli -run TestLintCommandReport -count=1` |
-| 8.10 | The lint run records one `lint.run` span and one `lint.engine` span for each engine, and a `harness.lint.findings` count for each rule and severity. | `go test ./internal/lint/application/command/lint -run TestLintTelemetry -count=1` |
+| 8.10 | The lint run records one `lint.run` span, and a `harness.lint.findings` count for each rule and severity. The bus `plugin.call` span times each engine. | `go test ./internal/lint/application/command/lint -run TestLintTelemetry -count=1` |
 | 8.11 | `InitLint` writes `.harness-lint/` with `VERSION`. `Lint` with an old `VERSION` returns `ErrStaleLintFiles`. | `go test ./internal/lint/application/command/initlint -run TestLintInitVersion -count=1` |
 | 8.12 | The first baseline holds all findings. A later baseline only removes the fixed keys and never adds one. | `go test ./internal/lint/application/command/baseline -run TestBaselineRatchet -count=1` |
 | 8.13 | `harness gates init` adds the `lint` gate with packs set, and the `helm-render` and `promtool-test` gates with `observability`. | `go test ./internal/gate/infrastructure/toolchain -run TestDetectLintGates -count=1` |

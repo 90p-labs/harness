@@ -23,9 +23,7 @@ import (
 const (
 	binaryVersion = "v1.2.0"
 	spanRun       = "lint.run"
-	spanEngine    = "lint.engine"
 	metricName    = "harness.lint.findings"
-	attrEngine    = "harness.lint.engine"
 	attrRule      = "harness.lint.rule"
 	attrSeverity  = "harness.lint.severity"
 	lintDir       = ".harness-lint"
@@ -42,12 +40,21 @@ type fakeEngine struct {
 	ran      bool
 }
 
-func (f *fakeEngine) Name() domain.EngineName             { return f.name }
-func (f *fakeEngine) Prepare(string, []domain.Rule) error { return nil }
-func (f *fakeEngine) Run(_ context.Context, _ string, rules []domain.Rule) ([]shareddomain.Finding, error) {
-	f.ran = true
-	f.got = rules
-	return f.findings, f.err
+type fakeEngines []*fakeEngine
+
+func (f fakeEngines) Check(_ context.Context, _ string, engine domain.EngineName, rules []domain.Rule) ([]shareddomain.Finding, error) {
+	for _, e := range f {
+		if e.name == engine {
+			e.ran = true
+			e.got = rules
+			return e.findings, e.err
+		}
+	}
+	return nil, nil
+}
+
+func (fakeEngines) Prepare(context.Context, string, domain.EngineName, []domain.Rule) error {
+	return nil
 }
 
 func rule(id string, engine domain.EngineName) domain.Rule {
@@ -90,11 +97,11 @@ type fixture struct {
 	handler lint.Handler
 }
 
-func newFixture(packs []domain.PackName, engines ...domain.Engine) fixture {
+func newFixture(packs []domain.PackName, engines ...*fakeEngine) fixture {
 	f := fixture{spans: tracetest.NewSpanRecorder(), reader: sdkmetric.NewManualReader()}
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(f.spans)).Tracer("test")
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(f.reader)).Meter("test")
-	f.handler = lint.NewHandler(packs, lookup, engines, binaryVersion, tracer, meter)
+	f.handler = lint.NewHandler(packs, lookup, fakeEngines(engines), binaryVersion, tracer, meter)
 	return f
 }
 
@@ -130,23 +137,8 @@ func TestLintTelemetry(t *testing.T) {
 		t.Fatal("an engine with no rule must not run")
 	}
 
-	ended := f.spans.Ended()
-	engines := map[string]bool{}
-	runs := 0
-	for _, span := range ended {
-		switch span.Name() {
-		case spanRun:
-			runs++
-		case spanEngine:
-			for _, a := range span.Attributes() {
-				if string(a.Key) == attrEngine {
-					engines[a.Value.Emit()] = true
-				}
-			}
-		}
-	}
-	if runs != 1 || len(ended) != 3 || !engines[string(domain.EngineHarness)] || !engines[string(domain.EngineBiomeGrit)] {
-		t.Fatalf("spans = %d, run spans = %d, engines = %v", len(ended), runs, engines)
+	if ended := f.spans.Ended(); len(ended) != 1 || ended[0].Name() != spanRun {
+		t.Fatalf("spans = %v, want one %s span", ended, spanRun)
 	}
 
 	var collected metricdata.ResourceMetrics

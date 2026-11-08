@@ -239,6 +239,8 @@ Event kinds:
 | `signals.check` | collect | live module |
 | `gates.detect` | collect | gate module |
 | `chart.render` | collect | lint module |
+| `lint.check` | collect | lint module |
+| `lint.prepare` | collect | lint module |
 
 A `signals.check` plugin reads one signal source, such as Prometheus or an OpenTelemetry backend. It denies on a breached threshold. The joined deny reasons become the regression findings.
 
@@ -273,7 +275,7 @@ The envelope goes to the plugin on stdin. Its version is 1.
 The plugin writes the verdict on stdout. An empty stdout is an allow.
 
 ```json
-{"verdict":"allow|deny|context","reason":"...","context":"..."}
+{"verdict":"allow|deny|context","reason":"...","context":"...","findings":[]}
 ```
 
 Dispatch rules:
@@ -282,6 +284,7 @@ Dispatch rules:
 - The bus calls the subscribed plugins one after the other, in name order.
 - A deny reason in the result is the plugin name, `: ` and its reason. The bus joins several reasons with a newline.
 - The bus joins context texts with a blank line.
+- On a collect event, the bus joins the `findings` of all plugins in name order. It drops them on the other kinds.
 - A `Failure` is `{Plugin, Err}`. On a veto event, a failure is a deny with the reason `plugin failed: ` plus the error.
 - A verdict with a kind other than `allow`, `deny` or `context` is a failure.
 - On a context or observe event, the result verdict is an allow.
@@ -484,6 +487,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `deploy.disabled` | empty list | A list of default deploy plugin names (`helm`, `promtool`); an unknown name is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |
 | `lint.packs` | empty list | A list of built-in pack names and custom pack folder paths (an entry with a `/`); a pack that needs another pack is an error when that pack is missing |
+| `lint.disabled` | empty list | A list of default lint plugins to turn off: `harness`, `biome-grit` or `oxlint`; another name is an error |
 | `lint.ddd.root` | `contexts` | The business root folder in `src/` |
 | `lint.ddd.src_files` | `[main.ts]` | The files that can be directly in `src/` |
 | `lint.observability.chart` | `deploy/chart` | The Helm chart folder |
@@ -652,7 +656,7 @@ A lint pack is a set of rules with ids, an engine, a severity and a scope. The `
 - Biome is the main engine. A custom rule is a GritQL plugin. Biome 2.0 or later is required.
 - A rule that Biome cannot express runs on oxlint. Its pack file records the reason.
 - The binary checks the folder layout and the import graph. These rules have the engine `harness`.
-- The engine constants are `biome-grit`, `biome-rule`, `oxlint` and `harness`.
+- The engine constants are `biome-grit`, `biome-rule`, `oxlint` and `harness`. A lint plugin adds its name as an engine.
 - Every GritQL message starts with the rule id in brackets, such as `[ddd/event-readonly]`.
 - The severity is `error`, `warn` or `info`. Only an `error` finding fails the lint gate.
 - The Biome engine runs both the `biome-grit` rules and the `biome-rule` rules, once for each scope.
@@ -663,6 +667,49 @@ A lint pack is a set of rules with ids, an engine, a severity and a scope. The `
 - `harness lint --json` prints the findings report. It exits 0 when it has findings, and 1 on an engine error. The lint gate uses this form.
 - `harness lint baseline` writes all findings to `.harness-baseline/lint.json` when no baseline file exists. Else it only removes the keys that no longer match. It never adds a key.
 - The Biome and oxlint engine tests have the build tag `linters`. The CI workflow `lint-engines.yml` installs the pinned tools and runs them with `go test -tags linters ./internal/lint/...`.
+
+#### Lint plugins
+
+A lint engine is a plugin on the event bus (ADR 0011). The rule `engine` is the plugin name. The lint module builds one bus for each engine name, so each plugin gets only its own rules.
+
+| Event | Caller | The plugin |
+|---|---|---|
+| `lint.check` | `harness lint` | runs its rules and returns the findings |
+| `lint.prepare` | `harness lint init` | writes its config files into `.harness-lint/` |
+
+The default lint plugins run in process and need no config: `harness`, `biome-grit` (it also runs the `biome-rule` rules) and `oxlint`. `lint.disabled` turns one off, and the rules of that engine then do not run.
+
+The payload of both events:
+
+```json
+{"rules":[{"id":"team/no-todo","engine":"todo-lint","severity":"error","scope":"src/**/*.ts","message":"A TODO is left in the code."}],"files":["src/a.ts"]}
+```
+
+- `rules` uses the `pack.yaml` key names. The `plugin` key is the GritQL path with the pack name first, such as `team/rules/x.grit`.
+- On `lint.check`, `files` is always a list: the git files that match the rule scopes, or the whole tree when a rule has no scope. An empty list means that no file matches. The default plugins list their own files.
+- The envelope `cwd` is the repo root.
+
+An exec lint plugin writes its findings in the verdict. An empty stdout is an allow with no findings.
+
+```json
+{"verdict":"allow","findings":[{"rule":"team/no-todo","severity":"error","file":"src/a.ts","line":2,"message":"A TODO is left in the code."}]}
+```
+
+```yaml
+plugins:
+  - name: todo-lint
+    command: [./scripts/todo-lint.sh]
+    events: [lint.check]
+    timeout: 30s
+```
+
+- A custom pack rule with `engine: todo-lint` goes to this plugin. Its findings go through the same report, baseline ratchet and gates.
+- The default `timeout` of 5 seconds is short for a linter: set it in the `plugins` entry.
+- A plugin on `lint.prepare` gets the same payload with `files` null during `harness lint init`. The `.harness-lint/` folder exists before the first plugin runs.
+- A finding `file` is relative to the repo root, because it is part of the baseline key. The finding takes the severity of its rule; the plugin value is ignored.
+- These are config errors: a rule engine with no plugin, an exec plugin on `lint.check` with the name of an enabled default or the name `biome-rule`, and an exec plugin on `lint.prepare` without `lint.check`. An exec plugin can take the name of a disabled default.
+- These stop the lint as an engine error: a plugin failure, a deny, a finding whose rule is not one of the sent rules, and a finding with an absolute `file`.
+- The bus `plugin.call` span with `harness.plugin` times each engine.
 
 | Pack | Needs | Content |
 |---|---|---|
@@ -703,7 +750,8 @@ rules:
 - `requires` names only built-in packs. Each required pack must also be in `lint.packs`.
 - A rule id, `biome` value or `oxlint` value that a built-in pack, another custom pack or an earlier rule of the pack uses is an error. The engines map a diagnostic to one rule.
 - With a custom pack, `.harness-lint/VERSION` holds the binary version, a `+` and a hash of the custom pack files. An edit to a custom pack makes `harness lint` stop with "run harness lint init".
-- A rule has the engine `biome-grit`, `biome-rule` or `oxlint`. The engine `harness` is an error, because its checks are Go code in the binary.
+- A rule has the engine `biome-grit`, `biome-rule`, `oxlint` or the name of a lint plugin. The engine `harness` is an error, because its checks are Go code in the binary. An empty engine is an error.
+- A severity other than `error`, `warn` or `info`, or no severity, is an error.
 - A path outside the repo is an error: a path that leaves the repo after it is cleaned, an absolute path, or a symlink that resolves outside the repo. A folder with no `pack.yaml` is an unknown pack.
 - A `plugin` path that leaves the pack folder is an error.
 - `harness lint init` copies the GritQL files of a custom pack into `.harness-lint/plugins/NAME/`, as for a built-in pack.

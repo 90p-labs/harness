@@ -21,10 +21,7 @@ const (
 
 var AllPacks = []PackName{PackDDD, PackDDDES, PackNextjs, PackNextjsDDDShadcn, PackObservability, PackShadcn}
 
-var (
-	customPackEngines = []EngineName{EngineBiomeGrit, EngineBiomeRule, EngineOxlint}
-	packNamePattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
-)
+var packNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 func ParsePackName(name string) (PackName, error) {
 	if !slices.Contains(AllPacks, PackName(name)) {
@@ -46,11 +43,14 @@ func NewCustomPack(name string, requires []PackName, rules []Rule) (Pack, error)
 		}
 	}
 	for _, rule := range rules {
-		if !slices.Contains(customPackEngines, rule.Engine) {
+		if rule.Engine == "" || rule.Engine == EngineHarness {
 			return Pack{}, fmt.Errorf("%w: rule %s has %q", ErrCustomPackEngine, rule.ID, rule.Engine)
 		}
 		if rule.Plugin != "" && (!fs.ValidPath(rule.Plugin) || !strings.HasPrefix(rule.Plugin, name+"/")) {
 			return Pack{}, fmt.Errorf("%w: rule %s has %q", ErrPluginOutsidePack, rule.ID, rule.Plugin)
+		}
+		if !rule.Severity.Known() {
+			return Pack{}, fmt.Errorf("%w: rule %s has %q", ErrUnknownSeverity, rule.ID, rule.Severity)
 		}
 	}
 	return Pack{Name: PackName(name), Requires: requires, Rules: rules}, nil
