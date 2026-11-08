@@ -15,3 +15,8 @@ rules:
     severity: error
     scope: "internal/**/*.go"
     message: A bounded context does not use the packages of another context.
+  - id: ddd/src-roots
+    engine: go-arch-lint
+    severity: error
+    scope: "internal/**/*.go"
+    message: Each source file sits in a component of .go-arch-lint.yml, that is in a known context and layer.
