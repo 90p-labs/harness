@@ -43,6 +43,7 @@ var examples = []example{
 	{name: "symfony", lockfile: "composer.lock", detected: []string{"make-test", "make-phpstan", "make-cs", "make-lint-container"}},
 	{name: "go", lockfile: "go.sum"},
 	{name: "nextjs", lockfile: "pnpm-lock.yaml"},
+	{name: "python", lockfile: "uv.lock"},
 }
 
 func TestExamples(t *testing.T) {

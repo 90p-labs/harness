@@ -1,0 +1,7 @@
+name: python
+rules:
+  - id: python/ruff
+    engine: ruff
+    severity: error
+    scope: "**/*.py"
+    message: Ruff reports a diagnostic. The [tool.ruff] table of pyproject.toml selects the ruff codes.

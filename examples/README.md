@@ -7,13 +7,14 @@ Each folder holds only the files that you add to a project to set up the harness
 | [`symfony/`](symfony/) | Symfony | A Makefile with `## gate` targets and a `gates.detect` plugin | `php`, the `composer` image |
 | [`go/`](go/) | Go module | The `gates` key, with the ids of the built-in detection of `go.mod` | `go`, the `golang` image |
 | [`nextjs/`](nextjs/) | Next.js and shadcn | The `gates` key and the lint packs `nextjs` and `shadcn` | `node`, a `Dockerfile` with a pinned pnpm |
+| [`python/`](python/) | Python with uv | The `gates` key, written by hand, and a custom lint pack with a ruff lint engine plugin | `python`, the `uv` image |
 
 The output in each README is real, from a scratch project that the steps built from zero.
 
 ## Rules for every example
 
 - Pin each image to an exact version tag and its index digest, such as `golang:1.27.3-bookworm@sha256:...`. Then every user gets the same toolchain on `linux/arm64` and `linux/amd64`.
-- Commit the lockfile of the project (`composer.lock`, `go.sum` or `pnpm-lock.yaml`) and put it in the gate `paths`.
+- Commit the lockfile of the project (`composer.lock`, `go.sum`, `pnpm-lock.yaml` or `uv.lock`) and put it in the gate `paths`.
 - Put `compose.yaml`, and the `Dockerfile` if you have one, in the gate `paths`. The image is not in the input hash, so an image change must change a file in the hash.
 - Pull or build the image before the first `harness verify`. A pull inside a gate counts against the gate timeout of 10 minutes, and a failed gate is not cached.
 - Set the top-level `name:` of `compose.yaml` to the name of your project. `harness verify --commits` runs the gates in a temporary worktree, and a fixed name lets that worktree use the same volumes and image. Two projects on one machine need two names.
@@ -70,3 +71,15 @@ Know these limits:
 - The plugin runs only when `harness gates init` or `harness init` writes the `gates` key. A new marked target needs a new `harness gates init`, after you remove the `gates` key, or a hand edit of the `gates` key.
 - Set `paths` on each gate: the sources, the tests, the lockfile, the Makefile and `compose.yaml`. A gate with no `paths` hashes the full tree, so any change runs it again.
 - The files in `.gitignore`, such as `__pycache__/`, `vendor/` and `node_modules/`, are not in the input hash.
+
+## Your own lint pack
+
+A team linter can feed the same lint report, baseline ratchet and gate `lint` as the built-in packs. The [`python/`](python/) example is the worked example: a ruff pack for a Python project.
+
+1. Write a pack folder, such as `lint/python/pack.yaml`. Each rule names a lint engine plugin as its `engine`, and its `scope` selects the files.
+2. Write an exec plugin on `lint.check`. It reads the rules and the files from the payload, runs the linter, and returns `{"verdict":"allow","findings":[...]}`. Each finding needs a rule id of the payload and a file that is relative to the repository.
+3. Register the plugin under `plugins:`, and add the pack folder to `lint.packs`, such as `./lint/python`. Set `timeout` above the start time of the linter. The default is 5 s.
+4. Run `harness lint init`, `harness lint` and `harness lint baseline`. Then add the gate `lint`, `harness lint --json` with the baseline `.harness-baseline/lint.json`.
+
+The harness calls a lint engine only when an active pack has a rule for it. A pack with only plugin rules needs no Biome, no oxlint and no Node.
+Run `harness lint init` again after each edit of the pack. The [Custom lint pack](../README.md#custom-lint-pack-and-lint-engine-plugin) section of the root README gives the contract.

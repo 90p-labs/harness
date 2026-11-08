@@ -1,0 +1,18 @@
+plugins:
+  - name: ruff
+    command: [sh, .harness/plugins/ruff-lint.sh]
+    events: [lint.check]
+    timeout: 60s
+lint:
+  packs: [./lint/python]
+
+gates:
+  - id: py-test
+    run: docker compose run --rm -T python uv run --locked --exact pytest
+    paths: &python-inputs ["**/*.py", "**/*.pyi", "**/py.typed", "tests/**", pyproject.toml, uv.lock, .python-version, compose.yaml]
+  - id: py-typecheck
+    run: docker compose run --rm -T python uv run --locked --exact mypy .
+    paths: *python-inputs
+  - id: lint
+    run: harness lint --json
+    baseline: .harness-baseline/lint.json
