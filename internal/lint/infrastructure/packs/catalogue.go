@@ -53,7 +53,7 @@ type ruleDocument struct {
 type Catalogue struct {
 	custom map[domain.PackName]domain.Pack
 	files  fstest.MapFS
-	taken  map[string]bool
+	taken  map[string]domain.PackName
 }
 
 type packFiles fstest.MapFS
@@ -66,7 +66,7 @@ func (p packFiles) Open(name string) (fs.File, error) {
 }
 
 func Load(repo string, entries []string) (Catalogue, []domain.PackName, error) {
-	catalogue := Catalogue{custom: map[domain.PackName]domain.Pack{}, files: fstest.MapFS{}, taken: map[string]bool{}}
+	catalogue := Catalogue{custom: map[domain.PackName]domain.Pack{}, files: fstest.MapFS{}, taken: map[string]domain.PackName{}}
 	for _, entry := range entries {
 		if strings.Contains(entry, folderMarker) {
 			continue
@@ -77,7 +77,7 @@ func Load(repo string, entries []string) (Catalogue, []domain.PackName, error) {
 		}
 		for _, rule := range pack.Rules {
 			for _, claim := range ruleClaims(rule) {
-				catalogue.taken[claim] = true
+				catalogue.taken[claim] = pack.Name
 			}
 		}
 	}
@@ -170,10 +170,10 @@ func (c Catalogue) loadFolder(repo string, root *os.Root, entry string) (domain.
 	}
 	for _, rule := range pack.Rules {
 		for _, claim := range ruleClaims(rule) {
-			if c.taken[claim] {
-				return "", fmt.Errorf("%w: pack %s, rule %s uses %s", domain.ErrRuleTaken, entry, rule.ID, claim)
+			if owner, held := c.taken[claim]; held {
+				return "", fmt.Errorf("%w: pack %s, rule %s uses %s, which pack %s already holds", domain.ErrRuleTaken, entry, rule.ID, claim, owner)
 			}
-			c.taken[claim] = true
+			c.taken[claim] = pack.Name
 		}
 	}
 	c.files[path.Join(string(pack.Name), packFile)] = &fstest.MapFile{Data: raw}

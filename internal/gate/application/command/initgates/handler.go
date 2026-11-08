@@ -11,7 +11,10 @@ import (
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
-const proposalSeparator = "\n"
+const (
+	proposalSeparator = "\n"
+	blockedFormat     = "%w: the %s key is set, so edit it by hand, or remove the %s key"
+)
 
 type Command struct {
 	Dir string
@@ -26,29 +29,29 @@ type Detect func(dir string) ([]domain.Gate, error)
 
 type Files func(ctx context.Context, dir string) ([]string, error)
 
-type HasGates func(dir string) (bool, error)
+type BlockingKey func(dir string) (string, error)
 
 type WriteGates func(dir string, setup []domain.Setup, gates []domain.Gate) error
 
 type Handler struct {
-	detect Detect
-	files  Files
-	bus    shareddomain.Dispatcher
-	has    HasGates
-	write  WriteGates
+	detect      Detect
+	files       Files
+	bus         shareddomain.Dispatcher
+	blockingKey BlockingKey
+	write       WriteGates
 }
 
-func NewHandler(detect Detect, files Files, bus shareddomain.Dispatcher, has HasGates, write WriteGates) Handler {
-	return Handler{detect: detect, files: files, bus: bus, has: has, write: write}
+func NewHandler(detect Detect, files Files, bus shareddomain.Dispatcher, blockingKey BlockingKey, write WriteGates) Handler {
+	return Handler{detect: detect, files: files, bus: bus, blockingKey: blockingKey, write: write}
 }
 
 func (h Handler) Handle(ctx context.Context, c Command) (Result, error) {
-	exists, err := h.has(c.Dir)
+	key, err := h.blockingKey(c.Dir)
 	if err != nil {
 		return Result{}, err
 	}
-	if exists {
-		return Result{}, domain.ErrGatesExist
+	if key != "" {
+		return Result{}, fmt.Errorf(blockedFormat, domain.ErrGatesExist, key, key)
 	}
 	gates, err := h.detect(c.Dir)
 	if err != nil {

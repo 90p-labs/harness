@@ -25,6 +25,7 @@ const (
 	catalogueRuleFormat = "%s %s\n"
 	canaryLineFormat    = "%s %s\n"
 	noPacksLine         = "no lint pack is set: set lint.packs in .harness.yaml\n"
+	noCanaryLine        = "lint canaries: only built-in rules are active, so there is no canary to run\n"
 )
 
 var (
@@ -111,6 +112,10 @@ func NewLintCommand(connect Connect, catalogue func() (domain.RuleCatalogue, err
 }
 
 func printCanaries(out io.Writer, results []domain.CanaryResult) error {
+	if len(results) == 0 {
+		_, err := fmt.Fprint(out, noCanaryLine)
+		return err
+	}
 	failed := false
 	for _, result := range results {
 		line := result.Rule

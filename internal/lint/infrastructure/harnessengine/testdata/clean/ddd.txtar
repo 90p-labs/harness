@@ -78,3 +78,7 @@ export class OrderMemoryRepository implements OrderRepository {
     this.saved.push(order)
   }
 }
+-- src/Order/Domain/Order.php --
+<?php
+
+final class Order {}

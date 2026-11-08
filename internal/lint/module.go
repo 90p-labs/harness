@@ -31,10 +31,11 @@ const (
 )
 
 type Handlers struct {
-	Lint     lintcommand.Handler
-	Canaries canaries.Handler
-	Init     initlint.Handler
-	Baseline baseline.Handler
+	Lint        lintcommand.Handler
+	Canaries    canaries.Handler
+	Init        initlint.Handler
+	Baseline    baseline.Handler
+	PluginRules []domain.Rule
 }
 
 func New(cfg config.Lint, plugins []config.Plugin, worktree, version string, render harnessengine.RenderChart) (Handlers, error) {
@@ -66,10 +67,11 @@ func New(cfg config.Lint, plugins []config.Plugin, worktree, version string, ren
 	linter := lintcommand.NewHandler(active, catalogue.Get, engines, version, otel.Tracer(instrumentationName), otel.Meter(instrumentationName))
 	return Handlers{
 		Lint:     linter,
-		Canaries: canaries.NewHandler(ruleCatalogue, manifest.Read, rules, engines),
+		Canaries: canaries.NewHandler(ruleCatalogue, manifest.Read, rules, engines, linter.CheckVersion),
 		Init:     initlint.NewHandler(active, catalogue.Get, engines, version),
 		Baseline: baseline.NewHandler(func(ctx context.Context, dir string) (shareddomain.Report, error) {
 			return linter.Handle(ctx, lintcommand.Command{Dir: dir})
 		}),
+		PluginRules: ruleCatalogue.PluginRules(rules),
 	}, nil
 }

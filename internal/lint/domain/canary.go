@@ -3,10 +3,16 @@ package domain
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 )
 
-const ManifestFile = "lint/rules.yaml"
+const (
+	ManifestFile    = "lint/rules.yaml"
+	minWaiverWords  = 3
+	manifestKeyPack = "pack"
+	notListed       = "not in " + ManifestFile
+)
 
 type CanaryStatus string
 
@@ -23,9 +29,9 @@ type Manifest struct {
 }
 
 type ManifestRule struct {
-	ID     string `yaml:"id"`
-	Canary string `yaml:"canary"`
-	Waived string `yaml:"waived"`
+	ID     string  `yaml:"id"`
+	Canary string  `yaml:"canary"`
+	Waived *string `yaml:"waived"`
 }
 
 type CanaryResult struct {
@@ -45,6 +51,9 @@ func (c RuleCatalogue) Pack(name PackName) (CataloguePack, error) {
 }
 
 func (m Manifest) Results(catalogue RuleCatalogue) ([]CanaryResult, error) {
+	if m.Pack == "" {
+		return nil, fmt.Errorf("%w in %s: set %s to a pack that harness lint catalogue lists", ErrNoPackKey, ManifestFile, manifestKeyPack)
+	}
 	pack, err := catalogue.Pack(m.Pack)
 	if err != nil {
 		return nil, err
@@ -60,14 +69,17 @@ func (m Manifest) Results(catalogue RuleCatalogue) ([]CanaryResult, error) {
 		}
 		listed[rule.ID] = rule
 	}
+	if len(m.Rules) > 0 && !slices.ContainsFunc(m.Rules, func(r ManifestRule) bool { return r.Canary != "" }) {
+		return nil, fmt.Errorf("%w in %s", ErrAllWaived, ManifestFile)
+	}
 	results := make([]CanaryResult, len(pack.Rules))
 	for i, rule := range pack.Rules {
 		entry, ok := listed[rule.ID]
 		switch {
 		case !ok:
-			results[i] = CanaryResult{Rule: rule.ID, Status: CanaryFail, Detail: "not in " + ManifestFile}
-		case entry.Waived != "":
-			results[i] = CanaryResult{Rule: rule.ID, Status: CanaryWaived, Detail: entry.Waived}
+			results[i] = CanaryResult{Rule: rule.ID, Status: CanaryFail, Detail: notListed}
+		case entry.Waived != nil:
+			results[i] = CanaryResult{Rule: rule.ID, Status: CanaryWaived, Detail: *entry.Waived}
 		default:
 			results[i] = CanaryResult{Rule: rule.ID, Canary: entry.Canary, Status: CanaryToRun}
 		}
@@ -76,13 +88,16 @@ func (m Manifest) Results(catalogue RuleCatalogue) ([]CanaryResult, error) {
 }
 
 func (r ManifestRule) check(known map[string]bool, listed map[string]ManifestRule) error {
+	_, twice := listed[r.ID]
 	switch {
 	case !known[r.ID]:
 		return fmt.Errorf("%w in %s: %s", ErrUnknownRule, ManifestFile, r.ID)
-	case listed[r.ID] != ManifestRule{}:
+	case twice:
 		return fmt.Errorf("%w in %s: %s", ErrDuplicateRule, ManifestFile, r.ID)
-	case (r.Canary == "") == (r.Waived == ""):
+	case (r.Canary == "") == (r.Waived == nil):
 		return fmt.Errorf("%w in %s: %s", ErrCanaryOrWaiver, ManifestFile, r.ID)
+	case r.Waived != nil && len(strings.Fields(*r.Waived)) < minWaiverWords:
+		return fmt.Errorf("%w in %s: %s", ErrShortWaiver, ManifestFile, r.ID)
 	case r.Canary != "" && !insideRepo(r.Canary):
 		return fmt.Errorf("%w in %s: %s: %s", ErrCanaryOutsideRepo, ManifestFile, r.ID, r.Canary)
 	}

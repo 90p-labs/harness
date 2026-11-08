@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 
 	"go.opentelemetry.io/otel/propagation"
@@ -19,7 +19,7 @@ import (
 const (
 	DefaultTimeout = 5 * time.Second
 	waitDelay      = 500 * time.Millisecond
-	stderrTail     = 512
+	killGrace      = 2 * time.Second
 	traceparentEnv = "TRACEPARENT"
 	traceparentKey = "traceparent"
 )
@@ -39,11 +39,11 @@ func (p ExecPlugin) Subscribes() []domain.EventName { return p.Events }
 
 func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domain.Verdict, error) {
 	if len(p.Command) == 0 {
-		return domain.Verdict{}, p.fail(errEmptyCommand, nil)
+		return domain.Verdict{}, p.fail(errEmptyCommand)
 	}
 	stdin, err := json.Marshal(envelope)
 	if err != nil {
-		return domain.Verdict{}, p.fail(err, nil)
+		return domain.Verdict{}, p.fail(err)
 	}
 
 	timeout := p.Timeout
@@ -54,12 +54,13 @@ func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domai
 	defer cancel()
 
 	var stdout bytes.Buffer
-	var tail tailBuffer
 	cmd := exec.CommandContext(callCtx, p.Command[0], p.Command[1:]...)
 	cmd.Dir = envelope.Cwd
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Stdout = &stdout
-	cmd.Stderr = io.MultiWriter(os.Stderr, &tail)
+	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return stopGroup(cmd.Process.Pid) }
 	cmd.WaitDelay = waitDelay
 	cmd.Env = append(os.Environ(), traceparentVar(callCtx))
 
@@ -67,7 +68,7 @@ func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domai
 		if callCtx.Err() != nil {
 			err = fmt.Errorf("%w: %w", callCtx.Err(), err)
 		}
-		return domain.Verdict{}, p.fail(err, tail.bytes())
+		return domain.Verdict{}, p.fail(err)
 	}
 
 	if len(bytes.TrimSpace(stdout.Bytes())) == 0 {
@@ -75,13 +76,25 @@ func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domai
 	}
 	var verdict domain.Verdict
 	if err := json.Unmarshal(stdout.Bytes(), &verdict); err != nil {
-		return domain.Verdict{}, p.fail(err, tail.bytes())
+		return domain.Verdict{}, p.fail(err)
 	}
 	return verdict, nil
 }
 
-func (p ExecPlugin) fail(cause error, stderr []byte) error {
-	return fmt.Errorf("%w: %s: %w: stderr: %s", domain.ErrPluginFailed, p.PluginName, cause, stderr)
+func (p ExecPlugin) fail(cause error) error {
+	return fmt.Errorf("%w: %s: %w", domain.ErrPluginFailed, p.PluginName, cause)
+}
+
+func stopGroup(pid int) error {
+	// macOS answers EPERM when the group leader is a zombie, and its children still need the SIGKILL.
+	if err := syscall.Kill(-pid, syscall.SIGTERM); errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	time.Sleep(killGrace)
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) && !errors.Is(err, syscall.EPERM) {
+		return err
+	}
+	return nil
 }
 
 // A plugin that exits 0 but leaves a child on stdout trips WaitDelay; its verdict is already written.
@@ -94,17 +107,3 @@ func traceparentVar(ctx context.Context) string {
 	propagation.TraceContext{}.Inject(ctx, carrier)
 	return traceparentEnv + "=" + carrier.Get(traceparentKey)
 }
-
-type tailBuffer struct {
-	data []byte
-}
-
-func (t *tailBuffer) Write(p []byte) (int, error) {
-	t.data = append(t.data, p...)
-	if len(t.data) > stderrTail {
-		t.data = t.data[len(t.data)-stderrTail:]
-	}
-	return len(p), nil
-}
-
-func (t *tailBuffer) bytes() []byte { return t.data }

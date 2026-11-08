@@ -11,6 +11,14 @@ const (
 	EngineHarness   EngineName = "harness"
 )
 
+func (e EngineName) IsPlugin() bool {
+	switch e {
+	case EngineBiomeGrit, EngineBiomeRule, EngineOxlint, EngineHarness:
+		return false
+	}
+	return true
+}
+
 type Rule struct {
 	ID         string                `json:"id"`
 	Engine     EngineName            `json:"engine"`

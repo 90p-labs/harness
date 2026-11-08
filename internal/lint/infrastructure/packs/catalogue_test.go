@@ -347,3 +347,34 @@ func TestLoad(t *testing.T) {
 		}
 	})
 }
+
+func TestRuleTakenNamesBothPacks(t *testing.T) {
+	const (
+		otherPack = "other"
+		claimedID = "ddd/domain-purity"
+	)
+	repo := t.TempDir()
+	writePack(t, repo, "lint/architecture", strings.Replace(packYAML(string(teamPack), ""), string(teamPack)+"/no-console", claimedID, 1))
+	writePack(t, repo, "lint/other", strings.Replace(packYAML(otherPack, ""), otherPack+"/no-console", claimedID, 1))
+	cases := map[string]struct {
+		entries []string
+		holder  string
+		clash   string
+	}{
+		"a built-in pack holds it": {entries: []string{string(domain.PackDDD), "./lint/architecture"}, holder: string(domain.PackDDD), clash: "./lint/architecture"},
+		"a custom pack holds it":   {entries: []string{"./lint/architecture", "./lint/other"}, holder: string(teamPack), clash: "./lint/other"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := packs.Load(repo, tc.entries)
+
+			if !errors.Is(err, domain.ErrRuleTaken) {
+				t.Fatalf("Load = %v, want ErrRuleTaken", err)
+			}
+			want := fmt.Sprintf("pack %s, rule %s uses %s, which pack %s already holds", tc.clash, claimedID, claimedID, tc.holder)
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("Load = %q, want it to contain %q", err, want)
+			}
+		})
+	}
+}

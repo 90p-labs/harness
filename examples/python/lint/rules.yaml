@@ -8,3 +8,5 @@ rules:
     canary: lint/canaries/ddd-cross-context
   - id: ddd/file-suffix
     waived: import-linter checks the imports, not the file names.
+  - id: ddd/src-roots
+    waived: the example run adds the src-roots canary next.

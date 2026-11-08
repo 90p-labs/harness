@@ -39,10 +39,14 @@ func readReport(t *testing.T, dir string) (shareddomain.Report, string) {
 	return report, string(raw)
 }
 
-func write(t *testing.T, dir string, lint baseline.Lint) {
+func write(t *testing.T, dir string, lint baseline.Lint, wantKept int) {
 	t.Helper()
-	if err := baseline.NewHandler(lint).Handle(context.Background(), baseline.WriteBaseline{Dir: dir, Path: baselinePath}); err != nil {
+	kept, err := baseline.NewHandler(lint).Handle(context.Background(), baseline.WriteBaseline{Dir: dir, Path: baselinePath})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if kept != wantKept {
+		t.Fatalf("kept = %d, want %d", kept, wantKept)
 	}
 }
 
@@ -50,7 +54,7 @@ func TestBaselineRatchet(t *testing.T) {
 	dir := t.TempDir()
 	a, b, c := finding("ddd/a", "a.ts"), finding("ddd/b", "b.ts"), finding("ddd/c", "c.ts")
 
-	write(t, dir, lintReturning(a, b))
+	write(t, dir, lintReturning(a, b), 2)
 	first, raw := readReport(t, dir)
 	if first.Version != 1 || len(first.Findings) != 2 {
 		t.Fatalf("first baseline = %+v", first)
@@ -59,13 +63,13 @@ func TestBaselineRatchet(t *testing.T) {
 		t.Fatalf("baseline is not indented with a trailing newline: %q", raw)
 	}
 
-	write(t, dir, lintReturning(a, c))
+	write(t, dir, lintReturning(a, c), 1)
 	second, _ := readReport(t, dir)
 	if len(second.Findings) != 1 || second.Findings[0] != a {
 		t.Fatalf("second baseline = %+v, want only the finding that is still found", second)
 	}
 
-	write(t, dir, lintReturning())
+	write(t, dir, lintReturning(), 0)
 	third, _ := readReport(t, dir)
 	if third.Findings == nil || len(third.Findings) != 0 {
 		t.Fatalf("third baseline = %+v, want an empty list", third)
@@ -77,7 +81,7 @@ func TestBaselineErrors(t *testing.T) {
 		dir := t.TempDir()
 		lint := func(context.Context, string) (shareddomain.Report, error) { return shareddomain.Report{}, errLint }
 
-		err := baseline.NewHandler(lint).Handle(context.Background(), baseline.WriteBaseline{Dir: dir, Path: baselinePath})
+		_, err := baseline.NewHandler(lint).Handle(context.Background(), baseline.WriteBaseline{Dir: dir, Path: baselinePath})
 
 		if !errors.Is(err, errLint) {
 			t.Fatalf("err = %v", err)
@@ -96,7 +100,7 @@ func TestBaselineErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := baseline.NewHandler(lintReturning()).Handle(context.Background(), baseline.WriteBaseline{Dir: dir, Path: baselinePath})
+		_, err := baseline.NewHandler(lintReturning()).Handle(context.Background(), baseline.WriteBaseline{Dir: dir, Path: baselinePath})
 
 		if err == nil {
 			t.Fatal("want an error for a broken baseline")

@@ -62,5 +62,5 @@ func NewInit(lint toolchain.Lint, bus shareddomain.Dispatcher) initgates.Handler
 	writer := gateconfig.Writer{}
 	detect := func(dir string) ([]domain.Gate, error) { return toolchain.Detect(dir, lint) }
 	files := func(ctx context.Context, dir string) ([]string, error) { return git.Files(ctx, dir) }
-	return initgates.NewHandler(detect, files, bus, writer.HasGates, writer.WriteGates)
+	return initgates.NewHandler(detect, files, bus, writer.BlockingKey, writer.WriteGates)
 }

@@ -24,6 +24,7 @@ const (
 	purityCanary    = "lint/canaries/ddd-domain-purity"
 	directionCanary = "lint/canaries/ddd-layer-direction"
 	waiver          = "deptrac checks dependencies, not file names"
+	canaryFile      = "src/Order/Domain/Order.php"
 )
 
 var errEngine = errors.New("deptrac crashed")
@@ -75,34 +76,132 @@ func fullManifest() domain.Manifest {
 	return domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
 		{ID: purity, Canary: purityCanary},
 		{ID: direction, Canary: directionCanary},
-		{ID: suffix, Waived: waiver},
+		{ID: suffix, Waived: &reason},
 	}}
 }
+
+var reason = waiver
 
 func repoWithCanaries(t *testing.T, folders ...string) string {
 	t.Helper()
 	repo := t.TempDir()
 	for _, folder := range folders {
-		if err := os.MkdirAll(filepath.Join(repo, filepath.FromSlash(folder)), 0o755); err != nil {
+		file := filepath.Join(repo, filepath.FromSlash(folder), filepath.FromSlash(canaryFile))
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte("<?php\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return repo
 }
 
+func fresh(string) error { return nil }
+
 func handle(t *testing.T, repo string, manifest domain.Manifest, rules map[domain.EngineName][]domain.Rule, set *engines) ([]domain.CanaryResult, error) {
 	t.Helper()
-	read := func(dir string) (domain.Manifest, error) {
+	return handleWith(t, repo, func(string) (domain.Manifest, error) { return manifest, nil }, fresh, rules, set)
+}
+
+func handleWith(t *testing.T, repo string, read canaries.ReadManifest, check canaries.CheckVersion, rules map[domain.EngineName][]domain.Rule, set *engines) ([]domain.CanaryResult, error) {
+	t.Helper()
+	inRepo := func(dir string) (domain.Manifest, error) {
 		if dir != repo {
 			t.Fatalf("manifest read in %s, want %s", dir, repo)
 		}
-		return manifest, nil
+		return read(dir)
 	}
-	return canaries.NewHandler(catalogue(), read, rules, set).Handle(context.Background(), canaries.Command{Dir: repo})
+	return canaries.NewHandler(catalogue(), inRepo, rules, set, check).Handle(context.Background(), canaries.Command{Dir: repo})
 }
 
 func finding(id string) shareddomain.Finding {
-	return shareddomain.Finding{Rule: id, Severity: shareddomain.SeverityError, File: "src/Order/Domain/Order.php", Line: 3, Message: "broken"}
+	return findingAt(id, canaryFile)
+}
+
+func findingAt(id, file string) shareddomain.Finding {
+	return shareddomain.Finding{Rule: id, Severity: shareddomain.SeverityError, File: file, Line: 3, Message: "broken"}
+}
+
+func TestFindingOutsideCanaryFails(t *testing.T) {
+	const outside = "../../../cmd/app/main.go"
+	cases := []struct {
+		name   string
+		file   string
+		status domain.CanaryStatus
+		detail string
+	}{
+		{name: "a canary file", file: canaryFile, status: domain.CanaryPass},
+		{name: "a folder that holds a canary file", file: "src/Order", status: domain.CanaryPass},
+		{name: "a file outside the canary", file: outside, status: domain.CanaryFail, detail: "the engine deptrac gave a ddd/domain-purity finding for " + outside + ", which is outside the canary"},
+		{name: "a file that the canary does not hold", file: "src/Order/Domain/Other.php", status: domain.CanaryFail, detail: "the engine deptrac gave a ddd/domain-purity finding for src/Order/Domain/Other.php, which is outside the canary"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := repoWithCanaries(t, purityCanary, directionCanary)
+			set := &engines{findings: map[string][]shareddomain.Finding{
+				filepath.Base(purityCanary): {findingAt(purity, tc.file)},
+			}}
+
+			got, err := handle(t, repo, fullManifest(), active(), set)
+
+			if err != nil {
+				t.Fatalf("Handle: %v", err)
+			}
+			if got[0].Status != tc.status || got[0].Detail != tc.detail {
+				t.Fatalf("result = %+v, want status %s and detail %q", got[0], tc.status, tc.detail)
+			}
+		})
+	}
+}
+
+func TestStaleLintFiles(t *testing.T) {
+	repo := repoWithCanaries(t, purityCanary, directionCanary)
+	set := &engines{}
+	stale := func(string) error { return fmt.Errorf("%w (have %q, want %q)", domain.ErrStaleLintFiles, "1", "2") }
+
+	_, err := handleWith(t, repo, func(string) (domain.Manifest, error) { return fullManifest(), nil }, stale, active(), set)
+
+	if !errors.Is(err, domain.ErrStaleLintFiles) || len(set.checks) != 0 {
+		t.Fatalf("Handle = %v after %d engine checks, want ErrStaleLintFiles before any check", err, len(set.checks))
+	}
+}
+
+func TestBuiltInNoManifest(t *testing.T) {
+	builtIn := map[domain.EngineName][]domain.Rule{domain.EngineHarness: {{ID: purity, Engine: domain.EngineHarness}}}
+	noManifest := func(string) (domain.Manifest, error) { return domain.Manifest{}, domain.ErrNoManifest }
+	cases := []struct {
+		name  string
+		rules map[domain.EngineName][]domain.Rule
+		want  error
+	}{
+		{name: "only built-in rules need no canary", rules: builtIn},
+		{name: "a plugin rule with a catalogue id needs the manifest", rules: active(), want: domain.ErrNoManifest},
+		{name: "no pack keeps the setup error", rules: map[domain.EngineName][]domain.Rule{}, want: domain.ErrNoManifest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := handleWith(t, t.TempDir(), noManifest, fresh, tc.rules, &engines{})
+
+			if !errors.Is(err, tc.want) || (tc.want == nil && got != nil) {
+				t.Fatalf("Handle = %+v, %v, want no result and %v", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuiltInEngineHint(t *testing.T) {
+	repo := repoWithCanaries(t, purityCanary, directionCanary)
+	rules := map[domain.EngineName][]domain.Rule{
+		domain.EngineHarness: {{ID: purity, Engine: domain.EngineHarness}, {ID: direction, Engine: domain.EngineHarness}},
+	}
+
+	got, err := handle(t, repo, fullManifest(), rules, &engines{})
+
+	want := "the engine harness gave no ddd/domain-purity finding, and the built-in engine reads only TypeScript and JavaScript"
+	if err != nil || got[0].Detail != want {
+		t.Fatalf("Handle = %+v, %v, want the detail %q", got, err, want)
+	}
 }
 
 func TestHandlerRunsEachCanary(t *testing.T) {
@@ -155,18 +254,25 @@ func TestHandlerStops(t *testing.T) {
 	cases := []struct {
 		name    string
 		folders []string
+		file    string
 		rules   map[domain.EngineName][]domain.Rule
 		err     error
 		want    error
 		names   string
 	}{
 		{name: "a missing canary folder", folders: []string{purityCanary}, rules: active(), want: domain.ErrCanaryMissing, names: direction},
+		{name: "a canary that is a file", folders: []string{purityCanary}, file: directionCanary, rules: active(), want: domain.ErrCanaryNotFolder, names: direction},
 		{name: "a canary rule with no active rule", folders: []string{purityCanary, directionCanary}, rules: map[domain.EngineName][]domain.Rule{engine: {rule(purity)}}, want: domain.ErrCanaryRuleInactive, names: direction},
 		{name: "an engine error", folders: []string{purityCanary, directionCanary}, rules: active(), err: errEngine, want: errEngine, names: purity},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := repoWithCanaries(t, tc.folders...)
+			if tc.file != "" {
+				if err := os.WriteFile(filepath.Join(repo, filepath.FromSlash(tc.file)), nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
 
 			_, err := handle(t, repo, fullManifest(), tc.rules, &engines{err: tc.err})
 

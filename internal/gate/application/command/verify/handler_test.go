@@ -475,6 +475,38 @@ func TestVerifyBaseline(t *testing.T) {
 	}
 }
 
+func TestFailedGateWithNoReport(t *testing.T) {
+	cases := []struct {
+		name       string
+		exit       domain.Result
+		wantReport bool
+	}{
+		{"a failed gate with an empty stdout keeps its tail only", domain.ResultFail, false},
+		{"a passing gate with an empty stdout has no report", domain.ResultPass, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(nil)
+			g := gate(lintGate)
+			g.Baseline = baselinePath
+			f.runner.outcomes[lintGate] = domain.Outcome{Result: tc.exit, Duration: time.Second, Stdout: " \n", Tail: "tool crashed"}
+
+			result, err := f.handler.Handle(context.Background(), command(g))
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			line := result.Lines[0]
+			if line.Status != domain.StatusFail || !strings.Contains(line.Tail, "tool crashed") {
+				t.Fatalf("line = %+v, want a failure that keeps its tail", line)
+			}
+			if strings.Contains(line.Tail, "findings report") != tc.wantReport {
+				t.Errorf("tail = %q, want findings report present = %v", line.Tail, tc.wantReport)
+			}
+		})
+	}
+}
+
 func TestVerifyErrors(t *testing.T) {
 	baselined := gate(lintGate)
 	baselined.Baseline = baselinePath

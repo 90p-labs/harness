@@ -25,7 +25,7 @@ func writeManifest(t *testing.T, content string) string {
 	return repo
 }
 
-func TestRead(t *testing.T) {
+func TestManifestRead(t *testing.T) {
 	repo := writeManifest(t, `pack: ddd
 rules:
   - id: ddd/domain-purity
@@ -39,16 +39,33 @@ rules:
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
+	waiver := "deptrac checks dependencies, not file names."
 	want := domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
 		{ID: "ddd/domain-purity", Canary: "lint/canaries/ddd-domain-purity"},
-		{ID: "ddd/file-suffix", Waived: "deptrac checks dependencies, not file names."},
+		{ID: "ddd/file-suffix", Waived: &waiver},
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Read = %+v, want %+v", got, want)
 	}
 }
 
-func TestReadRefuses(t *testing.T) {
+func TestManifestReadRefuses(t *testing.T) {
+	t.Run("an unknown key", func(t *testing.T) {
+		_, err := manifest.Read(writeManifest(t, "pack: ddd\nextra: 1\nrules: []\n"))
+
+		if err == nil || !strings.Contains(err.Error(), "extra") || !strings.Contains(err.Error(), domain.ManifestFile) {
+			t.Fatalf("Read = %v, want an error naming the unknown key extra", err)
+		}
+	})
+
+	t.Run("an empty file reads as a manifest with no pack", func(t *testing.T) {
+		got, err := manifest.Read(writeManifest(t, ""))
+
+		if err != nil || !reflect.DeepEqual(got, domain.Manifest{}) {
+			t.Fatalf("Read = %+v, %v, want an empty manifest, which Results refuses for its pack key", got, err)
+		}
+	})
+
 	t.Run("no manifest names the setup skill", func(t *testing.T) {
 		_, err := manifest.Read(t.TempDir())
 

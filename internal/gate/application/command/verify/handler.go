@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -337,6 +338,9 @@ func (h Handler) dispatch(ctx context.Context, event shareddomain.EventName, dir
 }
 
 func (h Handler) judgeBaseline(dir string, gate domain.Gate, outcome domain.Outcome) (domain.Outcome, error) {
+	if outcome.Result != domain.ResultPass && strings.TrimSpace(outcome.Stdout) == "" {
+		return outcome, nil
+	}
 	found, err := parseReport([]byte(outcome.Stdout))
 	if err != nil {
 		outcome.Result = domain.ResultFail
