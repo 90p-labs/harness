@@ -10,6 +10,8 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/jorge07/harness/internal/guard"
+	livemodule "github.com/jorge07/harness/internal/live"
+	livecli "github.com/jorge07/harness/internal/live/ui/cli"
 	planmodule "github.com/jorge07/harness/internal/plan"
 	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
 	runmodule "github.com/jorge07/harness/internal/run"
@@ -18,6 +20,7 @@ import (
 	"github.com/jorge07/harness/internal/shared/application/eventbus"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
+	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
 	"github.com/jorge07/harness/internal/shared/infrastructure/git"
 )
@@ -72,7 +75,12 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 			}
 			return git.DefaultBranch(ctx, worktree)
 		})
-	bus := eventbus.NewBus(append(append(plugins, guards...), review), otel.GetTracerProvider(), otel.GetMeterProvider())
+	var bus eventbus.Bus
+	session := livemodule.NewSessionPlugin(func(ctx context.Context) ([]string, error) {
+		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus})
+		return livecli.Lines(results), err
+	})
+	bus = eventbus.NewBus(append(append(plugins, guards...), review, session), otel.GetTracerProvider(), otel.GetMeterProvider())
 	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus}, nil
 }
 
@@ -81,12 +89,20 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
+	handlers, db, err := openRun(ctx, env)
+	if err != nil {
+		return cli.Handlers{}, nil, err
+	}
+	return handlers, db.Close, nil
+}
+
+func openRun(ctx context.Context, env environment) (cli.Handlers, *dbal.DB, error) {
 	db, err := openState(ctx, env.cfg, env.commonDir)
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
 	gate := planGate{submit: planmodule.NewModule(env.bus, env.key.Worktree).Submit, worktree: env.key.Worktree}
-	return runmodule.NewModule(db, env.bus, gate, env.cfg.Run, env.key, time.Now), db.Close, nil
+	return runmodule.NewModule(db, env.bus, gate, env.cfg.Run, env.key, time.Now), db, nil
 }
 
 type planGate struct {

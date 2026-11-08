@@ -38,6 +38,11 @@ const (
 	keyGuardDisabled   = "guard.disabled"
 	keyGitBranch       = "git.default_branch"
 
+	keyLiveEnvironment = "live.environment"
+	keyLiveRollback    = "live.rollback"
+
+	defaultLiveEnvironment = "production"
+
 	keyLintDDDRoot       = "lint.ddd.root"
 	keyLintDDDSrcFiles   = "lint.ddd.src_files"
 	keyLintChart         = "lint.observability.chart"
@@ -62,6 +67,12 @@ type Config struct {
 	Git     Git                 `mapstructure:"git"`
 	Gates   []Gate              `mapstructure:"gates"`
 	Lint    Lint                `mapstructure:"lint"`
+	Live    Live                `mapstructure:"live"`
+}
+
+type Live struct {
+	Environment string `mapstructure:"environment"`
+	Rollback    string `mapstructure:"rollback"`
 }
 
 type Lint struct {
@@ -181,6 +192,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyPlugins, []any{})
 	v.SetDefault(keyGuardDisabled, []any{})
 	v.SetDefault(keyGitBranch, "")
+	v.SetDefault(keyLiveEnvironment, defaultLiveEnvironment)
+	v.SetDefault(keyLiveRollback, "")
 	v.SetDefault(keyLintDDDRoot, defaultLintDDDRoot)
 	v.SetDefault(keyLintDDDSrcFiles, []string{defaultLintSrcFile})
 	v.SetDefault(keyLintChart, defaultLintChart)

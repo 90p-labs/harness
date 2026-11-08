@@ -16,7 +16,7 @@ import (
 func newHookCommand(flags *pflag.FlagSet) *cobra.Command {
 	handler := host.NewHookHandler(func(ctx context.Context) (shareddomain.Dispatcher, error) {
 		env, err := newEnvironment(ctx, flags)
-		return env.bus, err
+		return runDispatcher{next: env.bus, active: activeRunRef(env)}, err
 	})
 	cmd := hostcli.NewHookCommand(handler)
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return err })

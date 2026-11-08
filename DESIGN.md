@@ -450,6 +450,8 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `run.max_review_rounds` | `3` | 1 or more |
 | `run.max_live_rounds` | `3` | 1 or more |
 | `run.max_stop_blocks` | `3` | 1 or more |
+| `live.environment` | `production` | The GitHub deployment environment |
+| `live.rollback` | empty | The rollback line of the findings |
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
 | `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
@@ -739,19 +741,20 @@ Release record: `{RunID, PRURL, MergeSHA, MergedAt, DeployedAt, Environment}`. `
 Merge and deploy:
 
 - The merge state comes from `gh pr view URL --json state,mergedAt,mergeCommit`.
-- The deploy marker is the GitHub deployment status of the merge SHA in `live.environment` (default `production`). The newest status wins.
+- The deploy marker is the GitHub deployment status of the merge SHA in `live.environment` (default `production`). The newest status that is not `inactive` wins.
 - `success` is a deploy. `failure` and `error` are a failed deploy. Other states are pending.
 - A pipeline that deploys outside GitHub Actions writes the deployment status with one `gh api` call.
 
 The plan has a `## Signals` table:
 
-| Signal | Source | Query | Breach | Window | Panel |
-|---|---|---|---|---|---|
-| error rate | prometheus | `api:http_errors:ratio_rate5m` | `> 0.01` | 30m | https://grafana.example/d/api |
+| Criterion | Signal | Source | Query | Breach | Window | Panel |
+|---|---|---|---|---|---|---|
+| 3 | error rate | prometheus | `api:http_errors:ratio_rate5m` | `> 0.01` | 30m | https://grafana.example/d/api |
 
+- `Criterion` is the number of the acceptance criterion that the row proves.
 - `Breach` is an operator of `>`, `>=`, `<` or `<=`, then a number. `Window` is a Go duration.
 - The watch window of a release is the longest window of its rows. It starts at `DeployedAt`.
-- A `plan.submitted` plugin denies an invalid table. It also denies a plan that touches command, query, event handler or route code with no `## Signals` section.
+- The plan check owns the table. The rule `signals-table` refuses a bad header, breach or window. The rule `signals-missing` refuses a plan that touches command, query, event handler or route code with no `## Signals` section. The live module has no plan plugin.
 
 For each row, the live check dispatches one `signals.check` collect event:
 
@@ -780,13 +783,15 @@ The run guard turns `regress` into `blocked` on the last live round.
 On a regression, the handler:
 
 1. Applies `regress` through the run store. A stale version skips the run.
-2. Archives `plan.md`, `review.md` and the review judgements as `plan-N.md`, `review-N.md` and so on. An existing archive stops the step.
-3. Clears the submitted tree, the reviewed tree, the checked commits and the PR URL.
+2. Archives `plan.md` and `review.md` as `plan-N.md` and `review-N.md`. An existing archive stops the step.
+3. Clears the PR URL. The PR list stays.
 4. Gives the findings to the next agent session as the run reason. The agent replans with a `## Regression impact` section.
 
 The findings text names the round, the PR, the SHA, each breach with its panel, and a rollback line from `live.rollback`. The harness never runs the rollback. The maintainer runs it.
 
-`harness live check` checks every run of the repo in `releasing` or `observing`. It prints the id, the phase and the outcome for each run. A cron job or a CI schedule can run it. A `session.started` plugin also runs it when such a run exists.
+`harness live check` checks every run of the repo in `releasing` or `observing`. It prints the id, the phase and the outcome for each run. It exits 1 when one run fails. A cron job or a CI schedule can run it. The session plugin `live.session` also runs the check on `session.started`. It adds one context line `live: <id> <phase> <outcome>` for each run. A check error with no run line gets the line `live: check failed: <error>`. The check stops after 20 seconds. See `docs/go-live.md`.
+
+The hook command also fills `Envelope.Run` with the id and the phase of the active run. With no active run, or a state that does not open, `Run` stays empty.
 
 ## Hosts
 
