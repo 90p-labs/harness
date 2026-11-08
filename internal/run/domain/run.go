@@ -8,6 +8,7 @@ import (
 type Run struct {
 	ID          string
 	Key         RunKey
+	Prompt      string
 	Phase       Phase
 	ReviewRound int
 	LiveRound   int

@@ -48,7 +48,7 @@ func openStore(t *testing.T, c dialectCase) store {
 
 func newRun(t *testing.T, id string, events ...domain.Event) domain.Run {
 	t.Helper()
-	run := domain.Run{ID: id, Key: key}
+	run := domain.Run{ID: id, Key: key, Prompt: "add the run command\nwith a second line"}
 	for _, event := range events {
 		next, err := run.Apply(domain.Command{Event: event, Reason: string(event), At: clock}, domain.Policy{})
 		if err != nil {
