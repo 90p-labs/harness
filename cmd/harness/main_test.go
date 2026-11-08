@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jorge07/harness/internal/run/domain"
 )
 
 const (
@@ -174,5 +177,138 @@ func TestTelemetryErrorKeepsExitCode(t *testing.T) {
 	lines := strings.Split(strings.TrimSuffix(stderr, "\n"), "\n")
 	if len(lines) != 1 || !strings.HasPrefix(lines[0], telemetryPrefix) {
 		t.Errorf("stderr = %q, want one line starting with %q", stderr, telemetryPrefix)
+	}
+}
+
+const (
+	commandRun = "run"
+	gitBinary  = "git"
+	stateFile  = ".harness/state.db"
+	activeNo   = "active: no\n"
+)
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if out, err := exec.Command(gitBinary, append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func initRepo(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "init", "--quiet")
+	t.Chdir(dir)
+	return dir
+}
+
+func TestRunLifecycle(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+
+	steps := []struct {
+		args      []string
+		wantPhase domain.Phase
+	}{
+		{[]string{"start", "Add the login page"}, domain.PhasePlanning},
+		{[]string{"plan"}, domain.PhaseAwaitingApproval},
+		{[]string{"approve"}, domain.PhaseWorking},
+		{[]string{"review"}, domain.PhaseReviewing},
+		{[]string{"ship"}, domain.PhaseShipping},
+		{[]string{"done"}, domain.PhaseDone},
+	}
+	for _, step := range steps {
+		code, stdout, stderr := execute(t, append([]string{commandRun}, step.args...)...)
+		if code != exitOK || stderr != "" {
+			t.Fatalf("%v: code = %d, stderr = %q", step.args, code, stderr)
+		}
+		for _, want := range []string{" phase=" + string(step.wantPhase) + " ", "-add-the-login-page ", "\nnext: "} {
+			if !strings.Contains(stdout, want) {
+				t.Fatalf("%v: stdout = %q, want it to contain %q", step.args, stdout, want)
+			}
+		}
+	}
+
+	code, stdout, stderr := execute(t, commandRun, "status")
+	if code != exitOK || stdout != activeNo || stderr != "" {
+		t.Fatalf("status: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+}
+
+func TestStateInGitCommonDir(t *testing.T) {
+	clearHarnessEnv(t)
+	main := initRepo(t)
+	gitIn(t, main, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "--allow-empty", "-m", "init")
+	linked := filepath.Join(filepath.Dir(main), filepath.Base(main)+"-linked")
+	gitIn(t, main, "worktree", "add", "--quiet", linked)
+	t.Chdir(linked)
+
+	code, _, stderr := execute(t, commandRun, "start", "linked work")
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(main, ".git", stateFile)); err != nil {
+		t.Errorf("state file in the common dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(linked, ".harness")); !os.IsNotExist(err) {
+		t.Errorf("worktree has a .harness folder: %v", err)
+	}
+}
+
+func TestRunExitCodes(t *testing.T) {
+	cases := []struct {
+		name      string
+		args      []string
+		wantCode  int
+		wantError string
+		wantUsage string
+	}{
+		{name: "extra argument", args: []string{commandRun, "plan", "extra"}, wantCode: exitUsage, wantError: "error: ", wantUsage: "harness run plan"},
+		{name: "missing findings", args: []string{commandRun, "rework"}, wantCode: exitUsage, wantError: "error: ", wantUsage: "--findings"},
+		{name: "missing reason", args: []string{commandRun, "block"}, wantCode: exitUsage, wantError: "error: ", wantUsage: "--reason"},
+		{name: "no subcommand", args: []string{commandRun}, wantCode: exitUsage, wantError: "error: no command given\n", wantUsage: "harness run [command]"},
+		{name: "no active run", args: []string{commandRun, "plan"}, wantCode: exitRuntime, wantError: "error: run not found\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearHarnessEnv(t)
+			initRepo(t)
+			code, _, stderr := execute(t, tc.args...)
+			if code != tc.wantCode || !strings.HasPrefix(stderr, tc.wantError) {
+				t.Fatalf("code = %d, stderr = %q, want %d and prefix %q", code, stderr, tc.wantCode, tc.wantError)
+			}
+			if tc.wantUsage != "" && !strings.Contains(stderr, tc.wantUsage) {
+				t.Errorf("stderr = %q, want usage with %q", stderr, tc.wantUsage)
+			}
+			if hasUsage := strings.Contains(stderr, "Usage:"); hasUsage != (tc.wantCode == exitUsage) {
+				t.Errorf("stderr = %q, usage shown = %v", stderr, hasUsage)
+			}
+		})
+	}
+}
+
+func TestRunVetoExitsOne(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	deny := filepath.Join(dir, "deny.sh")
+	script := "#!/bin/sh\necho '{\"verdict\":\"deny\",\"reason\":\"not now\"}'\n"
+	if err := os.WriteFile(deny, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "plugins:\n  - name: gate\n    command: [" + deny + "]\n    events: [run.transition.before]\n"
+	if err := os.WriteFile(filepath.Join(dir, ".harness.yaml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, stderr := execute(t, commandRun, "start", "vetoed")
+	if code != exitRuntime || !strings.Contains(stderr, "not now") {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	code, stdout, _ := execute(t, commandRun, "status")
+	if code != exitOK || stdout != activeNo {
+		t.Fatalf("after veto: code = %d, stdout = %q", code, stdout)
 	}
 }

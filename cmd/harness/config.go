@@ -41,7 +41,6 @@ func newConfigCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   commandConfig,
 		Short: "Print the effective config",
-		Args:  usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
