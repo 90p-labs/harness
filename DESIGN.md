@@ -599,7 +599,7 @@ Commands:
 
 - `harness verify` runs the gates in file order. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate. It exits 1 when one gate fails.
 - `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
-- `harness gates init` detects the toolchain (Go, pnpm, npm, Biome) and writes the `gates` key. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set, and the `helm-render` and `promtool-test` gates when `lint.packs` has `observability`.
+- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set, and the `helm-render` and `promtool-test` gates when `lint.packs` has `observability`.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.

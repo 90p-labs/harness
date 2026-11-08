@@ -59,25 +59,41 @@ func TestDetectToolchain(t *testing.T) {
 		"pnpm with biome": {
 			files: map[string]string{packageJSON: allScripts, pnpmLock: "", biomeJSON: "{}"},
 			want: []domain.Gate{
-				gate(t, "typecheck", "pnpm run typecheck", nil),
-				gate(t, "lint", "pnpm run lint", nil),
-				gate(t, "test", "pnpm run test", nil),
+				gate(t, "node-typecheck", "pnpm run typecheck", nil),
+				gate(t, "node-lint", "pnpm run lint", nil),
+				gate(t, "node-test", "pnpm run test", nil),
 				gate(t, "biome", "pnpm exec biome ci .", nil),
 			},
 		},
 		"npm with some scripts": {
 			files: map[string]string{packageJSON: someScripts, npmLock: ""},
-			want:  []domain.Gate{gate(t, "test", "npm run test", nil)},
+			want:  []domain.Gate{gate(t, "node-test", "npm run test", nil)},
 		},
 		"npm with biome jsonc": {
 			files: map[string]string{packageJSON: someScripts, npmLock: "", biomeJSONC: "{}"},
 			want: []domain.Gate{
-				gate(t, "test", "npm run test", nil),
+				gate(t, "node-test", "npm run test", nil),
 				gate(t, "biome", "npx biome ci .", nil),
 			},
 		},
-		"package without lock file": {
+		"package without lock file runs npm": {
 			files: map[string]string{packageJSON: allScripts},
+			want: []domain.Gate{
+				gate(t, "node-typecheck", "npm run typecheck", nil),
+				gate(t, "node-lint", "npm run lint", nil),
+				gate(t, "node-test", "npm run test", nil),
+			},
+		},
+		"go and node without lock file": {
+			files: map[string]string{goMod: "module x\n", packageJSON: allScripts},
+			want: []domain.Gate{
+				gate(t, "go-fmt", `test -z "$(gofmt -l .)"`, goSources),
+				gate(t, "go-vet", "go vet ./...", nil),
+				gate(t, "go-test", "go test ./...", nil),
+				gate(t, "node-typecheck", "npm run typecheck", nil),
+				gate(t, "node-lint", "npm run lint", nil),
+				gate(t, "node-test", "npm run test", nil),
+			},
 		},
 		"empty repo": {files: map[string]string{}},
 	}
@@ -91,6 +107,21 @@ func TestDetectToolchain(t *testing.T) {
 				t.Errorf("gates = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDetectEveryStack(t *testing.T) {
+	dir := repo(t, map[string]string{goMod: "module x\n", packageJSON: allScripts, pnpmLock: ""})
+
+	got, err := toolchain.Detect(dir, toolchain.Lint{Packs: []string{"ddd"}})
+	if err != nil {
+		t.Fatalf("detect: %v", err)
+	}
+	if err := domain.ValidateGates(got); err != nil {
+		t.Fatalf("gates %+v: %v", got, err)
+	}
+	if len(got) != 7 {
+		t.Fatalf("got %d gates, want 3 Go, 3 Node and the lint gate: %+v", len(got), got)
 	}
 }
 
