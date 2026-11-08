@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -23,21 +25,31 @@ const (
 	helperFlag = "GO_WANT_HELPER_PROCESS"
 	helperMode = "HELPER_MODE"
 
-	modeVerdict     = "verdict"
-	modeEmpty       = "empty"
-	modeEchoEnv     = "echo-traceparent"
-	modeFail        = "fail"
-	modeBadJSON     = "bad-json"
-	modeHang        = "hang"
-	modeGrandchild  = "grandchild"
-	modeSleepHolder = "sleep-holder"
-	modeNoisyFail   = "noisy-fail"
-	modeDetached    = "detached"
+	modeVerdict       = "verdict"
+	modeEmpty         = "empty"
+	modeEchoEnv       = "echo-traceparent"
+	modeFail          = "fail"
+	modeBadJSON       = "bad-json"
+	modeHang          = "hang"
+	modeGrandchild    = "grandchild"
+	modeSleepHolder   = "sleep-holder"
+	modeDetached      = "detached"
+	modeSleepChild    = "sleep-child"
+	modeStubbornChild = "stubborn-child"
 
-	stderrTail  = 512
-	callTimeout = 5 * time.Second
-	shortLimit  = 200 * time.Millisecond
+	pidFileEnv   = "HELPER_PID_FILE"
+	childSeconds = "30"
+	callTimeout  = 5 * time.Second
+	shortLimit   = 200 * time.Millisecond
+	graceBound   = 4 * time.Second
+	exitPoll     = 5 * time.Second
+	pollStep     = 50 * time.Millisecond
 )
+
+var childCommands = map[string][]string{
+	modeSleepChild:    {"sleep", childSeconds},
+	modeStubbornChild: {"sh", "-c", "trap '' TERM; exec sleep " + childSeconds},
+}
 
 func TestHelperProcess(t *testing.T) {
 	if os.Getenv(helperFlag) != "1" {
@@ -76,9 +88,17 @@ func TestHelperProcess(t *testing.T) {
 			os.Exit(4)
 		}
 		fmt.Print(`{"verdict":"deny","reason":"detached"}`)
-	case modeNoisyFail:
-		fmt.Fprint(os.Stderr, strings.Repeat("a", 2*stderrTail)+"END")
-		os.Exit(5)
+	case modeSleepChild, modeStubbornChild:
+		argv := childCommands[os.Getenv(helperMode)]
+		child := exec.Command(argv[0], argv[1:]...)
+		if err := child.Start(); err != nil {
+			os.Exit(4)
+		}
+		pid := fmt.Sprint(child.Process.Pid)
+		if err := os.WriteFile(os.Getenv(pidFileEnv), []byte(pid), 0o600); err != nil {
+			os.Exit(4)
+		}
+		time.Sleep(time.Minute)
 	}
 	os.Exit(0)
 }
@@ -141,13 +161,12 @@ func TestExecPluginFailure(t *testing.T) {
 		name    string
 		mode    string
 		timeout time.Duration
-		stderr  string
+		wantErr string
 	}{
-		{"non-zero exit", modeFail, callTimeout, "boom"},
-		{"invalid json", modeBadJSON, callTimeout, ""},
-		{"timeout", modeHang, shortLimit, ""},
-		{"grandchild keeps stdout open", modeGrandchild, shortLimit, ""},
-		{"stderr cut to the last bytes", modeNoisyFail, callTimeout, strings.Repeat("a", stderrTail-3) + "END"},
+		{"non-zero exit", modeFail, callTimeout, "exit status 3"},
+		{"invalid json", modeBadJSON, callTimeout, "invalid character"},
+		{"timeout", modeHang, shortLimit, context.DeadlineExceeded.Error()},
+		{"grandchild keeps stdout open", modeGrandchild, shortLimit, context.DeadlineExceeded.Error()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -160,14 +179,59 @@ func TestExecPluginFailure(t *testing.T) {
 			if !errors.Is(err, domain.ErrPluginFailed) {
 				t.Fatalf("err = %v, want ErrPluginFailed", err)
 			}
-			if !strings.Contains(err.Error(), tc.stderr) {
-				t.Fatalf("err %q does not hold stderr %q", err, tc.stderr)
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err %q does not hold %q", err, tc.wantErr)
 			}
-			if tc.mode == modeNoisyFail && strings.Contains(err.Error(), strings.Repeat("a", stderrTail)) {
-				t.Fatalf("stderr not cut to %d bytes", stderrTail)
-			}
-			if elapsed > callTimeout {
+			if elapsed > graceBound {
 				t.Fatalf("call held for %s", elapsed)
+			}
+		})
+	}
+}
+
+func TestFailureErrorHasNoStderr(t *testing.T) {
+	plugin := newPlugin(t, modeFail, callTimeout)
+
+	_, err := plugin.Handle(context.Background(), testEnvelope(t))
+
+	if !errors.Is(err, domain.ErrPluginFailed) {
+		t.Fatalf("err = %v, want ErrPluginFailed", err)
+	}
+	if strings.Contains(err.Error(), "boom") {
+		t.Fatalf("err %q repeats the plugin stderr", err)
+	}
+}
+
+func TestTimeoutStopsProcessGroup(t *testing.T) {
+	for name, mode := range map[string]string{
+		"a child that stops on SIGTERM": modeSleepChild,
+		"a child that ignores SIGTERM":  modeStubbornChild,
+	} {
+		t.Run(name, func(t *testing.T) {
+			pidFile := filepath.Join(t.TempDir(), "child.pid")
+			t.Setenv(pidFileEnv, pidFile)
+			plugin := newPlugin(t, mode, time.Second)
+
+			_, err := plugin.Handle(context.Background(), testEnvelope(t))
+
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("err = %v, want deadline exceeded", err)
+			}
+			raw, readErr := os.ReadFile(pidFile)
+			if readErr != nil {
+				t.Fatalf("pid file: %v", readErr)
+			}
+			pid, convErr := strconv.Atoi(string(raw))
+			if convErr != nil {
+				t.Fatalf("pid %q: %v", raw, convErr)
+			}
+			t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+			deadline := time.Now().Add(exitPoll)
+			for syscall.Kill(pid, 0) != syscall.ESRCH {
+				if time.Now().After(deadline) {
+					t.Fatalf("child %d survived the timeout", pid)
+				}
+				time.Sleep(pollStep)
 			}
 		})
 	}
