@@ -230,6 +230,19 @@ func TestCanariesCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("an engine entry names its engine", func(t *testing.T) {
+		onDeptrac := domain.CanaryResult{Rule: "ddd/domain-purity", Engine: "deptrac", Canary: "lint/canaries/php-domain-purity", Status: domain.CanaryPass}
+		onHarness := domain.CanaryResult{Rule: "ddd/domain-purity", Engine: domain.EngineHarness, Status: domain.CanaryWaived, Detail: "the binary fixtures prove it"}
+
+		out, err := run(t, canariesOf([]domain.CanaryResult{onDeptrac, onHarness}, nil), subCanaries)
+
+		want := "PASS ddd/domain-purity deptrac lint/canaries/php-domain-purity\n" +
+			"WAIVED ddd/domain-purity harness: the binary fixtures prove it\n"
+		if err != nil || out != want {
+			t.Fatalf("out = %q, err = %v, want %q", out, err, want)
+		}
+	})
+
 	t.Run("a config error is returned", func(t *testing.T) {
 		if _, err := run(t, canariesOf(nil, errEngine), subCanaries); !errors.Is(err, errEngine) {
 			t.Fatalf("err = %v, want the handler error", err)

@@ -1,11 +1,14 @@
 package canaries
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/jorge07/harness/internal/lint/domain"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
@@ -28,22 +31,20 @@ type CheckVersion func(dir string) error
 type Handler struct {
 	catalogue     domain.RuleCatalogue
 	read          ReadManifest
-	active        map[string]activeRule
+	active        map[string]map[domain.EngineName]domain.Rule
 	engines       domain.EngineSet
 	fresh         CheckVersion
 	needsManifest bool
 }
 
-type activeRule struct {
-	rule   domain.Rule
-	engine domain.EngineName
-}
-
 func NewHandler(catalogue domain.RuleCatalogue, read ReadManifest, rules map[domain.EngineName][]domain.Rule, engines domain.EngineSet, fresh CheckVersion) Handler {
-	active := map[string]activeRule{}
+	active := map[string]map[domain.EngineName]domain.Rule{}
 	for engine, list := range rules {
 		for _, rule := range list {
-			active[rule.ID] = activeRule{rule: rule, engine: engine}
+			if active[rule.ID] == nil {
+				active[rule.ID] = map[domain.EngineName]domain.Rule{}
+			}
+			active[rule.ID][engine] = rule
 		}
 	}
 	needsManifest := len(catalogue.PluginRules(rules)) > 0
@@ -67,12 +68,16 @@ func (h Handler) Handle(ctx context.Context, cmd Command) ([]domain.CanaryResult
 	if err != nil {
 		return nil, err
 	}
+	engines := map[string][]domain.EngineName{}
+	for id, byEngine := range h.active {
+		engines[id] = slices.Sorted(maps.Keys(byEngine))
+	}
+	if results, err = domain.ForEngines(results, engines); err != nil {
+		return nil, err
+	}
 	for _, result := range results {
 		if result.Status != domain.CanaryToRun {
 			continue
-		}
-		if _, ok := h.active[result.Rule]; !ok {
-			return nil, fmt.Errorf("%w: %s", domain.ErrCanaryRuleInactive, result.Rule)
 		}
 		info, err := os.Stat(canaryDir(cmd.Dir, result.Canary))
 		if err != nil {
@@ -86,17 +91,17 @@ func (h Handler) Handle(ctx context.Context, cmd Command) ([]domain.CanaryResult
 		if result.Status != domain.CanaryToRun {
 			continue
 		}
-		if results[i], err = h.run(ctx, cmd.Dir, result); err != nil {
+		if results[i], err = h.run(ctx, cmd.Dir, result, engines[result.Rule]); err != nil {
 			return nil, err
 		}
 	}
 	return results, nil
 }
 
-func (h Handler) run(ctx context.Context, repo string, result domain.CanaryResult) (domain.CanaryResult, error) {
-	active := h.active[result.Rule]
+func (h Handler) run(ctx context.Context, repo string, result domain.CanaryResult, engines []domain.EngineName) (domain.CanaryResult, error) {
+	engine := cmp.Or(result.Engine, engines[0])
 	canary := canaryDir(repo, result.Canary)
-	findings, err := h.engines.Check(ctx, canary, active.engine, []domain.Rule{active.rule})
+	findings, err := h.engines.Check(ctx, canary, engine, []domain.Rule{h.active[result.Rule][engine]})
 	if err != nil {
 		return result, fmt.Errorf("canary %s for %s: %w", result.Canary, result.Rule, err)
 	}
@@ -114,11 +119,11 @@ func (h Handler) run(ctx context.Context, repo string, result domain.CanaryResul
 	result.Status = domain.CanaryFail
 	switch {
 	case outside != "":
-		result.Detail = fmt.Sprintf(outsideFormat, active.engine, result.Rule, outside)
-	case active.engine == domain.EngineHarness:
-		result.Detail = fmt.Sprintf(noFindingFormat, active.engine, result.Rule) + builtInHint
+		result.Detail = fmt.Sprintf(outsideFormat, engine, result.Rule, outside)
+	case engine == domain.EngineHarness:
+		result.Detail = fmt.Sprintf(noFindingFormat, engine, result.Rule) + builtInHint
 	default:
-		result.Detail = fmt.Sprintf(noFindingFormat, active.engine, result.Rule)
+		result.Detail = fmt.Sprintf(noFindingFormat, engine, result.Rule)
 	}
 	return result, nil
 }
