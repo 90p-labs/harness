@@ -1,0 +1,185 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+)
+
+const (
+	FlagConfig   = "config"
+	FlagStateDSN = "state-dsn"
+
+	DefaultPluginTimeout = 5 * time.Second
+
+	fileName   = ".harness.yaml"
+	fileFormat = "yaml"
+	envPrefix  = "HARNESS"
+
+	keyStateDSN        = "state.dsn"
+	keyApproval        = "run.approval"
+	keyGoLive          = "run.go_live"
+	keyMaxReviewRounds = "run.max_review_rounds"
+	keyMaxLiveRounds   = "run.max_live_rounds"
+	keyMaxStopBlocks   = "run.max_stop_blocks"
+	keyPlugins         = "plugins"
+	keyRoles           = "roles"
+
+	defaultStateDSN = "sqlite:.harness/state.db"
+	defaultRounds   = 3
+)
+
+type Config struct {
+	State   State               `mapstructure:"state"`
+	Run     Run                 `mapstructure:"run"`
+	Plugins []Plugin            `mapstructure:"plugins"`
+	Roles   map[string]RoleHost `mapstructure:"roles"`
+}
+
+type State struct {
+	DSN string `mapstructure:"dsn"`
+}
+
+type Run struct {
+	Approval        bool `mapstructure:"approval"`
+	GoLive          bool `mapstructure:"go_live"`
+	MaxReviewRounds int  `mapstructure:"max_review_rounds"`
+	MaxLiveRounds   int  `mapstructure:"max_live_rounds"`
+	MaxStopBlocks   int  `mapstructure:"max_stop_blocks"`
+}
+
+type Plugin struct {
+	Name    string        `mapstructure:"name"`
+	Command []string      `mapstructure:"command"`
+	Events  []string      `mapstructure:"events"`
+	Timeout time.Duration `mapstructure:"timeout"`
+}
+
+type RoleHost map[string]string
+
+var (
+	knownRoles = []shareddomain.Role{
+		shareddomain.RoleLead,
+		shareddomain.RoleWorker,
+		shareddomain.RoleReviewer,
+		shareddomain.RoleExplorer,
+	}
+	knownHosts = []shareddomain.Host{shareddomain.HostClaude, shareddomain.HostCodex}
+)
+
+func Load(flags *pflag.FlagSet, topLevel string) (Config, error) {
+	v := viper.New()
+	v.SetEnvPrefix(envPrefix)
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	setDefaults(v)
+
+	if flag := flags.Lookup(FlagStateDSN); flag != nil {
+		if err := v.BindPFlag(keyStateDSN, flag); err != nil {
+			return Config{}, fmt.Errorf("bind flag %s: %w", FlagStateDSN, err)
+		}
+	}
+
+	path, explicit := filepath.Join(topLevel, fileName), false
+	if flag := flags.Lookup(FlagConfig); flag != nil && flag.Value.String() != "" {
+		path, explicit = flag.Value.String(), true
+	}
+	v.SetConfigFile(path)
+	v.SetConfigType(fileFormat)
+	if err := v.ReadInConfig(); err != nil && (explicit || !errors.Is(err, fs.ErrNotExist)) {
+		return Config{}, fmt.Errorf("read config %s: %w", path, err)
+	}
+
+	var cfg Config
+	strict := func(dc *mapstructure.DecoderConfig) {
+		dc.ErrorUnused = true
+		dc.DecodeHook = mapstructure.ComposeDecodeHookFunc(durationOnlyFromString, dc.DecodeHook)
+	}
+	if err := v.Unmarshal(&cfg, strict); err != nil {
+		return Config{}, fmt.Errorf("decode config %s: %w", path, err)
+	}
+	if err := cfg.validate(); err != nil {
+		return Config{}, fmt.Errorf("config %s: %w", path, err)
+	}
+	return cfg, nil
+}
+
+func setDefaults(v *viper.Viper) {
+	v.SetDefault(keyStateDSN, defaultStateDSN)
+	v.SetDefault(keyApproval, true)
+	v.SetDefault(keyGoLive, false)
+	v.SetDefault(keyMaxReviewRounds, defaultRounds)
+	v.SetDefault(keyMaxLiveRounds, defaultRounds)
+	v.SetDefault(keyMaxStopBlocks, defaultRounds)
+	v.SetDefault(keyPlugins, []any{})
+	v.SetDefault(keyRoles, map[string]any{
+		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): "haiku"},
+		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): "sonnet"},
+	})
+}
+
+func durationOnlyFromString(from, to reflect.Type, data any) (any, error) {
+	if to != reflect.TypeFor[time.Duration]() || from.Kind() == reflect.String {
+		return data, nil
+	}
+	return nil, fmt.Errorf("%v is not a duration string such as 5s", data)
+}
+
+func (c *Config) validate() error {
+	if c.State.DSN == "" {
+		return fmt.Errorf("%s is empty", keyStateDSN)
+	}
+	for key, value := range map[string]int{
+		keyMaxReviewRounds: c.Run.MaxReviewRounds,
+		keyMaxLiveRounds:   c.Run.MaxLiveRounds,
+		keyMaxStopBlocks:   c.Run.MaxStopBlocks,
+	} {
+		if value < 1 {
+			return fmt.Errorf("%s is %d, want 1 or more", key, value)
+		}
+	}
+
+	seen := map[string]bool{}
+	for i := range c.Plugins {
+		plugin := &c.Plugins[i]
+		switch {
+		case plugin.Name == "":
+			return fmt.Errorf("%s[%d] has no name", keyPlugins, i)
+		case seen[plugin.Name]:
+			return fmt.Errorf("plugin %q is duplicated", plugin.Name)
+		case len(plugin.Command) == 0:
+			return fmt.Errorf("plugin %q has no command", plugin.Name)
+		case len(plugin.Events) == 0:
+			return fmt.Errorf("plugin %q has no event", plugin.Name)
+		case plugin.Timeout < 0:
+			return fmt.Errorf("plugin %q has a negative timeout %s", plugin.Name, plugin.Timeout)
+		}
+		seen[plugin.Name] = true
+		if plugin.Timeout == 0 {
+			plugin.Timeout = DefaultPluginTimeout
+		}
+	}
+
+	for role, hosts := range c.Roles {
+		if !slices.Contains(knownRoles, shareddomain.Role(role)) {
+			return fmt.Errorf("unknown role %q", role)
+		}
+		for host := range hosts {
+			if !slices.Contains(knownHosts, shareddomain.Host(host)) {
+				return fmt.Errorf("unknown host %q for role %q", host, role)
+			}
+		}
+	}
+	return nil
+}

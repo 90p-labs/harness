@@ -14,7 +14,7 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 
 `TestLayerImports` checks the direct imports of each package:
 
-- A `domain` package imports only the standard library.
+- A `domain` package imports only the standard library and `internal/shared/domain`.
 - An `application` package imports no `go.opentelemetry.io/otel/sdk` package and no `infrastructure` package.
 
 | Module | Path | Job |
@@ -411,6 +411,39 @@ type RunRepository interface {
 - `Apply` appends one `Transitioned{RunID, From, Event, To, Reason, At}` to the new run. The caller sets `Command.At`, so the domain reads no clock.
 
 A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A remote case skips when `HARNESS_TEST_<ENGINE>_DSN` is not set, so `make check` works offline.
+
+## Config
+
+`config.Load` reads the config with a new viper for each call. Only a command that needs config calls it, so `harness version` works outside a repo.
+
+- The file is `.harness.yaml` at the git top level. The root flag `--config` names another file.
+- A missing default file gives the defaults. A missing `--config` file is an error.
+- The precedence is flag, then env, then file, then default. The env prefix is `HARNESS_`, and a dot becomes `_`: `HARNESS_STATE_DSN` sets `state.dsn`.
+- The root flag `--state-dsn` binds to `state.dsn`.
+- An unknown key is an error that names the key.
+
+| Key | Default | Rule |
+|---|---|---|
+| `state.dsn` | `sqlite:.harness/state.db` | Not empty |
+| `run.approval` | `true` | |
+| `run.go_live` | `false` | The harness cannot know that a repo has a deploy |
+| `run.max_review_rounds` | `3` | 1 or more |
+| `run.max_live_rounds` | `3` | 1 or more |
+| `run.max_stop_blocks` | `3` | 1 or more |
+| `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
+| `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
+
+The plugin module checks the plugin event names, because `shared` cannot import it. The host constants live in `internal/shared/domain`, so the envelope and the role table use one set.
+
+`harness config` prints the effective config as YAML. Outside a git repo it writes `error: not in a git repository`.
+
+Exit codes:
+
+| Code | Cause |
+|---|---|
+| 0 | Success |
+| 1 | A runtime error |
+| 2 | A usage error: an unknown command, an unknown flag or a wrong argument count. The usage text follows the error |
 
 ## Gates and lint packs
 

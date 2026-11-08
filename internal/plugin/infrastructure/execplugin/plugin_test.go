@@ -15,6 +15,7 @@ import (
 
 	"github.com/jorge07/harness/internal/plugin/domain"
 	"github.com/jorge07/harness/internal/plugin/infrastructure/execplugin"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 const (
@@ -97,7 +98,7 @@ func testEnvelope() domain.Envelope {
 	return domain.Envelope{
 		Version: domain.EnvelopeVersion,
 		Event:   domain.EventToolBefore,
-		Host:    domain.HostClaude,
+		Host:    shareddomain.HostClaude,
 		Cwd:     "/repo",
 		Run:     domain.RunRef{ID: "r1", Phase: "working"},
 		Payload: json.RawMessage(`{}`),
