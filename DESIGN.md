@@ -498,7 +498,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `deploy.disabled` | empty list | A list of default deploy plugin names (`helm`, `promtool`); an unknown name is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |
 | `lint.packs` | empty list | A list of built-in pack names and custom pack folder paths (an entry with a `/`); a pack that needs another pack is an error when that pack is missing |
-| `lint.disabled` | empty list | A list of default lint plugins to turn off (`harness`, `biome-grit` or `oxlint`) and of rule ids to turn off (an entry with a `/`, such as `next/no-lib-folder`); an unknown name or an unknown rule id is an error |
+| `lint.disabled` | empty list | A list of default lint plugins (`harness`, `biome-grit` or `oxlint`) and rule ids to turn off. An entry that is not a default lint plugin is a rule id, such as `next/no-lib-folder`. An unknown entry is an error |
 | `lint.ddd.root` | `contexts` | The business root folder in `src/` |
 | `lint.ddd.src_files` | `[main.ts]` | The files that can be directly in `src/` |
 | `lint.observability.chart` | `deploy/chart` | The Helm chart folder |
@@ -784,7 +784,7 @@ A lint engine is a plugin on the event bus (ADR 0011). The rule `engine` is the 
 | `lint.check` | `harness lint` | runs its rules and returns the findings |
 | `lint.prepare` | `harness lint init` | writes its config files into `.harness-lint/` |
 
-The default lint plugins run in process and need no config: `harness`, `biome-grit` (it also runs the `biome-rule` rules) and `oxlint`. `lint.disabled` turns one off, and the rules of that engine then do not run. An entry with a `/`, such as `next/no-lib-folder`, is a rule id: that one rule does not run. An id that no active pack holds is an error.
+The default lint plugins run in process and need no config: `harness`, `biome-grit` (it also runs the `biome-rule` rules) and `oxlint`. `lint.disabled` turns one off, and the rules of that engine then do not run. An entry that is not a default lint plugin is a rule id, such as `next/no-lib-folder`: that one rule does not run. An entry that is neither a default lint plugin nor a rule of an active pack is an error.
 
 The payload of both events:
 
@@ -979,6 +979,7 @@ wait $!
 ```
 
 The manifest gives each rule of one catalogue pack a canary or a waiver. The engine and the scope come from the active pack rule.
+Remove the canary entry of a turned-off rule from `lint/rules.yaml`.
 
 ```yaml
 pack: ddd

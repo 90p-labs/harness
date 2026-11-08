@@ -30,7 +30,7 @@ var (
 	ErrCanaryOutsideRepo  = errors.New("canary folder is outside the repository")
 	ErrCanaryMissing      = errors.New("canary folder is missing")
 	ErrCanaryNotFolder    = errors.New("canary is a file, not a folder")
-	ErrCanaryRuleInactive = errors.New("no active lint pack has the canary rule")
+	ErrCanaryRuleInactive = errors.New("the canary rule is not active: its pack is not in lint.packs, or lint.disabled names it")
 	ErrOneProofForEngines = errors.New("a rule on several engines needs a canary or a waiver for each engine under engines")
 	ErrNoPackKey          = errors.New("the pack key is missing")
 	ErrShortWaiver        = errors.New("a waiver needs a reason of 3 words or more")

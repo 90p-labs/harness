@@ -2,7 +2,7 @@ package lint
 
 import (
 	"context"
-	"strings"
+	"slices"
 
 	"go.opentelemetry.io/otel"
 
@@ -29,8 +29,6 @@ const (
 	instrumentationName = "github.com/jorge07/harness/internal/lint"
 
 	BaselinePath = ".harness-baseline/lint.json"
-
-	ruleIDSeparator = "/"
 )
 
 type Handlers struct {
@@ -41,12 +39,12 @@ type Handlers struct {
 	PluginRules []domain.Rule
 }
 
-func splitDisabled(disabled []string) (engines, rules []string) {
+func splitDisabled(disabled []string, defaults []domain.Engine) (engines, rules []string) {
 	for _, entry := range disabled {
-		if strings.Contains(entry, ruleIDSeparator) {
-			rules = append(rules, entry)
-		} else {
+		if slices.ContainsFunc(defaults, func(engine domain.Engine) bool { return string(engine.Name()) == entry }) {
 			engines = append(engines, entry)
+		} else {
+			rules = append(rules, entry)
 		}
 	}
 	return engines, rules
@@ -67,7 +65,7 @@ func New(cfg config.Lint, plugins []config.Plugin, worktree, version string, ren
 		return Handlers{}, err
 	}
 	defaults := []domain.Engine{harnessengine.New(lintconfig.Decode(cfg), render), biome.New(catalogue.Files()), oxlint.New()}
-	disabledEngines, disabledRules := splitDisabled(cfg.Disabled)
+	disabledEngines, disabledRules := splitDisabled(cfg.Disabled, defaults)
 	engines, err := lintplugin.NewEngines(defaults, disabledEngines, execs, git.Files, otel.GetTracerProvider(), otel.GetMeterProvider())
 	if err != nil {
 		return Handlers{}, err

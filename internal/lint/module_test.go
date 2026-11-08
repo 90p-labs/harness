@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jorge07/harness/internal/deploy/infrastructure/toolplugin"
@@ -69,6 +70,25 @@ func TestDisabledRule(t *testing.T) {
 				t.Fatalf("New err = %v, want %v", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestDisabledCustomRuleWithoutSlash(t *testing.T) {
+	dir := fixture.Extract(t, filepath.Join("testdata", "custom-pack.txtar"))
+	pack := filepath.Join(dir, "lint", "team", "pack.yaml")
+	source, err := os.ReadFile(pack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renamed := strings.Replace(string(source), customRuleID, "no-console", 1)
+	if err := os.WriteFile(pack, []byte(renamed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = lintmodule.New(config.Lint{Packs: []string{"./lint/team"}, Disabled: []string{"no-console"}}, nil, dir, customPackVersion, toolplugin.Template)
+
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
 }
 

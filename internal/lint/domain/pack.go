@@ -84,7 +84,7 @@ func WithoutRules(active []PackName, lookup func(PackName) (Pack, error), ids []
 	}
 	for _, id := range ids {
 		if !held[id] {
-			return nil, fmt.Errorf("%w: lint.disabled names %q, which no active pack holds", ErrUnknownRule, id)
+			return nil, fmt.Errorf("%w: lint.disabled names %q, which is neither a default lint plugin nor a rule of an active pack", ErrUnknownRule, id)
 		}
 	}
 	return func(name PackName) (Pack, error) {
