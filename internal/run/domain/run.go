@@ -1,15 +1,29 @@
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 type Run struct {
 	ID          string
+	Key         RunKey
 	Phase       Phase
 	ReviewRound int
 	LiveRound   int
 	StopBlocks  int
 	BlockedFrom Phase
 	Reason      string
+	Version     int
+	events      []Transitioned
+}
+
+func (r Run) Events() []Transitioned { return slices.Clone(r.events) }
+
+func (r Run) Persisted() Run {
+	r.Version++
+	r.events = nil
+	return r
 }
 
 func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
@@ -20,6 +34,9 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 	next := r
 	next.Phase = row.To
 	next.StopBlocks = 0
+	next.events = append(slices.Clone(r.events), Transitioned{
+		RunID: r.ID, From: r.Phase, Event: cmd.Event, To: row.To, Reason: cmd.Reason, At: cmd.At,
+	})
 
 	switch {
 	case row.To == PhaseBlocked:

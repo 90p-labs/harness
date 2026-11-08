@@ -2,7 +2,9 @@ package domain_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jorge07/harness/internal/run/domain"
 )
@@ -33,6 +35,47 @@ func TestRunApply(t *testing.T) {
 	if !errors.Is(err, domain.ErrIllegalTransition) {
 		t.Fatalf("got %v", err)
 	}
+}
+
+func TestApplyRecordsTransition(t *testing.T) {
+	at := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
+	run := domain.Run{ID: "r1", Version: 3}
+
+	next, err := run.Apply(domain.Command{Event: domain.EventStart, Reason: "go", At: at}, domain.Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []domain.Transitioned{{RunID: "r1", From: domain.PhaseNone, Event: domain.EventStart, To: domain.PhasePlanning, Reason: "go", At: at}}
+	if !reflect.DeepEqual(next.Events(), want) {
+		t.Fatalf("events = %+v, want %+v", next.Events(), want)
+	}
+	if next.Version != 3 || run.Events() != nil {
+		t.Fatalf("version = %d, old events = %+v", next.Version, run.Events())
+	}
+
+	t.Run("a persisted run has the next version and no events", func(t *testing.T) {
+		saved := next.Persisted()
+		if saved.Version != 4 || saved.Events() != nil || len(next.Events()) != 1 {
+			t.Fatalf("saved = %+v, events = %+v", saved, saved.Events())
+		}
+	})
+
+	t.Run("two branches of one run share no events", func(t *testing.T) {
+		base := domain.Run{ID: "r2"}
+		for _, event := range []domain.Event{domain.EventStart, domain.EventSubmitPlan, domain.EventSubmitForReview} {
+			base = apply(t, base, domain.Policy{}, event, "")
+		}
+		left := apply(t, base, domain.Policy{}, domain.EventBlock, "left")
+		right := apply(t, base, domain.Policy{}, domain.EventAbandon, "right")
+
+		if got := left.Events()[3].Reason; got != "left" {
+			t.Fatalf("left event reason = %q, want left", got)
+		}
+		if got := right.Events()[3].Reason; got != "right" {
+			t.Fatalf("right event reason = %q, want right", got)
+		}
+	})
 }
 
 func TestApprovalGuard(t *testing.T) {
