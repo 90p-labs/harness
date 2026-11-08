@@ -454,6 +454,12 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |
+| `lint.packs` | empty list | A list of pack names; a pack that needs another pack is an error when that pack is missing |
+| `lint.ddd.root` | `contexts` | The business root folder in `src/` |
+| `lint.ddd.src_files` | `[main.ts]` | The files that can be directly in `src/` |
+| `lint.observability.chart` | `deploy/chart` | The Helm chart folder |
+| `lint.observability.rules` | `deploy/**/*.rules.yaml` | A glob of the alert rule files |
+| `lint.observability.dashboards` | `deploy/**/dashboards/*.json` | A glob of the dashboard files |
 | `gates` | empty list | A list of gates; each gate is valid and its id is unique, and an error names the gate |
 
 `execplugin.FromConfig` checks the plugin event names and builds the exec plugins. The host constants live in `internal/shared/domain`, so the envelope and the role table use one set.
@@ -581,7 +587,7 @@ Commands:
 
 - `harness verify` runs the gates in file order. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate. It exits 1 when one gate fails.
 - `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
-- `harness gates init` detects the toolchain (Go, pnpm, npm, Biome) and writes the `gates` key. It refuses to change an existing key.
+- `harness gates init` detects the toolchain (Go, pnpm, npm, Biome) and writes the `gates` key. It refuses to change an existing key. It also adds the `lint` gate when `lint.packs` is set, and the `helm-render` and `promtool-test` gates when `lint.packs` has `observability`.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`.
@@ -609,10 +615,14 @@ A lint pack is a set of rules with ids, an engine, a severity and a scope. The `
 - The engine constants are `biome-grit`, `biome-rule`, `oxlint` and `harness`.
 - Every GritQL message starts with the rule id in brackets, such as `[ddd/event-readonly]`.
 - The severity is `error`, `warn` or `info`. Only an `error` finding fails the lint gate.
-- The packs are embedded in the binary. `harness lint init` writes `.harness-lint/` into the repo, with one Biome config for each scope. The team commits it.
+- The Biome engine runs both the `biome-grit` rules and the `biome-rule` rules, once for each scope.
+- The packs are embedded in the binary. `harness lint init` writes `.harness-lint/` into the repo. The team commits it.
+- The `.harness-lint/` folder holds `VERSION`, `plugins/` (the GritQL files), `biome/SCOPE/biome.json` for each scope, and `oxlintrc.json`.
 - `harness lint` stops with "run harness lint init" when `.harness-lint/VERSION` differs from the binary version.
-- `harness lint --json` prints the findings report and always exits 0. The lint gate uses this form.
-- `harness lint baseline` writes all findings when no baseline file exists. Else it only removes the keys that no longer match. It never adds a key.
+- `harness lint` prints one line for each finding: severity, rule id, file, line and message. It exits 1 when an `error` finding exists.
+- `harness lint --json` prints the findings report. It exits 0 when it has findings, and 1 on an engine error. The lint gate uses this form.
+- `harness lint baseline` writes all findings to `.harness-baseline/lint.json` when no baseline file exists. Else it only removes the keys that no longer match. It never adds a key.
+- The Biome and oxlint engine tests have the build tag `linters`. The CI workflow `lint-engines.yml` installs the pinned tools and runs them with `go test -tags linters ./internal/lint/...`.
 
 | Pack | Needs | Content |
 |---|---|---|
@@ -624,6 +634,99 @@ A lint pack is a set of rules with ids, an engine, a severity and a scope. The `
 | `nextjs-ddd-shadcn` | `ddd`, `nextjs`, `shadcn` | Combined layout |
 
 A missing required pack is a config error.
+
+Pack `ddd`, after the Hollywood concepts, in the NestJS style:
+
+| Rule | Matches | Engine | Severity |
+|---|---|---|---|
+| `ddd/src-roots` | a folder in `src/` other than `app/`, `components/` and the business root, or a file not in `ddd.src_files` | harness | error |
+| `ddd/context-layers` | a context folder with only one of `domain/`, `application/` and `infrastructure/` | harness | error |
+| `ddd/parent-no-code` | a file in a folder that groups contexts, outside its `shared/` folder | harness | error |
+| `ddd/shared-layers` | a folder in a `shared/` folder other than the three layers | harness | error |
+| `ddd/shared-base-only` | a file in the root `shared/domain/` that is not an aggregate root, entity, value object, domain event or error base | harness | warn |
+| `ddd/file-suffix` | a file in a layer without a known suffix | harness | error |
+| `ddd/cqrs-folders` | a folder in `application/` other than `commands/`, `queries/` and `event-handlers/` | harness | error |
+| `ddd/handler-pair` | a `commands/NAME/` or `queries/NAME/` folder without exactly one message and one `*.handler.ts` | harness | error |
+| `ddd/module-per-context` | a context without exactly one `*.module.ts` at its root | harness | error |
+| `ddd/one-kernel` | a business root without exactly one `kernel.ts` | harness | error |
+| `ddd/domain-purity` | a domain import of a package not in `ddd.domain_allow`, or of an application or infrastructure path | harness | error |
+| `ddd/layer-direction` | an application import of an infrastructure path | harness | error |
+| `ddd/cross-context` | an import of another context that is not its module from the module file, or its `*.event.ts` from `event-handlers/` | harness | error |
+| `ddd/repository-port` | a `*.repository.ts` outside `domain/`, or a `*-repository.ts` adapter outside `infrastructure/` | harness | error |
+| `ddd/mapper-location` | a `*.mapper.ts` outside `infrastructure/` | harness | error |
+| `ddd/event-past-tense` | a `*.event.ts` file name whose last word is not a past tense verb | harness | warn |
+| `ddd/command-handler-returns` | a command handler `execute` that returns a value other than `void` or `Promise<void>` | biome-grit | error |
+| `ddd/query-handler-no-write` | a `save`, `delete`, `persist`, `publish` or `dispatch` call in a query handler | biome-grit | warn |
+| `ddd/event-readonly` | a property without `readonly` in a `*.event.ts` class | biome-grit | error |
+| `ddd/aggregate-encapsulation` | a public property without `readonly` in a `*.aggregate.ts` class | biome-grit | error |
+| `ddd/value-object-equals` | a `*.value-object.ts` class without an `equals` method | biome-grit | error |
+| `ddd/value-object-factory` | a `*.value-object.ts` class with a public constructor | biome-grit | error |
+| `ddd/publish-after-save` | a `publish` call before the repository `save` call in one command handler method | biome-grit | warn |
+
+- The known suffixes are `command`, `query`, `handler`, `event`, `aggregate`, `entity`, `value-object`, `repository`, `mapper`, `error`, `module`, `controller`, `adapter`, `schema`, `projection`, `spec` and `mother`.
+- An infrastructure adapter of a repository is `NAME.STORE-repository.ts`, for example `user.typeorm-repository.ts`.
+- `ddd/domain-purity` covers the ORM decorators and the event bus, because the domain imports neither package.
+
+Pack `ddd-es`, the optional event sourcing:
+
+| Rule | Matches | Engine | Severity |
+|---|---|---|---|
+| `ddd-es/apply-handler` | a `raise(new NAME(...))` in an aggregate with no `applyNAME` method | harness | error |
+| `ddd-es/event-version` | a `*.event.ts` class without a `readonly version` field | biome-grit | error |
+| `ddd-es/projection-read-only` | a `*.projection.ts` import of a repository port, an aggregate or a `commands/` path | harness | error |
+
+The `ddd-es` README recommends an outbox or a failover store between the events and the bus. No rule checks it.
+
+Pack `observability`:
+
+| Rule | Matches | Engine | Severity |
+|---|---|---|---|
+| `obs/otel-sdk` | a `package.json` without `@opentelemetry/api` and `@opentelemetry/sdk-node`, or no file that starts a `NodeSDK` | harness | error |
+| `obs/bus-instrumented` | a kernel that imports no `*.middleware.ts` with an `@opentelemetry/api` import | harness | warn |
+| `obs/probes` | a rendered Deployment container without a readiness probe and a liveness probe | harness | error |
+| `obs/liveness-process-only` | a liveness probe with the same path as the readiness probe | harness | warn |
+| `obs/immutable-tags` | a rendered image without a tag, or with the tag `latest` | harness | error |
+| `obs/hpa-target` | an HPA whose `scaleTargetRef` names no Deployment of the render | harness | error |
+| `obs/rule-tests` | a rule file without a `*.rules.test.yaml` that names each of its alerts and recorded series | harness | error |
+| `obs/slo-alert` | a recording rule with the label `slo` that no alert uses | harness | error |
+| `obs/runbook` | an alert without `annotations.runbook_url` | harness | error |
+| `obs/dashboard-series` | a dashboard query that uses a series that no rule file records | harness | warn |
+
+- The rendered rules run `helm template` on `lint.observability.chart`. Without `helm` on the path, these rules stop with a clear error.
+- The `helm-render` gate proves that the chart renders. The `promtool-test` gate runs `promtool test rules` on each test file.
+
+Pack `nextjs`:
+
+| Rule | Matches | Engine | Severity |
+|---|---|---|---|
+| `next/client-server-boundary` | a `'use client'` file that imports `server-only`, `next/headers` or a file that imports `server-only` | harness | error |
+| `next/app-router-files` | a file in `src/app/` that is not a Next.js route file or a CSS module | harness | error |
+| `next/thin-route-handler` | an exported handler in `route.ts` with more than 30 lines | harness | warn |
+| `next/no-img-element` | the Biome rule `noImgElement` | biome-rule | error |
+| `next/no-head-element` | the Biome rule `noHeadElement` | biome-rule | error |
+| `next/no-html-link-for-pages` | the oxlint rule `nextjs/no-html-link-for-pages` | oxlint | error |
+| `next/no-async-client-component` | the oxlint rule `nextjs/no-async-client-component` | oxlint | error |
+
+Biome has no rule for the two oxlint rules. Their `reason` lines in `pack.yaml` say so.
+
+Pack `shadcn`:
+
+| Rule | Matches | Engine | Severity |
+|---|---|---|---|
+| `shadcn/ui-imports` | a `components/ui/` import other than ui files, the utils alias, `@radix-ui/*`, `class-variance-authority`, `lucide-react`, React and `lint.shadcn.ui_allow` | harness | error |
+| `shadcn/cn-classnames` | a `className` with a template literal that has a substitution, or with a string concatenation | biome-grit | warn |
+| `shadcn/no-raw-colors` | a Tailwind palette color class such as `bg-red-500`, or a hex or `rgb()` color in a class or a style | biome-grit | error |
+| `shadcn/components-json` | a `components.json` without `tailwind.cssVariables` set to true | harness | error |
+
+Pack `nextjs-ddd-shadcn`:
+
+| Rule | Matches | Engine | Severity |
+|---|---|---|---|
+| `combo/components-no-business` | a `src/components/` import of a business root path | harness | error |
+| `combo/app-through-kernel` | a `src/app/` import of a business root path other than `kernel.ts` | harness | error |
+| `combo/utils-location` | a `components.json` utils alias outside `src/components/` | harness | error |
+
+The shadcn `cn` helper lives in `src/components/lib/utils.ts`.
 
 ## Go-live
 
