@@ -14,18 +14,23 @@ type CatalogueRule struct {
 	Description string `json:"description"`
 }
 
-// PluginRules are the active rules that a plugin engine checks under a catalogue id: only these need a canary.
-func (c RuleCatalogue) PluginRules(rules map[EngineName][]Rule) []Rule {
-	known := map[string]bool{}
+func (c RuleCatalogue) Has(id string) bool {
 	for _, pack := range c.Packs {
 		for _, rule := range pack.Rules {
-			known[rule.ID] = true
+			if rule.ID == id {
+				return true
+			}
 		}
 	}
+	return false
+}
+
+// PluginRules are the active rules that a plugin engine checks under a catalogue id: only these need a canary.
+func (c RuleCatalogue) PluginRules(rules map[EngineName][]Rule) []Rule {
 	var found []Rule
 	for engine, list := range rules {
 		for _, rule := range list {
-			if engine.IsPlugin() && known[rule.ID] {
+			if engine.IsPlugin() && c.Has(rule.ID) {
 				found = append(found, rule)
 			}
 		}

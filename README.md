@@ -241,7 +241,24 @@ PASS ddd/file-suffix lint/canaries/ddd-file-suffix
 
 A canary passes only when the finding is for a file inside the canary folder. `ddd/src-roots` makes the tool report each file or dependency that it cannot place, so no source folder drops out of the check. A waiver needs a reason of 3 words or more, and a manifest that waives each rule fails. The waiver shows in lint/rules.yaml and in the `WAIVED` lines of `harness lint canaries`. `harness verify` prints only the gate status, so run `harness lint canaries` to see the waivers.
 
-A repository has one `lint/rules.yaml`, so its canaries prove one language only. With a manifest, `harness init` prints a `next:` line for each other language that no plugin rule covers.
+A repository with two languages keeps one `lint/rules.yaml`. `harness init` prints a `next:` line for each language that no plugin rule covers, also when the manifest exists. Run the `lint-setup` skill for each language: the second pack holds the same catalogue ids on its own engine, and its scope must not hold a file of the first. A rule on two engines gives one canary or one waiver for each engine under `engines`, and each line names its engine. This is a TypeScript and PHP repository with the built-in `ddd` pack and a deptrac pack:
+
+```console
+$ harness lint canaries
+PASS ddd/src-roots deptrac lint/canaries/ddd-src-roots
+PASS ddd/src-roots harness lint/canaries/ts-src-roots
+PASS ddd/domain-purity deptrac lint/canaries/ddd-domain-purity
+PASS ddd/domain-purity harness lint/canaries/ts-domain-purity
+PASS ddd/layer-direction deptrac lint/canaries/ddd-layer-direction
+PASS ddd/layer-direction harness lint/canaries/ts-layer-direction
+PASS ddd/cross-context deptrac lint/canaries/ddd-cross-context
+WAIVED ddd/cross-context harness: the binary fixtures prove the built-in rule.
+WAIVED ddd/file-suffix: the binary fixtures prove the built-in rule.
+$ harness lint
+error ddd/domain-purity src/Order/Domain/Order.php:9 App\Order\Domain\Order must not depend on Symfony\Component\Uid\Uuid (OrderDomain on Framework)
+error ddd/domain-purity src/contexts/order/domain/clock.entity.ts:1 A domain file imports a package that is not allowed, or an application or infrastructure path.
+error: lint found error findings
+```
 
 ### Signals plugin
 

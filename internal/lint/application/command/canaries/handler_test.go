@@ -232,6 +232,56 @@ func TestHandlerRunsEachCanary(t *testing.T) {
 	}
 }
 
+func TestHandlerEnginesCanary(t *testing.T) {
+	const tsCanary = "lint/canaries/ts-domain-purity"
+	repo := repoWithCanaries(t, purityCanary, tsCanary)
+	builtIn := domain.Rule{ID: purity, Engine: domain.EngineHarness, Severity: shareddomain.SeverityError, Scope: "src/**"}
+	rules := map[domain.EngineName][]domain.Rule{engine: {rule(purity)}, domain.EngineHarness: {builtIn}}
+	manifest := domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
+		{ID: purity, Engines: map[domain.EngineName]domain.ManifestProof{
+			engine:               {Canary: purityCanary},
+			domain.EngineHarness: {Canary: tsCanary},
+		}},
+		{ID: direction, Waived: &reason},
+		{ID: suffix, Waived: &reason},
+	}}
+	set := &engines{findings: map[string][]shareddomain.Finding{filepath.Base(purityCanary): {finding(purity)}}}
+
+	got, err := handle(t, repo, manifest, rules, set)
+
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	want := []domain.CanaryResult{
+		{Rule: purity, Engine: engine, Canary: purityCanary, Status: domain.CanaryPass},
+		{Rule: purity, Engine: domain.EngineHarness, Canary: tsCanary, Status: domain.CanaryFail, Detail: "the engine harness gave no ddd/domain-purity finding, and the built-in engine reads only TypeScript and JavaScript"},
+		{Rule: direction, Status: domain.CanaryWaived, Detail: waiver},
+		{Rule: suffix, Status: domain.CanaryWaived, Detail: waiver},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("results = %+v, want %+v", got, want)
+	}
+	wantChecks := []check{
+		{dir: filepath.Join(repo, filepath.FromSlash(purityCanary)), engine: engine, rules: []domain.Rule{rule(purity)}},
+		{dir: filepath.Join(repo, filepath.FromSlash(tsCanary)), engine: domain.EngineHarness, rules: []domain.Rule{builtIn}},
+	}
+	if !reflect.DeepEqual(set.checks, wantChecks) {
+		t.Fatalf("checks = %+v, want %+v", set.checks, wantChecks)
+	}
+}
+
+func TestHandlerEnginesNeedAnEntryEach(t *testing.T) {
+	repo := repoWithCanaries(t, purityCanary, directionCanary)
+	rules := active()
+	rules[domain.EngineHarness] = []domain.Rule{{ID: purity, Engine: domain.EngineHarness}}
+
+	_, err := handle(t, repo, fullManifest(), rules, &engines{})
+
+	if !errors.Is(err, domain.ErrOneProofForEngines) || !strings.Contains(err.Error(), "deptrac and harness") {
+		t.Fatalf("Handle = %v, want ErrOneProofForEngines naming both engines", err)
+	}
+}
+
 func TestHandlerNamesTheEngineThatRan(t *testing.T) {
 	repo := repoWithCanaries(t, purityCanary, directionCanary)
 	rules := map[domain.EngineName][]domain.Rule{

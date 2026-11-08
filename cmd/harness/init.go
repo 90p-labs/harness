@@ -52,13 +52,11 @@ const (
 	listSeparator = ", "
 	noItems       = "none"
 
-	packsWroteFormat     = "lint packs: wrote %s\n"
-	packsKeptFormat      = "lint packs: kept %s\n"
-	packsNoneLine        = "lint packs: none detected\n"
-	lintSetupPrefix      = "next: run the lint-setup skill"
-	lintSetupFormat      = lintSetupPrefix + " to set up the architecture rules for %s\n"
-	lintSetupLimitFormat = lintSetupPrefix + " to set up the architecture rules for %s; " +
-		lintdomain.ManifestFile + " holds one canary for each rule, so its canaries prove one language only\n"
+	packsWroteFormat    = "lint packs: wrote %s\n"
+	packsKeptFormat     = "lint packs: kept %s\n"
+	packsNoneLine       = "lint packs: none detected\n"
+	lintSetupPrefix     = "next: run the lint-setup skill"
+	lintSetupFormat     = lintSetupPrefix + " to set up the architecture rules for %s\n"
 	gatesWroteFormat    = "gates: wrote %s\n"
 	setupWroteFormat    = "setup: wrote %s\n"
 	gatesKeptLine       = "gates: kept\n"
@@ -211,11 +209,7 @@ func lintSetupLines(dir string, pluginRules []lintdomain.Rule) ([]string, error)
 			return nil, err
 		}
 		covered := slices.ContainsFunc(pluginRules, func(r lintdomain.Rule) bool { return strings.HasSuffix(r.Scope, language.extension) })
-		switch {
-		case !found || (hasManifest && covered):
-		case hasManifest:
-			lines = append(lines, fmt.Sprintf(lintSetupLimitFormat, language.name))
-		default:
+		if found && !(hasManifest && covered) {
 			lines = append(lines, fmt.Sprintf(lintSetupFormat, language.name))
 		}
 	}

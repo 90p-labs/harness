@@ -119,6 +119,9 @@ func printCanaries(out io.Writer, results []domain.CanaryResult) error {
 	failed := false
 	for _, result := range results {
 		line := result.Rule
+		if result.Engine != "" {
+			line += " " + string(result.Engine)
+		}
 		if result.Canary != "" {
 			line += " " + result.Canary
 		}

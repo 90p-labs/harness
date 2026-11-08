@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -346,6 +347,122 @@ func TestLoad(t *testing.T) {
 			t.Fatalf("Load = %v, want ErrUnknownPack naming django", err)
 		}
 	})
+}
+
+const (
+	phpFolder = "./lint/architecture"
+	phpPack   = domain.PackName("architecture")
+	phpFile   = "src/Order/Domain/Order.php"
+	tsFile    = "src/contexts/order/domain/order.entity.ts"
+)
+
+const (
+	phpScope       = "src/**/*.php"
+	phpRootFile    = "src/Kernel.php"
+	domainPurity   = "ddd/domain-purity"
+	srcRoots       = "ddd/src-roots"
+	notInCatalogue = "ddd/context-layers"
+)
+
+var sharedCatalogue = domain.RuleCatalogue{Packs: []domain.CataloguePack{{Name: domain.PackDDD, Rules: []domain.CatalogueRule{{ID: domainPurity}, {ID: srcRoots}}}}}
+
+func phpPackYAML(id, scope string) string {
+	return "name: architecture\nrules:\n  - id: " + id + "\n    engine: deptrac\n    severity: error\n" +
+		"    scope: \"" + scope + "\"\n    message: The domain uses only itself.\n"
+}
+
+func gitRepo(t *testing.T, files ...string) string {
+	t.Helper()
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	for _, file := range files {
+		target := filepath.Join(repo, filepath.FromSlash(file))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return repo
+}
+
+func TestSharedCatalogueRule(t *testing.T) {
+	for _, id := range []string{domainPurity, srcRoots} {
+		t.Run("loads "+id+" on another engine with no script file in both scopes", func(t *testing.T) {
+			repo := gitRepo(t, phpFile, phpRootFile, tsFile)
+			writePack(t, repo, phpFolder, phpPackYAML(id, phpScope))
+
+			_, active, err := packs.LoadSharing(repo, []string{string(domain.PackDDD), phpFolder}, sharedCatalogue)
+
+			if want := []domain.PackName{domain.PackDDD, phpPack}; err != nil || !reflect.DeepEqual(active, want) {
+				t.Fatalf("LoadSharing = %v, %v, want %v", active, err, want)
+			}
+		})
+	}
+
+	t.Run("refuses a second pack on the same engine", func(t *testing.T) {
+		const otherFolder = "./lint/other"
+		repo := gitRepo(t, phpFile, tsFile)
+		writePack(t, repo, phpFolder, phpPackYAML(domainPurity, phpScope))
+		writePack(t, repo, otherFolder, strings.Replace(phpPackYAML(domainPurity, "src/Other/**/*.php"), "name: "+string(phpPack), "name: other", 1))
+
+		_, _, err := packs.LoadSharing(repo, []string{phpFolder, otherFolder}, sharedCatalogue)
+
+		want := fmt.Sprintf("pack %s, rule %s uses %s, which pack %s already holds", otherFolder, domainPurity, domainPurity, phpPack)
+		if !errors.Is(err, domain.ErrRuleTaken) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("LoadSharing = %v, want ErrRuleTaken containing %q", err, want)
+		}
+	})
+
+	t.Run("refuses an id twice in one pack", func(t *testing.T) {
+		repo := gitRepo(t, phpFile, tsFile)
+		secondRule := strings.TrimPrefix(strings.Replace(phpPackYAML(domainPurity, "src/Other/**/*.php"), "deptrac", "phpstan", 1), "name: "+string(phpPack)+"\nrules:\n")
+		writePack(t, repo, phpFolder, phpPackYAML(domainPurity, phpScope)+secondRule)
+
+		_, _, err := packs.LoadSharing(repo, []string{phpFolder}, sharedCatalogue)
+
+		want := fmt.Sprintf("pack %s, rule %s uses %s, which pack %s already holds", phpFolder, domainPurity, domainPurity, phpPack)
+		if !errors.Is(err, domain.ErrRuleTaken) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("LoadSharing = %v, want ErrRuleTaken containing %q", err, want)
+		}
+	})
+
+	t.Run("refuses a file in both scopes", func(t *testing.T) {
+		repo := gitRepo(t, phpFile, tsFile)
+		writePack(t, repo, phpFolder, phpPackYAML(domainPurity, "src/**"))
+
+		_, _, err := packs.LoadSharing(repo, []string{string(domain.PackDDD), phpFolder}, sharedCatalogue)
+
+		want := "pack " + phpFolder + " on the engine deptrac and pack ddd on the engine harness both check ddd/domain-purity in " + tsFile
+		if !errors.Is(err, domain.ErrScopeOverlap) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("LoadSharing = %v, want ErrScopeOverlap containing %q", err, want)
+		}
+	})
+
+	refused := map[string]struct {
+		id   string
+		load func(repo string, entries []string) (packs.Catalogue, []domain.PackName, error)
+	}{
+		"refuses an id outside the catalogue": {id: notInCatalogue, load: func(repo string, entries []string) (packs.Catalogue, []domain.PackName, error) {
+			return packs.LoadSharing(repo, entries, sharedCatalogue)
+		}},
+		"Load shares no id": {id: domainPurity, load: packs.Load},
+	}
+	for name, tc := range refused {
+		t.Run(name, func(t *testing.T) {
+			repo := gitRepo(t, phpFile, tsFile)
+			writePack(t, repo, phpFolder, phpPackYAML(tc.id, phpScope))
+
+			_, _, err := tc.load(repo, []string{string(domain.PackDDD), phpFolder})
+
+			if !errors.Is(err, domain.ErrRuleTaken) {
+				t.Fatalf("load = %v, want ErrRuleTaken", err)
+			}
+		})
+	}
 }
 
 func TestRuleTakenNamesBothPacks(t *testing.T) {

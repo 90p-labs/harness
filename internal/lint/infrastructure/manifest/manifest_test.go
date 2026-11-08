@@ -49,6 +49,45 @@ rules:
 	}
 }
 
+func TestManifestReadEngines(t *testing.T) {
+	repo := writeManifest(t, `pack: ddd
+rules:
+  - id: ddd/domain-purity
+    engines:
+      harness:
+        waived: the binary fixtures prove it.
+      deptrac:
+        canary: lint/canaries/ddd-domain-purity
+`)
+
+	got, err := manifest.Read(repo)
+
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	waiver := "the binary fixtures prove it."
+	want := domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
+		{ID: "ddd/domain-purity", Engines: map[domain.EngineName]domain.ManifestProof{
+			domain.EngineHarness: {Waived: &waiver},
+			"deptrac":            {Canary: "lint/canaries/ddd-domain-purity"},
+		}},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Read = %+v, want %+v", got, want)
+	}
+
+	for name, content := range map[string]string{
+		"an engine named twice":       "pack: ddd\nrules:\n  - id: ddd/domain-purity\n    engines:\n      deptrac:\n        canary: a\n      deptrac:\n        canary: b\n",
+		"an unknown key of an engine": "pack: ddd\nrules:\n  - id: ddd/domain-purity\n    engines:\n      deptrac:\n        canary: a\n        extra: 1\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := manifest.Read(writeManifest(t, content)); err == nil || !strings.Contains(err.Error(), domain.ManifestFile) {
+				t.Fatalf("Read = %v, want a decode error naming %s", err, domain.ManifestFile)
+			}
+		})
+	}
+}
+
 func TestManifestReadRefuses(t *testing.T) {
 	t.Run("an unknown key", func(t *testing.T) {
 		_, err := manifest.Read(writeManifest(t, "pack: ddd\nextra: 1\nrules: []\n"))

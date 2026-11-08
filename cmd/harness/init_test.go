@@ -144,7 +144,7 @@ func TestInitWithAManifest(t *testing.T) {
 
 	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
 
-	if want := fmt.Sprintf(lintSetupLimitFormat, languageGo); code != exitOK || !strings.Contains(stdout, want) {
+	if want := fmt.Sprintf(lintSetupFormat, languageGo); code != exitOK || !strings.Contains(stdout, want) {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q, because no plugin rule covers Go", code, stdout, stderr, want)
 	}
 	if !strings.Contains(stdout, "gates: wrote go-fmt, go-vet, go-test, lint-canaries\n") {
@@ -256,21 +256,39 @@ func TestInitNextLinePerUncoveredLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := initRepo(t)
-	commitFiles(t, dir, "chore: a PHP and Go repo", map[string]string{
-		configFile: "plugins:\n  - name: canary-lint\n    command: [sh, " + script + "]\n    events: [lint.check]\nlint:\n  packs: [./lint/architecture]\n",
-		"lint/architecture/pack.yaml": "name: architecture\nrules:\n  - id: ddd/domain-purity\n    engine: canary-lint\n    severity: error\n" +
-			"    scope: \"src/**/*.php\"\n    message: The domain depends only on itself.\n",
-		lintdomain.ManifestFile: canaryManifest,
-		composerJSON:            "{}\n",
-		goMod:                   goModuleFile,
-	})
+	cases := map[string]struct {
+		manifest  bool
+		languages []string
+	}{
+		"with a manifest, only the uncovered language": {manifest: true, languages: []string{languageGo}},
+		"with no manifest, also the covered language":  {languages: []string{languagePHP, languageGo}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			files := map[string]string{
+				configFile: "plugins:\n  - name: canary-lint\n    command: [sh, " + script + "]\n    events: [lint.check]\nlint:\n  packs: [./lint/architecture]\n",
+				"lint/architecture/pack.yaml": "name: architecture\nrules:\n  - id: ddd/domain-purity\n    engine: canary-lint\n    severity: error\n" +
+					"    scope: \"src/**/*.php\"\n    message: The domain depends only on itself.\n",
+				composerJSON: "{}\n",
+				goMod:        goModuleFile,
+			}
+			if tc.manifest {
+				files[lintdomain.ManifestFile] = canaryManifest
+			}
+			dir := initRepo(t)
+			commitFiles(t, dir, "chore: a PHP and Go repo", files)
 
-	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+			code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
 
-	want := fmt.Sprintf(lintSetupLimitFormat, languageGo)
-	if code != exitOK || !strings.Contains(stdout, want) || strings.Count(stdout, lintSetupPrefix) != 1 {
-		t.Fatalf("code = %d, stdout = %q, stderr = %q, want one lint-setup line %q", code, stdout, stderr, want)
+			if code != exitOK || strings.Count(stdout, lintSetupPrefix) != len(tc.languages) {
+				t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d lint-setup lines", code, stdout, stderr, len(tc.languages))
+			}
+			for _, language := range tc.languages {
+				if want := fmt.Sprintf(lintSetupFormat, language); !strings.Contains(stdout, want) {
+					t.Fatalf("stdout = %q, want %q", stdout, want)
+				}
+			}
+		})
 	}
 }
 

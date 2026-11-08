@@ -55,6 +55,134 @@ func TestManifestResults(t *testing.T) {
 	}
 }
 
+const (
+	deptrac          = domain.EngineName("deptrac")
+	tsPurityCanary   = "lint/canaries/ts-domain-purity"
+	builtInWaiver    = "the binary fixtures prove it"
+	notInManifestMsg = "not in " + domain.ManifestFile
+)
+
+func proofs(entries map[domain.EngineName]domain.ManifestProof) []domain.ManifestRule {
+	return []domain.ManifestRule{{ID: purity, Engines: entries}}
+}
+
+func TestManifestEngines(t *testing.T) {
+	manifest := domain.Manifest{Pack: domain.PackDDD, Rules: []domain.ManifestRule{
+		{ID: purity, Engines: map[domain.EngineName]domain.ManifestProof{
+			domain.EngineHarness: {Canary: tsPurityCanary},
+			deptrac:              {Canary: purityCanary},
+		}},
+		{ID: suffix, Engines: map[domain.EngineName]domain.ManifestProof{
+			domain.EngineHarness: {Waived: reason(builtInWaiver)},
+		}},
+	}}
+
+	got, err := manifest.Results(catalogue())
+
+	if err != nil {
+		t.Fatalf("Results: %v", err)
+	}
+	want := []domain.CanaryResult{
+		{Rule: purity, Engine: deptrac, Canary: purityCanary, Status: domain.CanaryToRun},
+		{Rule: purity, Engine: domain.EngineHarness, Canary: tsPurityCanary, Status: domain.CanaryToRun},
+		{Rule: direction, Status: domain.CanaryFail, Detail: notInManifestMsg},
+		{Rule: suffix, Engine: domain.EngineHarness, Status: domain.CanaryWaived, Detail: builtInWaiver},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Results = %+v, want %+v", got, want)
+	}
+}
+
+func TestManifestEnginesConfigErrors(t *testing.T) {
+	cases := []struct {
+		name  string
+		rules []domain.ManifestRule
+		want  error
+		names string
+	}{
+		{name: "engines and a canary", rules: []domain.ManifestRule{{ID: purity, Canary: purityCanary, Engines: map[domain.EngineName]domain.ManifestProof{deptrac: {Canary: purityCanary}}}}, want: domain.ErrCanaryOrWaiver, names: purity},
+		{name: "an empty engines map", rules: proofs(map[domain.EngineName]domain.ManifestProof{}), want: domain.ErrCanaryOrWaiver, names: purity},
+		{name: "an engine with neither", rules: proofs(map[domain.EngineName]domain.ManifestProof{deptrac: {}}), want: domain.ErrCanaryOrWaiver, names: string(deptrac)},
+		{name: "an engine with both", rules: proofs(map[domain.EngineName]domain.ManifestProof{deptrac: {Canary: purityCanary, Waived: reason(suffixWaiver)}}), want: domain.ErrCanaryOrWaiver, names: string(deptrac)},
+		{name: "a short engine waiver", rules: proofs(map[domain.EngineName]domain.ManifestProof{deptrac: {Canary: purityCanary}, domain.EngineHarness: {Waived: reason("a")}}), want: domain.ErrShortWaiver, names: string(domain.EngineHarness)},
+		{name: "an engine canary outside", rules: proofs(map[domain.EngineName]domain.ManifestProof{deptrac: {Canary: "../x"}}), want: domain.ErrCanaryOutsideRepo, names: string(deptrac)},
+		{name: "every engine waived", rules: proofs(map[domain.EngineName]domain.ManifestProof{deptrac: {Waived: reason(suffixWaiver)}, domain.EngineHarness: {Waived: reason(builtInWaiver)}}), want: domain.ErrAllWaived, names: domain.ManifestFile},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := domain.Manifest{Pack: domain.PackDDD, Rules: tc.rules}.Results(catalogue())
+
+			if !errors.Is(err, tc.want) || !strings.Contains(err.Error(), tc.names) {
+				t.Fatalf("Results = %v, want %v naming %s", err, tc.want, tc.names)
+			}
+		})
+	}
+}
+
+func TestEnginesCheck(t *testing.T) {
+	both := map[string][]domain.EngineName{purity: {deptrac, domain.EngineHarness}}
+	one := map[string][]domain.EngineName{purity: {deptrac}}
+	single := domain.CanaryResult{Rule: purity, Canary: purityCanary, Status: domain.CanaryToRun}
+	onDeptrac := domain.CanaryResult{Rule: purity, Engine: deptrac, Canary: purityCanary, Status: domain.CanaryToRun}
+	unlisted := domain.CanaryResult{Rule: purity, Status: domain.CanaryFail, Detail: notInManifestMsg}
+	waived := domain.CanaryResult{Rule: suffix, Status: domain.CanaryWaived, Detail: suffixWaiver}
+
+	t.Run("keeps a single entry on its one engine", func(t *testing.T) {
+		got, err := domain.ForEngines([]domain.CanaryResult{single, waived}, one)
+
+		if err != nil || !reflect.DeepEqual(got, []domain.CanaryResult{single, waived}) {
+			t.Fatalf("ForEngines = %+v, %v, want the results unchanged", got, err)
+		}
+	})
+
+	t.Run("fails each active engine with no entry", func(t *testing.T) {
+		got, err := domain.ForEngines([]domain.CanaryResult{onDeptrac}, both)
+
+		want := []domain.CanaryResult{onDeptrac, {Rule: purity, Engine: domain.EngineHarness, Status: domain.CanaryFail, Detail: notInManifestMsg}}
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("ForEngines = %+v, %v, want %+v", got, err, want)
+		}
+	})
+
+	t.Run("fails an unlisted rule once for each engine", func(t *testing.T) {
+		got, err := domain.ForEngines([]domain.CanaryResult{unlisted}, both)
+
+		want := []domain.CanaryResult{
+			{Rule: purity, Engine: deptrac, Status: domain.CanaryFail, Detail: notInManifestMsg},
+			{Rule: purity, Engine: domain.EngineHarness, Status: domain.CanaryFail, Detail: notInManifestMsg},
+		}
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("ForEngines = %+v, %v, want %+v", got, err, want)
+		}
+	})
+
+	errorCases := []struct {
+		name    string
+		results []domain.CanaryResult
+		active  map[string][]domain.EngineName
+		want    error
+		names   []string
+	}{
+		{name: "a single entry for two engines", results: []domain.CanaryResult{single}, active: both, want: domain.ErrOneProofForEngines, names: []string{purity, string(deptrac), string(domain.EngineHarness)}},
+		{name: "a single canary for no engine", results: []domain.CanaryResult{single}, active: nil, want: domain.ErrCanaryRuleInactive, names: []string{purity}},
+		{name: "an entry for an inactive engine", results: []domain.CanaryResult{{Rule: purity, Engine: domain.EngineHarness, Status: domain.CanaryWaived, Detail: builtInWaiver}}, active: one, want: domain.ErrCanaryRuleInactive, names: []string{purity, string(domain.EngineHarness)}},
+	}
+	for _, tc := range errorCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := domain.ForEngines(tc.results, tc.active)
+
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("ForEngines = %v, want %v", err, tc.want)
+			}
+			for _, name := range tc.names {
+				if !strings.Contains(err.Error(), name) {
+					t.Errorf("error %q does not name %s", err, name)
+				}
+			}
+		})
+	}
+}
+
 func TestManifestConfigErrors(t *testing.T) {
 	cases := []struct {
 		name     string

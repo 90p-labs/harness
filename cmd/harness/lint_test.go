@@ -128,6 +128,38 @@ rules:
 	}
 }
 
+func TestLintCanariesEngines(t *testing.T) {
+	clearHarnessEnv(t)
+	script, err := filepath.Abs(canaryLintScript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: canary repo", map[string]string{
+		".harness.yaml": "plugins:\n  - name: canary-lint\n    command: [sh, " + script + "]\n    events: [lint.check]\nlint:\n  packs: [./lint/architecture]\n",
+		"lint/architecture/pack.yaml": "name: architecture\nrules:\n  - id: ddd/domain-purity\n    engine: canary-lint\n    severity: error\n" +
+			"    scope: \"src/**/*.php\"\n    message: The domain depends only on itself.\n",
+		lintdomain.ManifestFile: "pack: ddd\nrules:\n  - id: ddd/domain-purity\n    engines:\n      canary-lint:\n        canary: lint/canaries/php-domain-purity\n" +
+			"  - id: ddd/src-roots\n    waived: the test pack places no file.\n  - id: ddd/layer-direction\n    waived: the test pack has no layers.\n" +
+			"  - id: ddd/cross-context\n    waived: the tool cannot see the contexts.\n  - id: ddd/file-suffix\n    waived: the tool checks dependencies, not file names.\n",
+		"lint/canaries/php-domain-purity/src/Order/Domain/Order.php": "<?php\n// violates: ddd/domain-purity\n",
+	})
+	if code, _, stderr := execute(t, commandLint, commandInit); code != exitOK {
+		t.Fatalf("lint init: code = %d, stderr = %q", code, stderr)
+	}
+
+	code, stdout, stderr := execute(t, commandLint, commandCanaries)
+
+	want := "WAIVED ddd/src-roots: the test pack places no file.\n" +
+		"PASS ddd/domain-purity canary-lint lint/canaries/php-domain-purity\n" +
+		"WAIVED ddd/layer-direction: the test pack has no layers.\n" +
+		"WAIVED ddd/cross-context: the tool cannot see the contexts.\n" +
+		"WAIVED ddd/file-suffix: the tool checks dependencies, not file names.\n"
+	if code != exitOK || stdout != want {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want exit %d and %q", code, stdout, stderr, exitOK, want)
+	}
+}
+
 func TestLintExecPlugin(t *testing.T) {
 	clearHarnessEnv(t)
 	script, err := filepath.Abs(todoLintScript)

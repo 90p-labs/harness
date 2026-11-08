@@ -252,6 +252,11 @@ func readComponents(tree Tree) (componentsConfig, bool, error) {
 	return config, true, json.Unmarshal(raw, &config)
 }
 
+// IsScript tells whether the built-in engine reads the file as TypeScript or JavaScript.
+func IsScript(file string) bool {
+	return slices.Contains(scriptExts, path.Ext(file))
+}
+
 func SrcRoots(tree Tree, _ Graph, settings Settings) []Violation {
 	var found []Violation
 	seen := map[string]bool{}
@@ -263,9 +268,10 @@ func SrcRoots(tree Tree, _ Graph, settings Settings) []Violation {
 		}
 		name, _, nested := strings.Cut(rest, pathSeparator)
 		switch {
+		case !IsScript(file):
 		case !nested && !slices.Contains(settings.DDD.SrcFiles, name):
 			found = append(found, Violation{File: file})
-		case nested && !slices.Contains(allowed, name) && !seen[name] && slices.Contains(scriptExts, path.Ext(file)):
+		case nested && !slices.Contains(allowed, name) && !seen[name]:
 			seen[name] = true
 			found = append(found, Violation{File: path.Join(sourceFolder, name)})
 		}
@@ -460,7 +466,7 @@ func AppRouterFiles(tree Tree, _ Graph, _ Settings) []Violation {
 func isAppRouterFile(name string) bool {
 	ext := path.Ext(name)
 	stem := strings.TrimSuffix(name, ext)
-	return slices.Contains(routeStems, stem) && slices.Contains(scriptExts, ext) ||
+	return slices.Contains(routeStems, stem) && IsScript(name) ||
 		slices.Contains(metadataStems, stem) ||
 		strings.HasSuffix(name, cssModuleSuffix) ||
 		name == globalStylesFile
