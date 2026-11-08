@@ -84,11 +84,13 @@ if [ "${1:-}" = hook ]; then
 				rm -f "$stale"
 			fi
 		done
-		if [ -f "$failure" ]; then
-			echo "harness: binary missing, hook skipped. The release download failed: $(cat "$failure"). To fix: $no_binary_help" >&2
-			skip_hook
-		fi
 		if (set -C; : >"$lock") 2>/dev/null; then
+			# Only a lock holder writes the failure file, so a check before the lock can miss a failure that frees the lock.
+			if [ -f "$failure" ]; then
+				rm -f "$lock"
+				echo "harness: binary missing, hook skipped. The release download failed: $(cat "$failure"). To fix: $no_binary_help" >&2
+				skip_hook
+			fi
 			(
 				trap 'rm -f "$lock"; [ -z "${tmp:-}" ] || rm -rf "$tmp"' EXIT
 				trap 'exit 1' HUP INT TERM
