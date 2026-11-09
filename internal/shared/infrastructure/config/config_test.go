@@ -70,18 +70,13 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("plugins = %+v, want none", got.Plugins)
 	}
 	wantRoles := map[string]config.RoleHost{
-		"explorer": {"claude": "haiku"},
-		"worker":   {"claude": "sonnet"},
+		"explorer": {"claude": {"haiku"}},
+		"worker":   {"claude": {"sonnet", "haiku"}},
+		"reviewer": {"claude": {"sonnet", "haiku", "opus"}},
+		"advisor":  {"claude": {"fable"}},
 	}
-	if len(got.Roles) != len(wantRoles) {
-		t.Fatalf("roles = %+v, want %+v", got.Roles, wantRoles)
-	}
-	for role, hosts := range wantRoles {
-		for host, model := range hosts {
-			if got.Roles[role][host] != model {
-				t.Errorf("roles.%s.%s = %q, want %q", role, host, got.Roles[role][host], model)
-			}
-		}
+	if !reflect.DeepEqual(got.Roles, wantRoles) {
+		t.Errorf("roles = %+v, want %+v", got.Roles, wantRoles)
 	}
 }
 
@@ -381,19 +376,26 @@ func TestLoadInvalidTimeout(t *testing.T) {
 }
 
 func TestLoadRoles(t *testing.T) {
-	got, err := load(t, "roles:\n  lead:\n    codex: gpt-5\n  reviewer:\n    claude: opus\n")
+	got, err := load(t, "roles:\n  lead:\n    codex: gpt-5\n  reviewer:\n    claude: opus\n  worker:\n    claude: [opus, sonnet]\n")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
 	want := map[string]config.RoleHost{
-		"lead":     {"codex": "gpt-5"},
-		"reviewer": {"claude": "opus"},
-		"explorer": {"claude": "haiku"},
-		"worker":   {"claude": "sonnet"},
+		"lead":     {"codex": {"gpt-5"}},
+		"reviewer": {"claude": {"opus"}},
+		"worker":   {"claude": {"opus", "sonnet"}},
+		"explorer": {"claude": {"haiku"}},
+		"advisor":  {"claude": {"fable"}},
 	}
 	if !reflect.DeepEqual(got.Roles, want) {
 		t.Errorf("roles = %+v, want %+v", got.Roles, want)
+	}
+}
+
+func TestLoadAdvisorRole(t *testing.T) {
+	if _, err := load(t, "roles:\n  advisor:\n    claude: fable\n"); err != nil {
+		t.Fatalf("load: %v", err)
 	}
 }
 

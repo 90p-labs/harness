@@ -245,6 +245,7 @@ type treeView struct {
 
 type taskRow struct {
 	Key, Name, Side     string
+	Model               string
 	Number              int
 	TestFirst           template.HTML
 	Owned               []string
@@ -600,7 +601,7 @@ func (b *builder) waves() []waveRow {
 
 func (b *builder) task(t domain.Task) taskRow {
 	row := taskRow{
-		Key: number(keyTask, t.Number), Number: t.Number, Name: t.Name, Side: t.Side,
+		Key: number(keyTask, t.Number), Number: t.Number, Name: t.Name, Side: t.Side, Model: t.Model,
 		TestFirst: inline(t.TestFirst), Owned: t.Owned, After: b.taskChips(t.DependsOn),
 	}
 	for _, n := range t.DoD {

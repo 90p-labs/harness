@@ -4,6 +4,7 @@ import "path"
 
 const (
 	TransitionSubmitForReview = "submit-for-review"
+	TransitionApproveReview   = "approve-review"
 
 	PhasePlanning         = "planning"
 	PhaseAwaitingApproval = "awaiting_approval"

@@ -7,4 +7,5 @@ const (
 	RoleWorker   Role = "worker"
 	RoleReviewer Role = "reviewer"
 	RoleExplorer Role = "explorer"
+	RoleAdvisor  Role = "advisor"
 )

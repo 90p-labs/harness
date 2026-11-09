@@ -24,22 +24,23 @@ import (
 )
 
 const (
-	pluginPrefix   = "guard."
-	forcePush      = "git push --force origin feat/x"
-	metricDenies   = "harness.guard.denies"
-	attrRule       = "harness.rule"
-	toolBash       = "Bash"
-	toolAgent      = "Agent"
-	branchDevelop  = "develop"
-	emDashText     = "fix — it\n"
-	modelSonnet    = "sonnet"
-	modelGPT       = "gpt-5"
-	roleWorker     = "worker"
-	pushToDevelop  = "git push origin HEAD:develop"
-	pushToMain     = "git push origin HEAD:main"
-	stopReason     = "the run is in phase working and is not finished"
-	missingBodyMsg = "missing.md"
-	subDir         = "sub"
+	pluginPrefix         = "guard."
+	pluginReviewRecorder = pluginPrefix + "review-recorder"
+	forcePush            = "git push --force origin feat/x"
+	metricDenies         = "harness.guard.denies"
+	attrRule             = "harness.rule"
+	toolBash             = "Bash"
+	toolAgent            = "Agent"
+	branchDevelop        = "develop"
+	emDashText           = "fix — it\n"
+	modelSonnet          = "sonnet"
+	modelGPT             = "gpt-5"
+	roleWorker           = "worker"
+	pushToDevelop        = "git push origin HEAD:develop"
+	pushToMain           = "git push origin HEAD:main"
+	stopReason           = "the run is in phase working and is not finished"
+	missingBodyMsg       = "missing.md"
+	subDir               = "sub"
 )
 
 type fakeStop struct {
@@ -62,7 +63,7 @@ func deps(stop domain.StopDecider) guardplugin.Deps {
 		DefaultBranch: func(context.Context, string) (string, error) { return "main", nil },
 		Stop:          stop,
 		CommitChecked: func(context.Context, string) (bool, error) { return true, nil },
-		Models:        map[shareddomain.Host]map[string]string{},
+		Models:        map[shareddomain.Host]map[string][]string{},
 		Meter:         metricnoop.NewMeterProvider().Meter("test"),
 	}
 }
@@ -127,28 +128,33 @@ func TestGuardPluginNames(t *testing.T) {
 	for _, rule := range domain.Rules() {
 		want = append(want, pluginPrefix+rule.ID)
 	}
-	want = append(want, pluginPrefix+domain.RuleStopHoldsTurn)
+	want = append(want, pluginPrefix+domain.RuleStopHoldsTurn, pluginReviewRecorder, pluginPrefix+domain.RuleReviewModels)
+	events := map[string]shareddomain.EventName{
+		pluginPrefix + domain.RuleStopHoldsTurn: shareddomain.EventTurnStopping,
+		pluginReviewRecorder:                    shareddomain.EventToolAfter,
+		pluginPrefix + domain.RuleReviewModels:  shareddomain.EventRunTransitionBefore,
+	}
 	var got []string
 	for _, p := range plugins {
 		got = append(got, p.Name())
-		event := shareddomain.EventToolBefore
-		if p.Name() == pluginPrefix+domain.RuleStopHoldsTurn {
-			event = shareddomain.EventTurnStopping
+		event, ok := events[p.Name()]
+		if !ok {
+			event = shareddomain.EventToolBefore
 		}
 		if !slices.Equal(p.Subscribes(), []shareddomain.EventName{event}) {
 			t.Errorf("%s subscribes to %v, want only %s", p.Name(), p.Subscribes(), event)
 		}
 	}
-	if len(want) != 14 || !slices.Equal(got, want) {
-		t.Fatalf("names = %v, want the 14 %v", got, want)
+	if len(want) != 16 || !slices.Equal(got, want) {
+		t.Fatalf("names = %v, want the 16 %v", got, want)
 	}
 }
 
 func TestGuardDisabled(t *testing.T) {
 	plugins := build(t, []string{domain.RuleGitNoForce, domain.RuleStopHoldsTurn}, deps(&fakeStop{}))
 
-	if len(plugins) != 12 {
-		t.Fatalf("plugins = %d, want 12", len(plugins))
+	if len(plugins) != 14 {
+		t.Fatalf("plugins = %d, want 14", len(plugins))
 	}
 	for _, p := range plugins {
 		if p.Name() == pluginPrefix+domain.RuleGitNoForce || p.Name() == pluginPrefix+domain.RuleStopHoldsTurn {
@@ -211,9 +217,9 @@ func TestCommitsCheckedRule(t *testing.T) {
 
 func TestAgentModelRouting(t *testing.T) {
 	d := deps(&fakeStop{})
-	d.Models = map[shareddomain.Host]map[string]string{
-		shareddomain.HostClaude: {roleWorker: modelSonnet},
-		shareddomain.HostCodex:  {roleWorker: modelGPT},
+	d.Models = map[shareddomain.Host]map[string][]string{
+		shareddomain.HostClaude: {roleWorker: {modelSonnet}},
+		shareddomain.HostCodex:  {roleWorker: {modelGPT}},
 	}
 	bus := newBus(build(t, nil, d))
 	call := func(host shareddomain.Host, model string) shareddomain.Verdict {
@@ -392,7 +398,7 @@ func TestDefaultBranchOverride(t *testing.T) {
 	})
 
 	t.Run("configured value skips git", func(t *testing.T) {
-		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil })
+		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil }, nil, nil)
 		if err != nil {
 			t.Fatalf("new plugins: %v", err)
 		}

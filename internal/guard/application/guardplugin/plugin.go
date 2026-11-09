@@ -25,14 +25,16 @@ type Deps struct {
 	DefaultBranch func(ctx context.Context, dir string) (string, error)
 	Stop          domain.StopDecider
 	CommitChecked func(ctx context.Context, dir string) (bool, error)
-	Models        map[shareddomain.Host]map[string]string
+	SaveReview    func(ctx context.Context, dir, model string) error
+	ReviewModels  func(ctx context.Context, dir string) ([]string, error)
+	Models        map[shareddomain.Host]map[string][]string
 	Worktree      string
 	Meter         metric.Meter
 }
 
 func Plugins(disabled []string, deps Deps) ([]shareddomain.Plugin, error) {
 	rules := domain.Rules()
-	known := []string{domain.RuleStopHoldsTurn}
+	known := []string{domain.RuleStopHoldsTurn, domain.RuleReviewModels}
 	for _, rule := range rules {
 		known = append(known, rule.ID)
 	}
@@ -54,6 +56,9 @@ func Plugins(disabled []string, deps Deps) ([]shareddomain.Plugin, error) {
 	}
 	if !slices.Contains(disabled, domain.RuleStopHoldsTurn) {
 		plugins = append(plugins, stopPlugin{stop: deps.Stop, denies: denies})
+	}
+	if !slices.Contains(disabled, domain.RuleReviewModels) {
+		plugins = append(plugins, reviewRecorder{deps: deps}, reviewShip{deps: deps, denies: denies})
 	}
 	return plugins, nil
 }

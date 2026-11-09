@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
@@ -10,6 +11,7 @@ import (
 const (
 	agentTypeSeparator = ":"
 	noModel            = "no model"
+	modelSeparator     = ", "
 )
 
 var agentRoles = map[string]shareddomain.Role{
@@ -22,6 +24,7 @@ var agentRoles = map[string]shareddomain.Role{
 	"second-reviewer":   shareddomain.RoleReviewer,
 	"code-reviewer":     shareddomain.RoleReviewer,
 	"pr-reviewer":       shareddomain.RoleReviewer,
+	"advisor":           shareddomain.RoleAdvisor,
 }
 
 func agentRole(agentType string) shareddomain.Role {
@@ -33,16 +36,17 @@ func agentRole(agentType string) shareddomain.Role {
 
 func denyAgentModel(call ToolCall, rc RuleContext) (string, bool) {
 	role := agentRole(call.AgentType)
-	want, ok := rc.AgentModels[string(role)]
-	if role == "" || !ok || call.Model == want {
+	models := rc.AgentModels[string(role)]
+	if role == "" || len(models) == 0 || slices.Contains(models, call.Model) {
 		return "", false
 	}
 	got := call.Model
 	if got == "" {
 		got = noModel
 	}
+	want := strings.Join(models, modelSeparator)
 	return deny(
-		fmt.Sprintf("the %s role runs on the model %s, and this call has %s", role, want, got),
-		fmt.Sprintf("set the model to %s", want),
+		fmt.Sprintf("the %s role runs on one of the models %s, and this call has %s", role, want, got),
+		fmt.Sprintf("set the model to one of %s", want),
 	)
 }

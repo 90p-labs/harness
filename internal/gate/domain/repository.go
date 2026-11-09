@@ -27,3 +27,15 @@ type CommitCheckRepository interface {
 	Passed(ctx context.Context, repo, headSHA string) (bool, error)
 	Save(ctx context.Context, check CommitCheck) error
 }
+
+type ReviewRecord struct {
+	Repo    string
+	HeadSHA string
+	Model   string
+	At      time.Time
+}
+
+type ReviewRecordRepository interface {
+	Save(ctx context.Context, record ReviewRecord) error
+	Models(ctx context.Context, repo, headSHA string) ([]string, error)
+}

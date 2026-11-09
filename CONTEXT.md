@@ -16,6 +16,9 @@ These terms have one meaning in the code, the docs and the plans.
 - **Grill**: the rounds of questions that turn each open question into a decision of the user.
 - **Frontier**: the open questions whose parent decisions are made. One round asks the whole frontier.
 - **Approval record**: a row that holds the run id and the SHA-256 of `plan.md` when the user picks `Approve` on the `Plan` question. `run approve` needs it, unless `--by` names a model.
+- **Role**: a job of a subagent, such as `explorer`, `worker`, `reviewer` or `advisor`. `.harness.yaml` gives each role the models that it may use on each host.
+- **Review lens**: the question of one reviewer. `Spec` checks the diff against `plan.md`. `Standards` checks it against the repository rules.
+- **Review record**: a row that holds the repo, the `HEAD` and the model of one dispatched `reviewer` agent. `run ship` needs 2 distinct models on `HEAD`.
 - **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`.
 
 ## Plugin terms

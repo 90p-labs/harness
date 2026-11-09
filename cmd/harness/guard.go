@@ -51,15 +51,15 @@ func openState(ctx context.Context, cfg config.Config, commonDir string) (*dbal.
 	return db, nil
 }
 
-func modelsByHost(roles map[string]config.RoleHost) map[shareddomain.Host]map[string]string {
-	models := map[shareddomain.Host]map[string]string{}
+func modelsByHost(roles map[string]config.RoleHost) map[shareddomain.Host]map[string][]string {
+	models := map[shareddomain.Host]map[string][]string{}
 	for role, hosts := range roles {
-		for host, model := range hosts {
+		for host, list := range hosts {
 			h := shareddomain.Host(host)
 			if models[h] == nil {
-				models[h] = map[string]string{}
+				models[h] = map[string][]string{}
 			}
-			models[h][role] = model
+			models[h][role] = list
 		}
 	}
 	return models

@@ -10,7 +10,7 @@ const (
 	EventApprovePlan   Event = "approve-plan"
 	EventAmend         Event = "amend"
 	EventRequestRework Event = "request-rework"
-	EventApproveReview Event = "approve-review"
+	EventApproveReview       = Event(shareddomain.TransitionApproveReview)
 	EventComplete      Event = "complete"
 	EventDeploy        Event = "deploy"
 	EventClose         Event = "close"

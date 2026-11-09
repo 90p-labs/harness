@@ -19,6 +19,9 @@ const (
 	skillFile        = "skills/harness/SKILL.md"
 	grillFile        = "skills/harness/references/grill.md"
 	explorerFile     = "agents/explorer.md"
+	advisorFile      = "agents/advisor.md"
+	workerFile       = "agents/worker.md"
+	advisorRole      = "`advisor`"
 	grillingSource   = "https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md"
 	mitLicense       = "MIT"
 	explorerRole     = "`explorer`"
@@ -63,6 +66,10 @@ func TestHarnessSkillGrill(t *testing.T) {
 	if explore < 0 || submit < 0 || explore > submit {
 		t.Errorf("%s: the explorer (at %d) must come before %s (at %d)", skillFile, explore, runPlanCommand, submit)
 	}
+	advise := strings.Index(skill, advisorRole)
+	if advise < explore || advise > submit {
+		t.Errorf("%s: the advisor (at %d) must sit between the explorer (at %d) and %s (at %d)", skillFile, advise, explore, runPlanCommand, submit)
+	}
 	for _, want := range []string{grillFile[len("skills/harness/"):], shareddomain.ApprovalHeader, shareddomain.ApproveLabel, shareddomain.ChangePlanLabel} {
 		if !strings.Contains(skill, want) {
 			t.Errorf("%s does not name %q", skillFile, want)
@@ -85,9 +92,18 @@ func TestHarnessSkillGrill(t *testing.T) {
 		}
 		last = at
 	}
-	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer, prOpenSkill: readDoc(t, prOpenSkill)} {
+	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer, advisorFile: readDoc(t, advisorFile), workerFile: readDoc(t, workerFile), prOpenSkill: readDoc(t, prOpenSkill)} {
 		if strings.Contains(text, emDash) || strings.ContainsFunc(text, isEmoji) {
 			t.Errorf("%s has an em dash or an emoji", path)
+		}
+	}
+}
+
+func TestAgentFiles(t *testing.T) {
+	want := frontmatterKeys(t, reviewerAgent)
+	for _, path := range []string{advisorFile, workerFile} {
+		if got := frontmatterKeys(t, path); !slices.Equal(got, want) {
+			t.Errorf("%s frontmatter keys = %v, want the keys of %s: %v", path, got, reviewerAgent, want)
 		}
 	}
 }

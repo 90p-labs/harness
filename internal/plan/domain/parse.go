@@ -272,6 +272,8 @@ func (p *parser) taskField(line string, n int) {
 		}
 	case FieldTestFirst:
 		t.TestFirst = value
+	case FieldModel:
+		t.Model = value
 	case FieldDoD:
 		numbers, _, ok := parseNumbers(value, "criterion ", "criteria ")
 		if !ok {

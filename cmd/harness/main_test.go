@@ -205,7 +205,7 @@ func TestConfigCommand(t *testing.T) {
 	if code != exitOK || stderr != "" {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
-	for _, want := range []string{"dsn: sqlite:.harness/state.db", "max_review_rounds: 3", "name: guard", "timeout: 5s", "timeout: 750ms", "worker:", "claude: sonnet", "- writing-style", "default_branch: develop"} {
+	for _, want := range []string{"dsn: sqlite:.harness/state.db", "max_review_rounds: 3", "name: guard", "timeout: 5s", "timeout: 750ms", "worker:", "claude:\n            - sonnet\n            - haiku\n", "- writing-style", "default_branch: develop"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, want)
 		}
@@ -866,6 +866,12 @@ func editPlan(t *testing.T, dir, runID string, edit func(string) string) {
 	}
 }
 
+const (
+	reviewerDoneFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"subagent_type":"harness:reviewer","model":%q,"prompt":"review"}}`
+	modelSonnet        = "sonnet"
+	modelHaiku         = "haiku"
+)
+
 func TestRunLifecycle(t *testing.T) {
 	clearHarnessEnv(t)
 	dir, valid := tracedRepo(t)
@@ -884,6 +890,11 @@ func TestRunLifecycle(t *testing.T) {
 	for _, step := range steps {
 		if step.args[0] == "review" {
 			verifyPasses(t)
+		}
+		if step.args[0] == "ship" {
+			for _, model := range []string{modelSonnet, modelHaiku} {
+				answer(t, hostClaude, fmt.Sprintf(reviewerDoneFormat, model))
+			}
 		}
 		code, stdout, stderr := execute(t, append([]string{commandRun}, step.args...)...)
 		if code != exitOK || stderr != "" {

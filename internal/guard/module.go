@@ -17,10 +17,12 @@ const instrumentationName = "github.com/jorge07/harness/internal/guard"
 func NewPlugins(
 	disabled []string,
 	defaultBranch string,
-	models map[shareddomain.Host]map[string]string,
+	models map[shareddomain.Host]map[string][]string,
 	worktree string,
 	stop domain.StopDecider,
 	commitChecked func(ctx context.Context, dir string) (bool, error),
+	saveReview func(ctx context.Context, dir, model string) error,
+	reviewModels func(ctx context.Context, dir string) ([]string, error),
 ) ([]shareddomain.Plugin, error) {
 	resolve := git.DefaultBranch
 	if defaultBranch != "" {
@@ -31,6 +33,8 @@ func NewPlugins(
 		DefaultBranch: resolve,
 		Stop:          stop,
 		CommitChecked: commitChecked,
+		SaveReview:    saveReview,
+		ReviewModels:  reviewModels,
 		Models:        models,
 		Worktree:      worktree,
 		Meter:         otel.Meter(instrumentationName),

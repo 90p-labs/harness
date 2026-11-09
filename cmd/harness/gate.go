@@ -193,3 +193,46 @@ func (a commitCheckAdapter) Passed(ctx context.Context, dir string) (checked boo
 	defer func() { err = errors.Join(err, db.Close()) }()
 	return gatemodule.NewCommitChecks(db).Passed(ctx, repo, head)
 }
+
+type reviewRecordAdapter struct {
+	cfg config.Config
+}
+
+func (a reviewRecordAdapter) Models(ctx context.Context, dir string) (models []string, err error) {
+	head, repo, records, closeState, err := a.open(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, closeState()) }()
+	return records.Models(ctx, repo, head)
+}
+
+func (a reviewRecordAdapter) Save(ctx context.Context, dir, model string) (err error) {
+	head, repo, records, closeState, err := a.open(ctx, dir)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, closeState()) }()
+	return records.Save(ctx, gatedomain.ReviewRecord{Repo: repo, HeadSHA: head, Model: model, At: time.Now()})
+}
+
+func (a reviewRecordAdapter) open(ctx context.Context, dir string) (head, repo string, records gatedomain.ReviewRecordRepository, closeState func() error, err error) {
+	if dir, err = filepath.Abs(dir); err != nil {
+		return "", "", nil, nil, err
+	}
+	if head, err = git.Head(ctx, dir); err != nil {
+		return "", "", nil, nil, err
+	}
+	if repo, _, err = git.RepoKey(ctx, dir); err != nil {
+		return "", "", nil, nil, err
+	}
+	commonDir, err := git.CommonDir(ctx, dir)
+	if err != nil {
+		return "", "", nil, nil, err
+	}
+	db, err := openState(ctx, a.cfg, commonDir)
+	if err != nil {
+		return "", "", nil, nil, err
+	}
+	return head, repo, gatemodule.NewReviewRecords(db), db.Close, nil
+}

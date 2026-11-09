@@ -62,7 +62,7 @@ type RuleContext struct {
 	Cwd           string
 	Worktree      string
 	DefaultBranch func() (string, error)
-	AgentModels   map[string]string
+	AgentModels   map[string][]string
 	TextErr       error
 	CommitChecked func() (bool, error)
 }

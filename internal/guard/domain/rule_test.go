@@ -47,7 +47,7 @@ func baseContext() RuleContext {
 		Cwd:           testWork,
 		Worktree:      testWork,
 		DefaultBranch: func() (string, error) { return defaultTip, nil },
-		AgentModels:   map[string]string{"explorer": "haiku", "worker": "sonnet"},
+		AgentModels:   map[string][]string{"explorer": {"haiku"}, "worker": {"sonnet", "haiku"}},
 		CommitChecked: func() (bool, error) { return true, nil },
 	}
 }
@@ -236,7 +236,9 @@ func ruleCases() map[string][]ruleCase {
 		RuleAgentModelRouting: {
 			{name: "explorer without model", call: agentOf("Explore", ""), deny: true, step: "haiku"},
 			{name: "harness explorer with another model", call: agentOf("harness:explorer", "sonnet"), deny: true, step: "haiku"},
-			{name: "worker with another model", call: agentOf("kodify:worker", "opus"), deny: true, step: "sonnet"},
+			{name: "worker with an unlisted model", call: agentOf("kodify:worker", "opus"), deny: true, step: "one of sonnet, haiku"},
+			{name: "worker without model", call: agentOf("worker", ""), deny: true, step: "one of sonnet, haiku"},
+			{name: "worker with the second listed model", call: agentOf("worker", "haiku")},
 			{name: "explorer model", call: agentOf("general-purpose", "haiku")},
 			{name: "prefixed upper case worker", call: agentOf("kodify:Worker", "sonnet")},
 			{name: "unknown type", call: agentOf("Plan", "")},

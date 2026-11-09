@@ -42,13 +42,24 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step.
 ## Phases
 
 1. `planning`: start the `explorer` agent on the model of the `explorer` role in `.harness.yaml`. Give it the prompt. It reads `CONTEXT.md`, `docs/adr/` and the code that the change touches, and returns the facts and the open decisions.
-2. `planning`: write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`. Run `harness plan check`, then `harness run plan`.
+2. `planning`: write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`. Run `harness plan check`. Then start the `advisor` agent on the model of the `advisor` role. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept. Then run `harness run plan`.
 3. `awaiting_approval`: show the plan (`harness plan view` gives the page). Grill the open questions in rounds with the question tool of the host: `references/grill.md`. When `## Open questions` holds only `- none`, ask the `Plan` question with the options `Approve` (first) and `Change the plan`. Stop until the user answers.
    - On `Approve`, the hook records the approval for the current `plan.md`. Run `harness run approve`.
    - On `Change the plan`, ask what to change, edit `plan.md`, and ask the `Plan` question again.
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
-4. `working`: for each task, write the failing test first, then the code. Run `harness verify` until each gate and each criterion passes. Commit, run `harness verify --commits <default branch>`, then `harness run review`.
-5. `reviewing`: start the `reviewer` agent on the diff, on the model of the `reviewer` role in `.harness.yaml`. With findings, run `harness run rework --findings "<summary>"` and go back to `working`. With none, run `harness run ship`.
+4. `working`: you are the driver. You do not write the code of a task. `harness plan view` gives the waves.
+   - For each wave, start one `worker` agent for each task, in the background, on the model of the `Model` field of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap.
+   - Use low effort for a haiku task that is mundane: docs, a rename or a config change.
+   - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.
+   - Send a failed task to a new worker once.
+   - Commit in plan order, one commit for each task. Run `harness verify --commits <default branch>`, then `harness run review`.
+5. `reviewing`: start new `reviewer` agents in parallel, each in a fresh context.
+   - Lens `Spec` on the first model of the `reviewer` role. Lens `Standards` on the second model.
+   - Add a third reviewer, lens `Spec`, on the last model of the role. Do it when the diff changes more than 400 lines, or when the plan names a state, concurrency or security risk.
+   - Keep each report as it is: do not merge the findings into one list. One finding with a proof counts. Rerun the proof of each blocker. Give each inferred finding one check. Do not rerank across lenses.
+   - A reviewer with no result gets one new agent. A second gap is not a pass.
+   - With findings, run `harness run rework --findings "<summary>"` and go back to `working`. Each round starts new reviewers.
+   - With none, run `harness run ship`. The guard needs 2 reviewer models on `HEAD`.
 6. `shipping`: start the `pr-open` skill. It pushes the branch and opens the pull request as a draft, with the body Why, What and How. The user merges it. Then run `harness run done --pr <url>`.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
