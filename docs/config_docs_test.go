@@ -1,4 +1,4 @@
-package harness
+package docs_test
 
 import (
 	"reflect"
@@ -10,6 +10,7 @@ import (
 	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -23,8 +24,8 @@ const (
 )
 
 func TestConfigurationPage(t *testing.T) {
-	page := readDoc(t, configPage)
-	if strings.Contains(page, emDash) || strings.ContainsFunc(page, isEmoji) {
+	page := repository.Read(t, configPage)
+	if strings.Contains(page, repository.EmDash) || strings.ContainsFunc(page, repository.IsEmoji) {
 		t.Errorf("%s has an em dash or an emoji", configPage)
 	}
 
@@ -33,7 +34,7 @@ func TestConfigurationPage(t *testing.T) {
 	for i := range top.NumField() {
 		field := top.Field(i)
 		key := field.Tag.Get(keyTag)
-		body := section(t, page, "\n## `"+key+"`\n")
+		body := repository.Section(t, page, "\n## `"+key+"`\n")
 		sections[key] = body
 		for _, path := range leafPaths(field.Type, "") {
 			if !strings.Contains(body, "\n| `"+path+"` |") {

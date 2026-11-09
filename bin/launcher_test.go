@@ -1,4 +1,4 @@
-package harness
+package bin_test
 
 import (
 	"bytes"
@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -30,12 +32,14 @@ const (
 	downloadWait    = 30 * time.Second
 	pollInterval    = 50 * time.Millisecond
 	hookReachesLock = 200 * time.Millisecond
+	claudeManifest  = ".claude-plugin/plugin.json"
 )
 
-var stopHook = []string{"hook", "--host", "claude", "stop"}
-
-// The launcher must work with only these tools: no gh and no go.
-var launcherTools = []string{"sh", "git", "uname", "tr", "mkdir", "find", "rm", "mktemp", "chmod", "mv", "readlink", "cat"}
+var (
+	stopHook = []string{"hook", "--host", "claude", "stop"}
+	// The launcher must work with only these tools: no gh and no go.
+	launcherTools = []string{"sh", "git", "uname", "tr", "mkdir", "find", "rm", "mktemp", "chmod", "mv", "readlink", "cat"}
+)
 
 type launcher struct {
 	root, binary, path string
@@ -45,7 +49,7 @@ func newLauncher(t *testing.T) launcher {
 	t.Helper()
 	root := t.TempDir()
 	for _, file := range []string{launcherPath, claudeManifest} {
-		raw, err := os.ReadFile(file)
+		raw, err := os.ReadFile(repository.Path(t, file))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -234,6 +238,7 @@ func TestLauncher(t *testing.T) {
 				t.Fatal("the hook did not reach the stale checks")
 			}
 		}
+
 		// The wait lets an early failure check pass before the failure file exists; the fixed hook passes in any order.
 		time.Sleep(hookReachesLock)
 		if err := os.WriteFile(failure, []byte(ghError), privateMode); err != nil {

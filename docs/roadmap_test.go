@@ -1,10 +1,12 @@
-package harness
+package docs_test
 
 import (
 	"os"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -16,10 +18,12 @@ const (
 	kodifyIDWant  = 16
 )
 
-var kodifyRow = regexp.MustCompile(`(?m)^\| (K\d+) \|`)
+var (
+	kodifyRow = regexp.MustCompile(`(?m)^\| (K\d+) \|`)
+)
 
 func TestEveryKodifyIssueHasARoadmapPR(t *testing.T) {
-	design, err := os.ReadFile(designFile)
+	design, err := os.ReadFile(repository.Path(t, designFile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +32,7 @@ func TestEveryKodifyIssueHasARoadmapPR(t *testing.T) {
 		t.Fatalf("%s has %d kodify ids, want %d", designFile, len(ids), kodifyIDWant)
 	}
 
-	roadmap, err := os.ReadFile(roadmapFile)
+	roadmap, err := os.ReadFile(repository.Path(t, roadmapFile))
 	if err != nil {
 		t.Fatal(err)
 	}

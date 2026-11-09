@@ -1,4 +1,4 @@
-package harness
+package report_test
 
 import (
 	"errors"
@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/90p-labs/harness/internal/report/domain"
+	reportdomain "github.com/90p-labs/harness/internal/report/domain"
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -16,22 +17,24 @@ const (
 		"Reproduction > Actual, Traces, Traces > Host, Traces > Output, Fix suggestion, Workaround"
 )
 
-var templatePlaceholder = regexp.MustCompile(`\[fill: [^\]]+\]`)
+var (
+	templatePlaceholder = regexp.MustCompile(`\[fill: [^\]]+\]`)
+)
 
 func TestReportTemplate(t *testing.T) {
-	raw, err := os.ReadFile(issueTemplateFile)
+	raw, err := os.ReadFile(repository.Path(t, issueTemplateFile))
 	if err != nil {
 		t.Fatal(err)
 	}
 	template := string(raw)
 
-	err = domain.Draft{Title: "t", Body: template}.Check()
-	if !errors.Is(err, domain.ErrDraftIncomplete) || !strings.HasSuffix(err.Error(), ": "+allSections) {
+	err = reportdomain.Draft{Title: "t", Body: template}.Check()
+	if !errors.Is(err, reportdomain.ErrDraftIncomplete) || !strings.HasSuffix(err.Error(), ": "+allSections) {
 		t.Fatalf("the unfilled template: Check() = %v, want every section missing", err)
 	}
 
 	filled := templatePlaceholder.ReplaceAllString(template, "filled")
-	if err := (domain.Draft{Title: "t", Body: filled}).Check(); err != nil {
+	if err := (reportdomain.Draft{Title: "t", Body: filled}).Check(); err != nil {
 		t.Fatalf("the filled template: Check() = %v, want nil", err)
 	}
 }
