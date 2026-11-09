@@ -374,7 +374,7 @@ OpenTelemetry is mandatory. Every command and hook starts the providers.
 - `Setup(ctx, version) (shutdown, err)` installs one SDK `TracerProvider` and one `MeterProvider` as the global providers. It does this also when it returns an error.
 - The resource has `service.name` `harness` and `service.version` from the argument.
 - One signal reads the first endpoint env that is set, in this order: `HARNESS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `HARNESS_OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT`. Metrics use the same order with `METRICS`.
-- A general name gets `/v1/traces` or `/v1/metrics` joined to its path. A signal name is used as it is. The harness passes the chosen URL to the exporter, and an error names the variable that it read.
+- A general name gets `/v1/traces` or `/v1/metrics` joined to its path. A signal name is used as it is. The harness passes the chosen URL to the exporter. An error names the variable that it read.
 - An endpoint without the `http` or `https` scheme is an error, and that signal gets no exporter. The scheme also sets insecure, so `OTEL_EXPORTER_OTLP_*_INSECURE` has no effect.
 - The exporters use OTLP over HTTP with protobuf. The other `OTEL_*` variables, such as the headers, have no `HARNESS_` alias. So they do not apply under Claude Code.
 - Traces go through a batch span processor. Metrics go through a periodic reader. The shutdown flushes both.
