@@ -424,7 +424,7 @@ Later modules add a span for each run transition, hook and live check.
 
 ### Run attributes on every span
 
-- A span with a run carries `harness.run.id`. Every span carries `harness.worktree` when the worktree is known. A span processor sets them at the span start.
+- A span with a run carries `harness.run.id`. Every span carries `harness.worktree` when the worktree is known. A span processor sets them when the span starts.
 - The run id comes from the span itself, else from its parent span, else from the run that the CLI finds before the command runs.
 - The CLI finds the active run of the worktree only when the state database file exists.
 - A span with no run carries `harness.run.active=false` and no `harness.run.id`. Examples are a hook before `harness run start` or after `harness run done`, and `harness version`.

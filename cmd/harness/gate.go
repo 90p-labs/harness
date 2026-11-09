@@ -60,7 +60,7 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	if err != nil {
 		return gatecli.Handlers{}, nil, err
 	}
-	_, db, err := openRun(ctx, env)
+	db, err := openState(ctx, env.cfg, env.commonDir)
 	if err != nil {
 		return gatecli.Handlers{}, nil, err
 	}

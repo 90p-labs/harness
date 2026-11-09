@@ -28,7 +28,7 @@ const (
 	mergeSHA     = "abc1234"
 	spanName     = "live.check"
 	metricName   = "harness.live.checks"
-	attrRun      = "harness.run.id"
+	attrRunID    = "harness.run.id"
 	attrWorktree = "harness.worktree"
 	attrPhase    = "harness.phase"
 	attrOutcome  = "harness.live.outcome"
@@ -561,7 +561,7 @@ func TestLiveCheckTelemetry(t *testing.T) {
 		for _, a := range span.Attributes() {
 			attrs[string(a.Key)] = a.Value.Emit()
 		}
-		id := attrs[attrRun]
+		id := attrs[attrRunID]
 		if span.Name() != spanName || attrs[attrOutcome] != wantOutcome[id] || attrs[attrPhase] != wantPhase[id] {
 			t.Fatalf("span %s attributes = %v", span.Name(), attrs)
 		}
@@ -611,7 +611,7 @@ func TestCheckSpanNamesTheRun(t *testing.T) {
 		for _, a := range span.Attributes() {
 			attrs[string(a.Key)] = a.Value.Emit()
 		}
-		if attrs[attrRun] != runs[i].ID || attrs[attrWorktree] != runs[i].Worktree {
+		if attrs[attrRunID] != runs[i].ID || attrs[attrWorktree] != runs[i].Worktree {
 			t.Errorf("span %d attributes = %v, want run %s in %s", i, attrs, runs[i].ID, runs[i].Worktree)
 		}
 	}
