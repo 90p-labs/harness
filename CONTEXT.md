@@ -31,6 +31,7 @@ These terms have one meaning in the code, the docs and the plans.
 - **Envelope**: the JSON message that the bus sends to a plugin. It holds the version, the event, the host, the working directory, the run and the payload.
 - **Verdict**: the answer of a plugin. It is `allow`, `deny` or `context`.
 - **Event kind**: how the bus treats the verdicts of one event. The kinds are `veto`, `collect`, `context` and `observe`.
+- **Flat line**: a shell line of simple commands joined by `;`, `&&`, `||`, `|`, `&` or a newline, with no construct that the guard cannot read. `shell-write-source` expands variables and follows `cd` only on a flat line.
 
 ## Verification and live terms
 
