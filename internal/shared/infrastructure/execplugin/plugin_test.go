@@ -29,6 +29,7 @@ const (
 	modeVerdict       = "verdict"
 	modeEmpty         = "empty"
 	modeEchoEnv       = "echo-traceparent"
+	modeEchoRunID     = "echo-run-id"
 	modeFail          = "fail"
 	modeBadJSON       = "bad-json"
 	modeHang          = "hang"
@@ -72,6 +73,8 @@ func TestHelperProcess(t *testing.T) {
 			value = traceparentUnset
 		}
 		fmt.Printf(`{"verdict":"context","context":%q}`, value)
+	case modeEchoRunID:
+		fmt.Printf(`{"verdict":"context","context":%q}`, os.Getenv(telemetry.EnvRunID))
 	case modeFail:
 		fmt.Fprint(os.Stderr, "boom")
 		os.Exit(3)
@@ -302,9 +305,24 @@ func TestExecPluginTraceparent(t *testing.T) {
 	}
 }
 
+func TestExecPluginRunID(t *testing.T) {
+	t.Setenv(telemetry.EnvRunID, "inherited")
+	plugin := newPlugin(t, modeEchoRunID, callTimeout)
+	ctx := telemetry.WithRun(context.Background(), "", "run-7")
+
+	got, err := plugin.Handle(ctx, testEnvelope(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if got.Kind != domain.VerdictContext || got.Context != "run-7" {
+		t.Fatalf("got %+v, want HARNESS_RUN_ID run-7", got)
+	}
+}
+
 func TestTraceparentNoSpan(t *testing.T) {
 	// Setenv registers the restore at cleanup; Unsetenv then removes the variable.
 	t.Setenv(telemetry.EnvTraceparent, "")
+	t.Setenv(telemetry.EnvRunID, "")
 	if err := os.Unsetenv(telemetry.EnvTraceparent); err != nil {
 		t.Fatal(err)
 	}

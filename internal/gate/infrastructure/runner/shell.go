@@ -33,8 +33,8 @@ func (Shell) Run(ctx context.Context, dir string, gate domain.Gate) (domain.Outc
 	tail := &tailBuffer{}
 	cmd := exec.CommandContext(ctx, shell, shellFlag, gate.Run)
 	cmd.Dir = dir
-	if entry, ok := telemetry.TraceparentEntry(ctx); ok {
-		cmd.Env = append(os.Environ(), entry)
+	if env := telemetry.ChildEnv(ctx); len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
 	}
 	cmd.Stdout = io.MultiWriter(&stdout, tail)
 	cmd.Stderr = tail

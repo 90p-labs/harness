@@ -13,16 +13,24 @@ const (
 	keyTraceparent = "traceparent"
 )
 
-func TraceparentEntry(ctx context.Context) (string, bool) {
-	if !trace.SpanContextFromContext(ctx).IsValid() {
-		return "", false
+func ChildEnv(ctx context.Context) []string {
+	var env []string
+	if trace.SpanContextFromContext(ctx).IsValid() {
+		carrier := propagation.MapCarrier{}
+		propagation.TraceContext{}.Inject(ctx, carrier)
+		env = append(env, EnvTraceparent+"="+carrier.Get(keyTraceparent))
 	}
-	carrier := propagation.MapCarrier{}
-	propagation.TraceContext{}.Inject(ctx, carrier)
-	return EnvTraceparent + "=" + carrier.Get(keyTraceparent), true
+	if id := runOfSpan(trace.SpanFromContext(ctx)).or(runFromContext(ctx)).id; id != "" {
+		env = append(env, EnvRunID+"="+id)
+	}
+	return env
 }
 
 func ParentFromEnv(ctx context.Context) context.Context {
 	carrier := propagation.MapCarrier{keyTraceparent: os.Getenv(EnvTraceparent)}
-	return propagation.TraceContext{}.Extract(ctx, carrier)
+	ctx = propagation.TraceContext{}.Extract(ctx, carrier)
+	if id := os.Getenv(EnvRunID); id != "" {
+		ctx = WithRun(ctx, "", id)
+	}
+	return ctx
 }
