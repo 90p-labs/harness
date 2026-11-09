@@ -61,6 +61,11 @@ func (silentHooks) Before(context.Context, domain.Run, domain.Command, domain.Ph
 }
 func (silentHooks) After(context.Context, domain.Run, domain.Run) {}
 
+type noTrace struct{}
+
+func (noTrace) Under(ctx context.Context, _ domain.Run) context.Context { return ctx }
+func (noTrace) End(context.Context, domain.Run)                         {}
+
 func TestTransitionCommand(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -78,7 +83,7 @@ func TestTransitionCommand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: tc.phase}}
 			connect := func(context.Context) (cli.Handlers, func() error, error) {
-				flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, nil, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"))
+				flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, nil, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"), noTrace{})
 				return cli.Handlers{
 					Transition: transition.NewHandler(repo, flow),
 					Status:     status.NewHandler(repo),

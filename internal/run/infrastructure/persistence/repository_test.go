@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	clock = time.Date(2026, 11, 8, 12, 30, 0, 0, time.FixedZone("CET", 3600))
-	key   = domain.RunKey{Repo: "github.com/90p-labs/harness", Worktree: "/repo"}
+	clock     = time.Date(2026, 11, 8, 12, 30, 0, 0, time.FixedZone("CET", 3600))
+	startedAt = clock.Add(-time.Hour).UTC()
+	key       = domain.RunKey{Repo: "github.com/90p-labs/harness", Worktree: "/repo"}
 )
 
 type dialectCase struct {
@@ -49,7 +50,7 @@ func openStore(t *testing.T, c dialectCase) store {
 
 func newRun(t *testing.T, id string, events ...domain.Event) domain.Run {
 	t.Helper()
-	run := domain.Run{ID: id, Key: key, Prompt: "add the run command\nwith a second line", Track: shareddomain.TrackFull}
+	run := domain.Run{ID: id, Key: key, Prompt: "add the run command\nwith a second line", Track: shareddomain.TrackFull, StartedAt: startedAt}
 	for _, event := range events {
 		next, err := run.Apply(domain.Command{Event: event, Reason: string(event), At: clock}, domain.Policy{})
 		if err != nil {
@@ -147,9 +148,9 @@ func TestRunRepositoryContract(t *testing.T) {
 				if err := s.db.QueryRow("SELECT at FROM run_transitions WHERE run_id = ?", "r1").Scan(&at); err != nil {
 					t.Fatal(err)
 				}
-				for _, stored := range []time.Time{created, at} {
-					if _, offset := stored.Zone(); !stored.Equal(clock) || offset != 0 {
-						t.Fatalf("stored time = %v, want %v in UTC", stored, clock.UTC())
+				for stored, want := range map[time.Time]time.Time{created: startedAt, at: clock} {
+					if _, offset := stored.Zone(); !stored.Equal(want) || offset != 0 {
+						t.Fatalf("stored time = %v, want %v in UTC", stored, want.UTC())
 					}
 				}
 				if _, err := s.repo.Get(ctx, "missing"); !errors.Is(err, domain.ErrRunNotFound) {

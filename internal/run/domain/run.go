@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
@@ -21,6 +22,7 @@ type Run struct {
 	PRURL       string
 	PRs         []string
 	Version     int
+	StartedAt   time.Time
 	events      []Transitioned
 }
 

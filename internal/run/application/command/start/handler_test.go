@@ -65,9 +65,14 @@ func (f *fakeHooks) After(_ context.Context, _ domain.Run, to domain.Run) {
 	f.afterTo = append(f.afterTo, to)
 }
 
+type noTrace struct{}
+
+func (noTrace) Under(ctx context.Context, _ domain.Run) context.Context { return ctx }
+func (noTrace) End(context.Context, domain.Run)                         {}
+
 func newHandler(repo *fakeRepository, hooks *fakeHooks) Handler {
 	clock := func() time.Time { return now }
-	flow := transition.NewFlow(repo, hooks, nil, nil, domain.Policy{}, clock, noop.NewTracerProvider().Tracer("test"))
+	flow := transition.NewFlow(repo, hooks, nil, nil, domain.Policy{}, clock, noop.NewTracerProvider().Tracer("test"), noTrace{})
 	return NewHandler(repo, flow, clock)
 }
 
@@ -160,4 +165,20 @@ type failingRepository struct {
 
 func (f *failingRepository) Active(context.Context, domain.RunKey) (domain.Run, error) {
 	return domain.Run{}, f.err
+}
+
+func TestStartRecordsTheStartTime(t *testing.T) {
+	repo := &fakeRepository{}
+	local := time.FixedZone("plus2", 2*60*60)
+	clock := func() time.Time { return now.In(local) }
+	flow := transition.NewFlow(repo, &fakeHooks{}, nil, nil, domain.Policy{}, clock, noop.NewTracerProvider().Tracer("test"), noTrace{})
+
+	if err := NewHandler(repo, flow, clock).Handle(context.Background(), Command{Key: key, Prompt: prompt}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := repo.saved[0].StartedAt
+	if !got.Equal(now) || got.Location() != time.UTC {
+		t.Fatalf("StartedAt = %v, want %v in UTC", got, now)
+	}
 }

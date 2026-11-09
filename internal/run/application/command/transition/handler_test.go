@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -98,6 +99,27 @@ func (f *fakeHooks) After(_ context.Context, from domain.Run, to domain.Run) {
 	f.afterFrom, f.afterTo = from, to
 }
 
+type markerKey struct{}
+
+type fakeTrace struct {
+	journal    *journal
+	under      []domain.Run
+	ended      []domain.Run
+	endedCtx   context.Context
+	callsAtEnd []string
+}
+
+func (f *fakeTrace) Under(ctx context.Context, run domain.Run) context.Context {
+	f.under = append(f.under, run)
+	return context.WithValue(ctx, markerKey{}, true)
+}
+
+func (f *fakeTrace) End(ctx context.Context, run domain.Run) {
+	f.callsAtEnd = slices.Clone(f.journal.calls)
+	f.ended = append(f.ended, run)
+	f.endedCtx = ctx
+}
+
 type fakeGate struct {
 	journal    *journal
 	submission domain.Submission
@@ -137,6 +159,7 @@ type fixture struct {
 	hooks     *fakeHooks
 	gate      *fakeGate
 	approvals *fakeApprovals
+	trace     *fakeTrace
 	spans     *tracetest.SpanRecorder
 	handler   transition.Handler
 }
@@ -153,8 +176,9 @@ func newFixtureWith(stored domain.Run, policy domain.Policy) fixture {
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)).Tracer("test")
 	gate := &fakeGate{journal: j, submission: domain.Submission{Track: shareddomain.TrackFull}}
 	approvals := &fakeApprovals{journal: j, recorded: map[string]bool{}}
-	flow := transition.NewFlow(repo, hooks, gate, approvals, policy, func() time.Time { return now }, tracer)
-	return fixture{journal: j, repo: repo, hooks: hooks, gate: gate, approvals: approvals, spans: spans, handler: transition.NewHandler(repo, flow)}
+	runTrace := &fakeTrace{journal: j}
+	flow := transition.NewFlow(repo, hooks, gate, approvals, policy, func() time.Time { return now }, tracer, runTrace)
+	return fixture{journal: j, repo: repo, hooks: hooks, gate: gate, approvals: approvals, trace: runTrace, spans: spans, handler: transition.NewHandler(repo, flow)}
 }
 
 func planningRun() domain.Run {
@@ -500,4 +524,64 @@ func stringAttributes(span sdktrace.ReadOnlySpan) map[string]string {
 		out[string(kv.Key)] = kv.Value.AsString()
 	}
 	return out
+}
+
+func TestMoveTracesTheRun(t *testing.T) {
+	shipping := domain.Run{ID: runID, Key: key, Phase: domain.PhaseShipping, Version: startedAt}
+
+	t.Run("a move that stays open puts the run under its trace and does not end it", func(t *testing.T) {
+		f := newFixture(planningRun())
+
+		if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: domain.EventSubmitPlan}); err != nil {
+			t.Fatal(err)
+		}
+
+		assertCalls(t, f, callActive, callGate, callBefore, callSave, callAfter)
+		if len(f.trace.under) != 1 || f.trace.under[0].ID != runID || len(f.trace.ended) != 0 {
+			t.Fatalf("under = %+v, ended = %+v", f.trace.under, f.trace.ended)
+		}
+	})
+
+	cases := []struct {
+		name  string
+		run   domain.Run
+		event domain.Event
+		want  domain.Phase
+	}{
+		{"abandon ends the run", planningRun(), domain.EventAbandon, domain.PhaseAbandoned},
+		{"complete ends the run", shipping, domain.EventComplete, domain.PhaseDone},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(tc.run)
+
+			if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: tc.event}); err != nil {
+				t.Fatal(err)
+			}
+
+			assertCalls(t, f, callActive, callBefore, callSave, callAfter)
+			if !reflect.DeepEqual(f.trace.callsAtEnd, f.journal.calls) {
+				t.Fatalf("End ran after %v, want after %v", f.trace.callsAtEnd, f.journal.calls)
+			}
+			if len(f.trace.ended) != 1 || f.trace.ended[0].Phase != tc.want || f.trace.ended[0].ID != runID {
+				t.Fatalf("ended = %+v", f.trace.ended)
+			}
+			if f.trace.endedCtx.Value(markerKey{}) == nil {
+				t.Fatal("End did not get the context from Under")
+			}
+		})
+	}
+
+	t.Run("a failed move does not end the run", func(t *testing.T) {
+		f := newFixture(planningRun())
+		f.repo.saveErr = errors.New("disk full")
+
+		if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: domain.EventAbandon}); err == nil {
+			t.Fatal("want an error")
+		}
+
+		if len(f.trace.ended) != 0 {
+			t.Fatalf("ended = %+v", f.trace.ended)
+		}
+	})
 }

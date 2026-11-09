@@ -48,13 +48,15 @@ type Flow struct {
 	policy    domain.Policy
 	clock     func() time.Time
 	tracer    trace.Tracer
+	runTrace  domain.RunTrace
 }
 
-func NewFlow(repo domain.RunRepository, hooks domain.TransitionHooks, gate domain.PlanGate, approvals domain.ApprovalRepository, policy domain.Policy, clock func() time.Time, tracer trace.Tracer) Flow {
-	return Flow{repo: repo, hooks: hooks, gate: gate, approvals: approvals, policy: policy, clock: clock, tracer: tracer}
+func NewFlow(repo domain.RunRepository, hooks domain.TransitionHooks, gate domain.PlanGate, approvals domain.ApprovalRepository, policy domain.Policy, clock func() time.Time, tracer trace.Tracer, runTrace domain.RunTrace) Flow {
+	return Flow{repo: repo, hooks: hooks, gate: gate, approvals: approvals, policy: policy, clock: clock, tracer: tracer, runTrace: runTrace}
 }
 
 func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err error) {
+	ctx = f.runTrace.Under(ctx, run)
 	ctx, span := f.tracer.Start(ctx, spanTransition, trace.WithAttributes(
 		attrRunID.String(run.ID),
 		attrEvent.String(string(cmd.Event)),
@@ -102,6 +104,9 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 		return err
 	}
 	f.hooks.After(ctx, run, next)
+	if next.Phase == domain.PhaseDone || next.Phase == domain.PhaseAbandoned {
+		f.runTrace.End(ctx, next)
+	}
 	span.SetAttributes(attrPhaseTo.String(string(next.Phase)))
 	return nil
 }

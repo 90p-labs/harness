@@ -1,6 +1,7 @@
 package run
 
 import (
+	"context"
 	"time"
 
 	"github.com/90p-labs/harness/internal/run/application/command/decidestop"
@@ -15,11 +16,23 @@ import (
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const tracerName = "github.com/90p-labs/harness/internal/run"
+
+type runTrace struct{ tracer trace.Tracer }
+
+func (r runTrace) Under(ctx context.Context, run domain.Run) context.Context {
+	return telemetry.UnderRun(ctx, run.ID)
+}
+
+func (r runTrace) End(ctx context.Context, run domain.Run) {
+	telemetry.EndRun(ctx, r.tracer, run.ID, run.Key.Worktree, string(run.Phase), run.StartedAt)
+}
 
 func policyOf(cfg config.Run) domain.Policy {
 	return domain.Policy{
@@ -46,7 +59,8 @@ func NewStatus(db *dbal.DB, now func() time.Time) status.Handler {
 func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, gate domain.PlanGate, cfg config.Run, key domain.RunKey, now func() time.Time) cli.Handlers {
 	repo := persistence.NewSQLRunRepository(db, now)
 	policy := policyOf(cfg)
-	flow := transition.NewFlow(repo, pluginhooks.NewHooks(bus, key.Worktree), gate, persistence.NewSQLApprovalRepository(db), policy, now, otel.Tracer(tracerName))
+	tracer := otel.Tracer(tracerName)
+	flow := transition.NewFlow(repo, pluginhooks.NewHooks(bus, key.Worktree), gate, persistence.NewSQLApprovalRepository(db), policy, now, tracer, runTrace{tracer: tracer})
 	return cli.Handlers{
 		Key:        key,
 		Start:      start.NewHandler(repo, flow, now),
