@@ -498,7 +498,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `live.environment` | `production` | The GitHub deployment environment |
 | `live.rollback` | empty | The rollback line of the findings |
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
-| `roles` | `explorer.claude: [haiku]`, `worker.claude: [sonnet, haiku]`, `reviewer.claude: [sonnet, haiku, opus]`, `advisor.claude: [fable]` | A role is `lead`, `worker`, `reviewer`, `explorer` or `advisor`; a host is `claude` or `codex`. A value is a list of models; a scalar is a list of one |
+| `roles` | `lead.claude: [opus]`, `explorer.claude: [haiku]`, `worker.claude: [sonnet, haiku]`, `reviewer.claude: [sonnet, haiku, opus]`, `advisor.claude: [fable]` | A role is `lead`, `worker`, `reviewer`, `explorer` or `advisor`; a host is `claude` or `codex`. A value is a list of models; a scalar is a list of one |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
 | `deploy.disabled` | empty list | A list of default deploy plugin names (`helm`, `promtool`); an unknown name is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |

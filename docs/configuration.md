@@ -137,13 +137,13 @@ The rule `review-models` needs 2 different reviewer models on `HEAD`. So a host 
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
-| `roles` | map of role to a map of host to a list of models | `explorer.claude: [haiku]`, `worker.claude: [sonnet, haiku]`, `reviewer.claude: [sonnet, haiku, opus]`, `advisor.claude: [fable]` | `HARNESS_ROLES_<ROLE>_CLAUDE` for the 4 roles with a default. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
+| `roles` | map of role to a map of host to a list of models | `lead.claude: [opus]`, `explorer.claude: [haiku]`, `worker.claude: [sonnet, haiku]`, `reviewer.claude: [sonnet, haiku, opus]`, `advisor.claude: [fable]` | `HARNESS_ROLES_<ROLE>_CLAUDE` for the 5 roles with a default, such as `HARNESS_ROLES_LEAD_CLAUDE`. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
 
 The roles, and the agent names that the guard maps to each role:
 
 | Role | Agent names |
 |---|---|
-| `lead` | none: the lead is the main session, so the guard checks no agent call for it |
+| `lead` | none: the lead is the main session. It defaults to `opus` on `claude`. The model is guidance only: the harness cannot switch the session model and no hook receives it, so the guard checks no agent call for it |
 | `explorer` | `explore`, `explorer`, `general-purpose`, `claude-code-guide` |
 | `worker` | `worker` |
 | `reviewer` | `reviewer`, `second-reviewer`, `code-reviewer`, `pr-reviewer` |
