@@ -150,13 +150,13 @@ table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 .copy.done { color: var(--added); }
 
 .waves { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(17rem, 1fr); gap: 1.25rem; overflow-x: auto; padding-bottom: 0.5rem; }
-.wave { display: grid; gap: 1rem; align-content: start; }
+.wave { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-content: start; }
 .wave-n { margin: 0; font: 500 0.7rem/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
 .task { padding: 1.1rem 1.15rem 1.15rem; border-radius: 12px; background: var(--paper); border: 1px solid var(--rule); scroll-margin-top: 2rem; }
 .task header { display: grid; grid-template-columns: auto 1fr auto; gap: 0.65rem; align-items: baseline; margin-bottom: 0.75rem; }
 .tn { font: italic 400 1.7rem/0.8 var(--serif); color: var(--accent); }
 .side { font: 500 0.66rem/1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em; padding: 0.28rem 0.45rem; border-radius: 5px; background: var(--paper-2); color: var(--ink-3); }
-.tf { margin: 0 0 0.6rem; font-size: 0.92rem; color: var(--ink-2); }
+.tf { margin: 0 0 0.6rem; font-size: 0.92rem; color: var(--ink-2); overflow-wrap: anywhere; }
 .tf em, .owned::before { display: block; font: 500 0.66rem/1 var(--mono); font-style: normal; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); margin-bottom: 0.35rem; }
 .owned { list-style: none; margin: 0 0 0.85rem; padding: 0; display: grid; gap: 0.2rem; }
 .owned::before { content: "Owned files"; }
