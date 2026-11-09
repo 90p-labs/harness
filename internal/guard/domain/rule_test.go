@@ -316,7 +316,7 @@ func ruleByID(t *testing.T, id string) Rule {
 func TestPRBodyShape(t *testing.T) {
 	const marked = "```mermaid\nstateDiagram-v2\n    A --> B: go (new)\n```"
 	const unmarked = "```mermaid\nstateDiagram-v2\n    A --> B\n```"
-	sections := "## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."
+	sections := "Bottom line: the guard checks X.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."
 	long := strings.TrimSpace(strings.Repeat("word ", 41))
 	create := bash("gh pr create --draft --title t --body-file body.md")
 	withBody := func(body string) ToolCall {
@@ -336,15 +336,19 @@ func TestPRBodyShape(t *testing.T) {
 		{name: "good inline body", call: bash("gh pr edit 3 --body '" + strings.ReplaceAll(sections, "'", "") + "'")},
 		{name: "good heredoc body", call: bash("gh pr create --draft -F - <<EOF\n" + sections + "\nEOF")},
 		{name: "heredoc without text", call: bash("gh pr create --draft --body-file -")},
-		{name: "missing section", call: withBody("## Why\nBecause.\n\n## What\n- one"), deny: true, want: "the body has no ## How line"},
-		{name: "old sections", call: withBody("## Summary\nShort.\n\n## What\n- one\n\n## Why\nBecause."), deny: true, want: "the body has no ## How line"},
-		{name: "what before why", call: withBody("## What\n- one\n\n## Why\nBecause.\n\n## How\nShort."), deny: true, want: "## What is before ## Why"},
-		{name: "how before what", call: withBody("## Why\nBecause.\n\n## How\nShort.\n\n## What\n- one"), deny: true, want: "## How is before ## What"},
+		{name: "missing section", call: withBody("Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one"), deny: true, want: "the body has no ## How line"},
+		{name: "old sections", call: withBody("Bottom line: x.\n\n## Summary\nShort.\n\n## What\n- one\n\n## Why\nBecause."), deny: true, want: "the body has no ## How line"},
+		{name: "what before why", call: withBody("Bottom line: x.\n\n## What\n- one\n\n## Why\nBecause.\n\n## How\nShort."), deny: true, want: "## What is before ## Why"},
+		{name: "how before what", call: withBody("Bottom line: x.\n\n## Why\nBecause.\n\n## How\nShort.\n\n## What\n- one"), deny: true, want: "## How is before ## What"},
 		{name: "plan diagram copied as it is", call: withBody(sections + "\n```mermaid\nflowchart TD\n" +
 			"    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n" +
 			"    a[plan] --> b[skill]\n    class b new\n```")},
-		{name: "heading in a code fence", call: withBody("## Why\nBecause.\n```\n## How\n```\n## What\n- one\n\n## How\nShort.")},
-		{name: "heading only in a code fence", call: withBody("## Why\nBecause.\n\n## What\n- one\n```\n## How\n```"), deny: true, want: "the body has no ## How line"},
+		{name: "heading in a code fence", call: withBody("Bottom line: x.\n\n## Why\nBecause.\n```\n## How\n```\n## What\n- one\n\n## How\nShort.")},
+		{name: "heading only in a code fence", call: withBody("Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n```\n## How\n```"), deny: true, want: "the body has no ## How line"},
+		{name: "no bottom line", call: withBody("## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."), deny: true, want: "no bottom line"},
+		{name: "bottom line only in a fence", call: withBody("```\nBottom line: x.\n```\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."), deny: true, want: "no bottom line"},
+		{name: "heading only above Why", call: withBody("# Title\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."), deny: true, want: "no bottom line"},
+		{name: "issue reference as bottom line", call: withBody("#42 is fixed.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.")},
 		{name: "41 word line", call: withBody(sections + "\n\n" + long), deny: true, want: "40 words"},
 		{name: "long line in a code fence", call: withBody(sections + "\n```\n" + long + "\n```")},
 		{name: "40 word line", call: withBody(sections + "\n\n" + strings.TrimSpace(strings.Repeat("word ", 40)))},
@@ -377,7 +381,7 @@ func TestPRBodyShape(t *testing.T) {
 
 func TestPRBodyShapeDiagramNextStep(t *testing.T) {
 	call := bash("gh pr create --draft --body-file body.md")
-	call.Texts = [][]string{{"## Why\nx\n## What\nx\n## How\nx\n```mermaid\nflowchart TD\n    a --> b\n```"}}
+	call.Texts = [][]string{{"Bottom line: x.\n## Why\nx\n## What\nx\n## How\nx\n```mermaid\nflowchart TD\n    a --> b\n```"}}
 	reason, denied := ruleByID(t, RulePRBodyShape).Denies(call, RuleContext{})
 	if !denied || !strings.HasSuffix(reason, "draw it with `harness diagram`") {
 		t.Fatalf("reason = %q, denied = %v", reason, denied)
