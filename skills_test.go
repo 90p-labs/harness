@@ -16,11 +16,15 @@ const (
 	fenceOpen           = "```"
 	skillKind           = "skill"
 	agentKind           = "agent"
+	modelFieldText      = "`model` field"
 )
+
+var roleAgents = []string{"explorer", "advisor", "worker", "reviewer"}
 
 var (
 	crossReference = regexp.MustCompile("`([a-z][a-z-]*)` (" + skillKind + "|" + agentKind + ")\\b")
 	reportLimit    = regexp.MustCompile(`\b(?:under|at most) \d+ words\b`)
+	roleAgentLine  = regexp.MustCompile("`(" + strings.Join(roleAgents, "|") + ")` agents?\\b|model of the (?:`(?:" + strings.Join(roleAgents, "|") + ")` )?role\\b")
 
 	requiredReferences = map[string][]string{
 		linterAgent:    {"ddd"},
@@ -128,6 +132,35 @@ func TestAgentReportWordLimit(t *testing.T) {
 	for _, path := range agents {
 		if !reportLimit.MatchString(readDoc(t, path)) {
 			t.Errorf("%s gives no word limit for its report", path)
+		}
+	}
+}
+
+func TestSkillAgentStartsNameModelField(t *testing.T) {
+	skills, err := filepath.Glob(skillDocs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range skills {
+		started := map[string]bool{}
+		for i, line := range strings.Split(readDoc(t, path), "\n") {
+			match := roleAgentLine.FindStringSubmatch(line)
+			if match == nil {
+				continue
+			}
+			if !strings.Contains(line, modelFieldText) {
+				t.Errorf("%s:%d names a role agent or a role model and does not name the %s", path, i+1, modelFieldText)
+			} else if path == skillFile {
+				started[match[1]] = true
+			}
+		}
+		if path != skillFile {
+			continue
+		}
+		for _, role := range roleAgents {
+			if !started[role] {
+				t.Errorf("%s starts no %s agent with the %s", skillFile, role, modelFieldText)
+			}
 		}
 	}
 }
