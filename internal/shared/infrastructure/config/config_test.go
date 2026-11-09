@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 )
 
@@ -510,16 +511,16 @@ func TestLoadPluginFilter(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	plugin := got.Plugins[0]
-	if len(plugin.Transition) != 2 || plugin.From[0] != "awaiting_approval" || plugin.To[0] != "working" {
+	if len(plugin.Transition) != 2 || plugin.From[0] != shareddomain.PhaseAwaitingApproval || plugin.To[0] != shareddomain.PhaseWorking {
 		t.Fatalf("plugin = %+v", plugin)
 	}
 }
 
 func TestLoadRejectsBadFilterName(t *testing.T) {
-	cases := map[string]struct{ key, value string }{
-		"from":       {"from", "start"},
-		"to":         {"to", "nowhere"},
-		"transition": {"transition", "jump"},
+	cases := map[string]struct{ key, value, valid string }{
+		"from":       {"from", shareddomain.TransitionStart, shareddomain.PhaseWorking},
+		"to":         {"to", "nowhere", shareddomain.PhaseWorking},
+		"transition": {"transition", "jump", shareddomain.TransitionApprovePlan},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -527,10 +528,7 @@ func TestLoadRejectsBadFilterName(t *testing.T) {
 			if err == nil {
 				t.Fatal("want an error")
 			}
-			for _, want := range []string{"bad", tc.key, tc.value, "working"} {
-				if name == "transition" && want == "working" {
-					want = "approve-plan"
-				}
+			for _, want := range []string{"bad", tc.key, tc.value, tc.valid} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error %q lacks %q", err, want)
 				}

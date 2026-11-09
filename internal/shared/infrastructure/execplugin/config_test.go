@@ -57,7 +57,7 @@ func TestFromConfigBuildsFilter(t *testing.T) {
 	}
 }
 
-func TestMatchesEmptyFilterSkipsDecoding(t *testing.T) {
+func TestMatchesEmptyFilterAllowsAnyPayload(t *testing.T) {
 	plugin := execplugin.ExecPlugin{}
 
 	if !plugin.Matches(domain.Envelope{Payload: json.RawMessage("nope")}) {

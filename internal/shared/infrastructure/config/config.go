@@ -27,18 +27,21 @@ const (
 	fileFormat = "yaml"
 	envPrefix  = "HARNESS"
 
-	keyStateDSN        = "state.dsn"
-	keyApproval        = "run.approval"
-	keyGoLive          = "run.go_live"
-	keyMaxReviewRounds = "run.max_review_rounds"
-	keyMaxLiveRounds   = "run.max_live_rounds"
-	keyMaxStopBlocks   = "run.max_stop_blocks"
-	keyPlugins         = "plugins"
-	keyRoles           = "roles"
-	keyGuardDisabled   = "guard.disabled"
-	keyDeployDisabled  = "deploy.disabled"
-	keyGitBranch       = "git.default_branch"
-	keyVerifyParallel  = "verify.parallel"
+	keyFilterTransition = "transition"
+	keyFilterFrom       = "from"
+	keyFilterTo         = "to"
+	keyStateDSN         = "state.dsn"
+	keyApproval         = "run.approval"
+	keyGoLive           = "run.go_live"
+	keyMaxReviewRounds  = "run.max_review_rounds"
+	keyMaxLiveRounds    = "run.max_live_rounds"
+	keyMaxStopBlocks    = "run.max_stop_blocks"
+	keyPlugins          = "plugins"
+	keyRoles            = "roles"
+	keyGuardDisabled    = "guard.disabled"
+	keyDeployDisabled   = "deploy.disabled"
+	keyGitBranch        = "git.default_branch"
+	keyVerifyParallel   = "verify.parallel"
 
 	keyLiveEnvironment = "live.environment"
 	keyLiveRollback    = "live.rollback"
@@ -176,9 +179,9 @@ func (p Plugin) validateFilter() error {
 		values []string
 		valid  []string
 	}{
-		{"transition", p.Transition, shareddomain.Transitions},
-		{"from", p.From, shareddomain.Phases},
-		{"to", p.To, shareddomain.Phases},
+		{keyFilterTransition, p.Transition, shareddomain.Transitions},
+		{keyFilterFrom, p.From, shareddomain.Phases},
+		{keyFilterTo, p.To, shareddomain.Phases},
 	}
 	for _, k := range keys {
 		for _, value := range k.values {
