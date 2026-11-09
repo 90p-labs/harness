@@ -343,3 +343,21 @@ func TestPageSketchError(t *testing.T) {
 		t.Error("the sketch error text must stand in place of the SVG")
 	}
 }
+
+func TestPageWaveFitsLongPaths(t *testing.T) {
+	page := render(t, baseInput(t))
+
+	for _, c := range []struct{ selector, declaration string }{
+		{".wave", "grid-template-columns: minmax(0, 1fr)"},
+		{".tf", "overflow-wrap: anywhere"},
+	} {
+		rule := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(c.selector) + ` \{([^}]*)\}`).FindStringSubmatch(page)
+		if rule == nil {
+			t.Errorf("the page has no %s rule", c.selector)
+			continue
+		}
+		if !strings.Contains(rule[1], c.declaration) {
+			t.Errorf("the %s rule must contain %q, got %q", c.selector, c.declaration, rule[1])
+		}
+	}
+}
