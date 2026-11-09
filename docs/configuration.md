@@ -137,13 +137,13 @@ The rule `review-models` needs 2 different reviewer models on `HEAD`. So a host 
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
-| `roles` | map of role to a map of host to a list of models | `lead.claude: [opus]`, `explorer.claude: [haiku]`, `worker.claude: [sonnet, haiku]`, `reviewer.claude: [sonnet, haiku, opus]`, `advisor.claude: [fable]` | `HARNESS_ROLES_<ROLE>_CLAUDE` for the 5 roles with a default, such as `HARNESS_ROLES_LEAD_CLAUDE`. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
+| `roles` | map of role to a map of host to a list of models | `lead.claude: [opus]`, `lead.codex: [gpt-6-astra]`, `explorer.claude: [haiku]`, `explorer.codex: [gpt-5.5]`, `worker.claude: [sonnet, haiku]`, `worker.codex: [gpt-5.6-luna, gpt-5.5]`, `reviewer.claude: [sonnet, haiku, opus]`, `reviewer.codex: [gpt-5.6-terra, gpt-5.6-luna, gpt-5.5]`, `advisor.claude: [fable]`, `advisor.codex: [gpt-6-astra]` | `HARNESS_ROLES_<ROLE>_CLAUDE` and `HARNESS_ROLES_<ROLE>_CODEX` for the 5 roles with a default, such as `HARNESS_ROLES_LEAD_CLAUDE`. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
 
 The roles, and the agent names that the guard maps to each role:
 
 | Role | Agent names |
 |---|---|
-| `lead` | none: the lead is the main session. It defaults to `opus` on `claude`. The model is guidance only: the harness cannot switch the session model and no hook receives it, so the guard checks no agent call for it |
+| `lead` | none: the lead is the main session. It defaults to `opus` on `claude` and `gpt-6-astra` on `codex`. The model is guidance only: the harness cannot switch the session model and no hook receives it, so the guard checks no agent call for it |
 | `explorer` | `explore`, `explorer`, `general-purpose`, `claude-code-guide` |
 | `worker` | `worker` |
 | `reviewer` | `reviewer`, `second-reviewer`, `code-reviewer`, `pr-reviewer` |
@@ -398,9 +398,10 @@ guard:
 ### A Codex repository
 
 1. Run `harness init --host codex`. It writes the hooks into `.codex/hooks.json`.
-2. The default roles name only the `claude` host, so the guard checks no model on Codex. To check one, set the Codex model under the role, as `roles.reviewer.codex`.
+2. The default roles now name Codex models. The guard lets a Codex agent call with no model pass, because Codex sends none. It still denies a wrong model.
 3. Add `review-models` to `guard.disabled`. Codex sends no model in an agent call, so else `harness run ship` is always denied.
-4. Commit `.harness.yaml` and `.codex/hooks.json`.
+4. Model names go stale. Check `~/.codex/models_cache.json` for the local Codex model list, and override any name in `.harness.yaml`.
+5. Commit `.harness.yaml` and `.codex/hooks.json`.
 
 ### A lint pack setting
 
