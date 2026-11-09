@@ -897,7 +897,7 @@ const (
 	planQuestion       = `"question":"Is the plan ready?","header":"Plan","options":[{"label":"Approve (Recommended)","description":"start the work"},{"label":"Change the plan","description":"edit plan.md"}]}`
 	claudeAnswerFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"AskUserQuestion","tool_input":{"questions":[{` + planQuestion + `]},` +
 		`"tool_response":{"questions":[{"question":"Is the plan ready?","header":"Plan"}],"answers":{"Is the plan ready?":%q}}}`
-	codexApproveInput = `{"cwd":".","hook_event_name":"PostToolUse","model":"gpt-5","turn_id":"t1","tool_name":"request_user_input","tool_use_id":"u3",` +
+	codexApproveInput = `{"cwd":".","hook_event_name":"PostToolUse","model":"gpt-6-astra","turn_id":"t1","tool_name":"request_user_input","tool_use_id":"u3",` +
 		`"tool_input":{"questions":[{"id":"plan_approval",` + planQuestion + `]},"tool_response":{"answers":{"plan_approval":{"answers":["Approve (Recommended)"]}}}}`
 	approveLabel    = shareddomain.ApproveLabel + shareddomain.RecommendedSuffix
 	changeLabel     = shareddomain.ChangePlanLabel

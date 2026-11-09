@@ -270,15 +270,15 @@ func setDefaults(v *viper.Viper) {
 		},
 		string(shareddomain.RoleExplorer): map[string]any{
 			string(shareddomain.HostClaude): []string{"haiku"},
-			string(shareddomain.HostCodex):  []string{"gpt-5.5"},
+			string(shareddomain.HostCodex):  []string{"gpt-6-luna"},
 		},
 		string(shareddomain.RoleWorker): map[string]any{
 			string(shareddomain.HostClaude): []string{"sonnet", "haiku"},
-			string(shareddomain.HostCodex):  []string{"gpt-5.6-luna", "gpt-5.5"},
+			string(shareddomain.HostCodex):  []string{"gpt-6.1-sol", "gpt-6-luna"},
 		},
 		string(shareddomain.RoleReviewer): map[string]any{
 			string(shareddomain.HostClaude): []string{"sonnet", "haiku", "opus"},
-			string(shareddomain.HostCodex):  []string{"gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"},
+			string(shareddomain.HostCodex):  []string{"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"},
 		},
 		string(shareddomain.RoleAdvisor): map[string]any{
 			string(shareddomain.HostClaude): []string{"fable"},

@@ -71,9 +71,9 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("plugins = %+v, want none", got.Plugins)
 	}
 	wantRoles := map[string]config.RoleHost{
-		"explorer": {"claude": {"haiku"}, "codex": {"gpt-5.5"}},
-		"worker":   {"claude": {"sonnet", "haiku"}, "codex": {"gpt-5.6-luna", "gpt-5.5"}},
-		"reviewer": {"claude": {"sonnet", "haiku", "opus"}, "codex": {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}},
+		"explorer": {"claude": {"haiku"}, "codex": {"gpt-6-luna"}},
+		"worker":   {"claude": {"sonnet", "haiku"}, "codex": {"gpt-6.1-sol", "gpt-6-luna"}},
+		"reviewer": {"claude": {"sonnet", "haiku", "opus"}, "codex": {"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"}},
 		"advisor":  {"claude": {"fable"}, "codex": {"gpt-6-astra"}},
 		"lead":     {"claude": {"opus"}, "codex": {"gpt-6-astra"}},
 	}
@@ -385,9 +385,9 @@ func TestLoadRoles(t *testing.T) {
 
 	want := map[string]config.RoleHost{
 		"lead":     {"claude": {"sonnet"}, "codex": {"gpt-6-astra"}},
-		"reviewer": {"claude": {"opus"}, "codex": {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}},
-		"worker":   {"claude": {"opus", "sonnet"}, "codex": {"gpt-5.6-luna", "gpt-5.5"}},
-		"explorer": {"claude": {"haiku"}, "codex": {"gpt-5.5"}},
+		"reviewer": {"claude": {"opus"}, "codex": {"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"}},
+		"worker":   {"claude": {"opus", "sonnet"}, "codex": {"gpt-6.1-sol", "gpt-6-luna"}},
+		"explorer": {"claude": {"haiku"}, "codex": {"gpt-6-luna"}},
 		"advisor":  {"claude": {"fable"}, "codex": {"gpt-6-astra"}},
 	}
 	if !reflect.DeepEqual(got.Roles, want) {
@@ -407,11 +407,11 @@ func TestLoadLeadEnv(t *testing.T) {
 }
 
 func TestLoadCodexOverride(t *testing.T) {
-	got, err := load(t, "roles:\n  reviewer:\n    codex: [gpt-5.5, gpt-5.6-luna]\n")
+	got, err := load(t, "roles:\n  reviewer:\n    codex: [gpt-6-luna, gpt-6.1-sol]\n")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if want := []string{"gpt-5.5", "gpt-5.6-luna"}; !reflect.DeepEqual(got.Roles["reviewer"]["codex"], want) {
+	if want := []string{"gpt-6-luna", "gpt-6.1-sol"}; !reflect.DeepEqual(got.Roles["reviewer"]["codex"], want) {
 		t.Errorf("reviewer.codex = %+v, want %+v", got.Roles["reviewer"]["codex"], want)
 	}
 	if want := []string{"sonnet", "haiku", "opus"}; !reflect.DeepEqual(got.Roles["reviewer"]["claude"], want) {
@@ -420,12 +420,12 @@ func TestLoadCodexOverride(t *testing.T) {
 }
 
 func TestLoadCodexEnv(t *testing.T) {
-	t.Setenv("HARNESS_ROLES_WORKER_CODEX", "gpt-5.5")
+	t.Setenv("HARNESS_ROLES_WORKER_CODEX", "gpt-6.1-terra")
 	got, err := load(t, "")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if want := []string{"gpt-5.5"}; !reflect.DeepEqual(got.Roles["worker"]["codex"], want) {
+	if want := []string{"gpt-6.1-terra"}; !reflect.DeepEqual(got.Roles["worker"]["codex"], want) {
 		t.Errorf("worker.codex = %+v, want %+v", got.Roles["worker"]["codex"], want)
 	}
 }
