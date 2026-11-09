@@ -18,7 +18,7 @@ The harness is a plugin for Claude Code and for Codex. The plugin installs these
 - The agents `explorer` (the facts for a plan), `advisor` (the check of a plan), `worker` (one task of a plan), `reviewer` (the review of a run, through one lens) and `linter` (the lint setup).
 - The hooks of the host.
 
-Each skill starts with a decision tree, so an agent reads only the part that it needs. The `pr-open` skill opens the pull request of the ship step. Its body answers Why, What and How, in this order, with the plan diagrams in How. The hooks act only in a git repository with `.harness.yaml` at its top level. In any other folder, they do nothing.
+Each skill starts with a decision tree, so an agent reads only the part that it needs. The `pr-open` skill opens the pull request of the ship step. Its body answers Why, What and How, in this order, after a bottom line, with the plan diagrams and the visuals of the done tasks in How. The hooks act only in a git repository with `.harness.yaml` at its top level. In any other folder, they do nothing.
 
 The repository is private. Log in to GitHub once, so that the host can clone the plugin and the plugin can download the binary:
 

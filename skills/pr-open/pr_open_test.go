@@ -41,6 +41,64 @@ func TestPROpen(t *testing.T) {
 	}
 }
 
+const prVisualsRef = "skills/pr-open/references/visuals.md"
+
+var (
+	prMermaidKinds = []string{"stateDiagram-v2", "flowchart", "sequenceDiagram", "journey", "classDiagram", "erDiagram"}
+	prWireframe    = "wireframe"
+)
+
+func fenceFirstLines(doc, lang string) []string {
+	var firsts []string
+	parts := strings.Split(doc, "```"+lang+"\n")
+	for _, part := range parts[1:] {
+		firsts = append(firsts, strings.SplitN(part, "\n", 2)[0])
+	}
+	return firsts
+}
+
+func TestPROpenVisuals(t *testing.T) {
+	skill, ref := repository.Read(t, prOpenSkill), repository.Read(t, prVisualsRef)
+	for _, kind := range append([]string{prWireframe}, prMermaidKinds...) {
+		if !strings.Contains(skill, kind) {
+			t.Errorf("%s does not name the visual %q", prOpenSkill, kind)
+		}
+	}
+	if !strings.Contains(skill, "references/visuals.md") {
+		t.Errorf("%s does not link references/visuals.md", prOpenSkill)
+	}
+	firsts := fenceFirstLines(ref, "mermaid")
+	for _, kind := range prMermaidKinds {
+		n := 0
+		for _, first := range firsts {
+			if strings.HasPrefix(first, kind) {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s has %d mermaid fences of kind %s, want 1", prVisualsRef, n, kind)
+		}
+	}
+	if n := len(fenceFirstLines(ref, "text")); n != 1 {
+		t.Errorf("%s has %d text fences, want 1 wireframe", prVisualsRef, n)
+	}
+}
+
+func TestPROpenBottomLine(t *testing.T) {
+	skill := repository.Read(t, prOpenSkill)
+	if !strings.Contains(skill, "BLUF") {
+		t.Errorf("%s does not name BLUF", prOpenSkill)
+	}
+	why := strings.Index(skill, "\n## Why\n")
+	if why < 0 {
+		t.Fatalf("%s has no body template", prOpenSkill)
+	}
+	above := skill[strings.LastIndex(skill[:why], "```\n")+4 : why]
+	if !strings.HasPrefix(strings.TrimSpace(above), "<the bottom line") {
+		t.Errorf("%s: the body template has no bottom line placeholder above ## Why", prOpenSkill)
+	}
+}
+
 func TestPROpenDocs(t *testing.T) {
 	design, readme := repository.Read(t, designFile), repository.Read(t, readmeFile)
 	for _, section := range prBodySections {
