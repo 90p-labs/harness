@@ -98,6 +98,15 @@ func invocations(line string) []Command {
 	return commands
 }
 
+func flatInvocations(line string) ([]Command, bool) {
+	commands, flat := flatCommands(line)
+	for i := range commands {
+		commands[i].Args = programArgs(commands[i].Args)
+		flat = flat && writeOptionsAllowed(commands[i].Args)
+	}
+	return commands, flat
+}
+
 func programArgs(args []string) []string {
 	for len(args) > 0 {
 		program := filepath.Base(args[0])
