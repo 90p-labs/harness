@@ -152,6 +152,18 @@ func TestQuestionDecodeClaude(t *testing.T) {
 	}
 }
 
+func TestClaudeDecodeSessionID(t *testing.T) {
+	codec := hookcodec.NewClaude()
+	with, err := codec.Decode(domain.HookSessionStart, []byte(sessionStartInput))
+	if err != nil || with.SessionID != "abc123" {
+		t.Fatalf("SessionID = %q, err = %v, want abc123", with.SessionID, err)
+	}
+	without, err := codec.Decode(domain.HookSessionStart, []byte(`{"cwd":"/work"}`))
+	if err != nil || without.SessionID != "" {
+		t.Fatalf("SessionID = %q, err = %v, want empty", without.SessionID, err)
+	}
+}
+
 func TestClaudeIdentity(t *testing.T) {
 	codec := hookcodec.NewClaude()
 	if codec.Host() != shareddomain.HostClaude {

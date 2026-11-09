@@ -51,6 +51,7 @@ func NewClaude() Codec { return Codec{host: shareddomain.HostClaude} }
 func NewCodex() Codec { return Codec{host: shareddomain.HostCodex, printsStopJSON: true} }
 
 type hookInput struct {
+	SessionID      string          `json:"session_id"`
 	Cwd            string          `json:"cwd"`
 	Source         string          `json:"source"`
 	Prompt         string          `json:"prompt"`
@@ -86,11 +87,12 @@ func (c Codec) Decode(hook domain.HookName, raw []byte) (shareddomain.Envelope, 
 		return shareddomain.Envelope{}, fmt.Errorf("encode %s payload: %w", hook, err)
 	}
 	return shareddomain.Envelope{
-		Version: shareddomain.EnvelopeVersion,
-		Event:   event,
-		Host:    c.host,
-		Cwd:     in.Cwd,
-		Payload: payload,
+		Version:   shareddomain.EnvelopeVersion,
+		Event:     event,
+		Host:      c.host,
+		Cwd:       in.Cwd,
+		Payload:   payload,
+		SessionID: in.SessionID,
 	}, nil
 }
 

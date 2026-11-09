@@ -34,6 +34,7 @@ const (
 	attrHost           = attribute.Key("harness.host")
 	attrHook           = attribute.Key("harness.hook")
 	attrVerdict        = attribute.Key("harness.verdict")
+	attrSessionID      = attribute.Key("harness.session.id")
 )
 
 type Connect func(ctx context.Context) (shareddomain.Dispatcher, error)
@@ -100,6 +101,9 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.V
 	envelope, err := codec.Decode(c.Hook, raw)
 	if err != nil {
 		return Output{}, shareddomain.Verdict{}, raw, err
+	}
+	if envelope.SessionID != "" {
+		trace.SpanFromContext(ctx).SetAttributes(attrSessionID.String(envelope.SessionID))
 	}
 	missing := hostdomain.MissingEvents(codec)
 	if envelope.Event == shareddomain.EventSessionStarted && len(missing) > 0 {

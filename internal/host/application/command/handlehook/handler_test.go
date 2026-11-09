@@ -306,6 +306,45 @@ func TestHandleHookTelemetry(t *testing.T) {
 	}
 }
 
+func TestHandleHookSessionIDAttribute(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+		found bool
+	}{
+		{"with session id", `{"session_id":"abc123","cwd":"/work","tool_name":"Bash","tool_input":{"command":"ls"}}`, "abc123", true},
+		{"without session id", preToolInput, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := tracetest.NewSpanRecorder()
+			tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
+			meter := sdkmetric.NewMeterProvider().Meter("test")
+			handler := handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(allowAll()), tracer, meter)
+
+			handler.Handle(context.Background(), handlehook.Command{
+				Host: shareddomain.HostClaude, Hook: hostdomain.HookPreToolUse, Input: strings.NewReader(tc.input),
+			})
+
+			spans := recorder.Ended()
+			if len(spans) != 1 {
+				t.Fatalf("spans = %d, want 1", len(spans))
+			}
+			var got string
+			var found bool
+			for _, kv := range spans[0].Attributes() {
+				if kv.Key == "harness.session.id" {
+					got, found = kv.Value.AsString(), true
+				}
+			}
+			if found != tc.found || got != tc.want {
+				t.Fatalf("harness.session.id = %q (present %v), want %q (present %v)", got, found, tc.want, tc.found)
+			}
+		})
+	}
+}
+
 func TestHandleHookTelemetryOnError(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
