@@ -266,7 +266,7 @@ The rule ids:
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` before `harness verify --commits` passes for `HEAD` |
 | `approval-no-forge` | `tool.before` | A question tool call with answers in its input, or a shell call of `harness hook` |
 | `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`) |
-| `review-models` | `run.transition.before` | `harness run ship` when a reviewer model of the host list has no record on `HEAD`, or fewer than 2 models have a record. The rule picks the host list with the most recorded models. A hook records the model of each `reviewer` agent call in the reviewing phase. A Codex repository turns it off, because Codex sends no model in an agent call |
+| `review-models` | `run.transition.before` | `harness run ship` when a reviewer model of the host list has no record on `HEAD`, or fewer than 2 models have a record. The rule picks the host list with the most recorded models. A hook records the model of each `reviewer` agent call in the reviewing phase, in the common list and in the final panel. A verifier call and a re-review write no record. A Codex repository turns it off, because Codex sends no model in an agent call |
 
 ```yaml
 guard:

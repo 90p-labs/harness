@@ -18,8 +18,11 @@ These terms have one meaning in the code, the docs and the plans.
 - **Approval record**: a row that holds the run id and the SHA-256 of `plan.md` when the user picks `Approve` on the `Plan` question. `run approve` needs it, unless `--by` names a model.
 - **Role**: a job of a subagent, such as `explorer`, `worker`, `reviewer` or `advisor`. `.harness.yaml` gives each role the models that it may use on each host.
 - **Review lens**: the question of one reviewer. `Spec` checks the diff against `plan.md`. `Standards` checks it against the repository rules.
-- **Review record**: a row that holds the repo, the `HEAD` and the model of one dispatched `reviewer` agent. `run ship` needs a record of every listed `reviewer` model of the host on `HEAD`.
-- **Pre-ship panel**: one `Spec` reviewer for each listed `reviewer` model that did not review the `HEAD`. It starts when a round has no finding, before `run ship`.
+- **Review record**: a row that holds the repo, the `HEAD` and the model of one dispatched `reviewer` agent. Only a `reviewer` agent call in `reviewing` writes one. `run ship` needs a record of every listed `reviewer` model of the host on `HEAD`.
+- **Common list**: the findings that one `reviewer` agent for each listed model returns in one pass on the same `HEAD`. The lead merges them and removes duplicates.
+- **Verifier**: an agent that checks one finding and answers `real` or `not real`. It never edits a file and writes no review record.
+- **Re-review**: a `reviewer` agent that reads one fixup diff and answers `closed` or `open`. It runs in `working` and writes no review record.
+- **Final panel**: the common list on the final `HEAD` after a rework, with every listed `reviewer` model.
 - **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`.
 
 ## Plugin terms
