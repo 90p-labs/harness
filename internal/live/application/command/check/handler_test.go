@@ -20,17 +20,18 @@ import (
 )
 
 const (
-	repo        = "/work/repo"
-	environment = "production"
-	rollback    = "kubectl rollout undo deploy/api"
-	prURL       = "https://github.com/acme/api/pull/7"
-	otherPRURL  = "https://github.com/acme/api/pull/8"
-	mergeSHA    = "abc1234"
-	spanName    = "live.check"
-	metricName  = "harness.live.checks"
-	attrRun     = "harness.run"
-	attrPhase   = "harness.phase"
-	attrOutcome = "harness.live.outcome"
+	repo         = "/work/repo"
+	environment  = "production"
+	rollback     = "kubectl rollout undo deploy/api"
+	prURL        = "https://github.com/acme/api/pull/7"
+	otherPRURL   = "https://github.com/acme/api/pull/8"
+	mergeSHA     = "abc1234"
+	spanName     = "live.check"
+	metricName   = "harness.live.checks"
+	attrRun      = "harness.run.id"
+	attrWorktree = "harness.worktree"
+	attrPhase    = "harness.phase"
+	attrOutcome  = "harness.live.outcome"
 )
 
 var (
@@ -587,6 +588,32 @@ func TestLiveCheckTelemetry(t *testing.T) {
 	}
 	if len(counts) != 2 || counts[string(domain.OutcomeHealthy)] != 1 || counts[string(domain.OutcomeError)] != 1 {
 		t.Fatalf("counts = %v", counts)
+	}
+}
+
+func TestCheckSpanNamesTheRun(t *testing.T) {
+	f := newFixture(t)
+	runs := []domain.LiveRun{observing("run-a", 0), releasing("run-b")}
+	f.runs.runs = runs
+	f.releases.stored["run-a"] = deployedRelease("run-a")
+	f.releases.stored["run-b"] = deployedRelease("run-b")
+
+	if _, err := f.handle(t); err != nil {
+		t.Fatal(err)
+	}
+
+	spans := f.spans.Ended()
+	if len(spans) != len(runs) {
+		t.Fatalf("spans = %d, want %d", len(spans), len(runs))
+	}
+	for i, span := range spans {
+		attrs := map[string]string{}
+		for _, a := range span.Attributes() {
+			attrs[string(a.Key)] = a.Value.Emit()
+		}
+		if attrs[attrRun] != runs[i].ID || attrs[attrWorktree] != runs[i].Worktree {
+			t.Errorf("span %d attributes = %v, want run %s in %s", i, attrs, runs[i].ID, runs[i].Worktree)
+		}
 	}
 }
 

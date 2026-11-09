@@ -25,7 +25,6 @@ const (
 	baseRef  = "main"
 	headSHA  = "c3c3c3"
 	testGate = "go-test"
-	runID    = "20261109-140744-trace"
 
 	spanVerifyCommits = "gate.verify_commits"
 	spanVerifyCommit  = "gate.verify_commit"
@@ -351,7 +350,6 @@ func spanAttrs(span sdktrace.ReadOnlySpan) map[string]string {
 func TestVerifyCommitsTrace(t *testing.T) {
 	f := newFixture(nil, "/tmp/wt-b2b2b2", "/tmp/wt-"+headSHA)
 	cmd := command()
-	cmd.RunID = runID
 
 	if _, err := f.handler.Handle(context.Background(), cmd); err != nil {
 		t.Fatal(err)
@@ -378,8 +376,10 @@ func TestVerifyCommitsTrace(t *testing.T) {
 	}
 	root := roots[0]
 	attrs := spanAttrs(root)
-	if attrs[attrRunID] != runID || attrs[attrWorktree] != workDir {
-		t.Errorf("root attributes = %v, want run id %s and worktree %s", attrs, runID, workDir)
+	for _, key := range []string{attrRunID, attrWorktree} {
+		if _, has := attrs[key]; has {
+			t.Errorf("root has %s, want none", key)
+		}
 	}
 	if len(commits) != 3 || len(verifies) != 3 {
 		t.Fatalf("commit spans = %d, verify spans = %d, want 3 each", len(commits), len(verifies))
@@ -396,6 +396,9 @@ func TestVerifyCommitsTrace(t *testing.T) {
 		}
 		if _, has := spanAttrs(span)[attrRunID]; has {
 			t.Errorf("verify span has %s, want none", attrRunID)
+		}
+		if tree := spanAttrs(span)[attrWorktree]; tree == "" || tree == workDir {
+			t.Errorf("verify span %s = %q, want the temp worktree", attrWorktree, tree)
 		}
 	}
 }
