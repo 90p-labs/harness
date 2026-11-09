@@ -1,4 +1,4 @@
-package harness
+package docs_test
 
 import (
 	"os"
@@ -18,6 +18,7 @@ import (
 	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -98,7 +99,7 @@ func guardIDs() []string {
 
 func TestConfigurationFullBlocksLoad(t *testing.T) {
 	clearHarnessEnv(t)
-	blocks := yamlBlocks(readDoc(t, fullConfigPage))
+	blocks := yamlBlocks(repository.Read(t, fullConfigPage))
 	if want := fullBlockCount + caseBlockCount; len(blocks) != want {
 		t.Fatalf("%s has %d yaml blocks, want %d", fullConfigPage, len(blocks), want)
 	}
@@ -154,7 +155,7 @@ func hasPath(node any, parts []string) bool {
 }
 
 func TestConfigurationFullSetsEveryKey(t *testing.T) {
-	blocks := yamlBlocks(readDoc(t, fullConfigPage))
+	blocks := yamlBlocks(repository.Read(t, fullConfigPage))
 	if len(blocks) == 0 {
 		t.Fatalf("%s has no yaml block", fullConfigPage)
 	}
@@ -186,15 +187,15 @@ func TestConfigurationFullSetsEveryKey(t *testing.T) {
 }
 
 func TestConfigurationFullPage(t *testing.T) {
-	page := readDoc(t, fullConfigPage)
-	if strings.Contains(page, emDash) || strings.ContainsFunc(page, isEmoji) {
+	page := repository.Read(t, fullConfigPage)
+	if strings.Contains(page, repository.EmDash) || strings.ContainsFunc(page, repository.IsEmoji) {
 		t.Errorf("%s has an em dash or an emoji", fullConfigPage)
 	}
 }
 
 func TestConfigurationFullLinked(t *testing.T) {
 	for _, doc := range fullConfigDocs {
-		if !fullConfigRef.MatchString(readDoc(t, doc)) {
+		if !fullConfigRef.MatchString(repository.Read(t, doc)) {
 			t.Errorf("%s has no link to %s", doc, fullConfigLink)
 		}
 	}

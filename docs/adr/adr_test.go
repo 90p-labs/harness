@@ -1,13 +1,17 @@
-package harness
+package adr_test
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
-const adrDir = "docs/adr"
+const (
+	adrDir = "docs/adr"
+)
 
 var (
 	adrNumbers  = []string{"0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017"}
@@ -16,7 +20,7 @@ var (
 
 func TestADRSections(t *testing.T) {
 	for _, number := range adrNumbers {
-		files, err := filepath.Glob(filepath.Join(adrDir, number+"-*.md"))
+		files, err := filepath.Glob(repository.Path(t, adrDir, number+"-*.md"))
 		if err != nil {
 			t.Fatal(err)
 		}

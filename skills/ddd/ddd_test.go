@@ -1,4 +1,4 @@
-package harness
+package ddd_test
 
 import (
 	"io/fs"
@@ -12,14 +12,15 @@ import (
 	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
 	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
 	"github.com/90p-labs/harness/internal/lint/infrastructure/rulecatalogue"
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
-	dddSkillDir   = "skills/ddd"
-	dddSkill      = dddSkillDir + "/SKILL.md"
-	dddReferences = "references/"
-
+	dddSkillDir        = "skills/ddd"
+	dddSkill           = dddSkillDir + "/SKILL.md"
+	dddReferences      = "references/"
 	dddBuiltInLanguage = "typescript"
+	examplesDir        = "examples"
 )
 
 var (
@@ -28,6 +29,7 @@ var (
 	languageSpecifics = append([]string{"biome"}, knownLintTools...)
 	languageExtension = regexp.MustCompile(`\.(?:tsx?|jsx?|php|py|go)\b`)
 	examplePath       = regexp.MustCompile("`(" + examplesDir + "/[^`]+)`")
+	knownLintTools    = []string{"deptrac", "import-linter", "go-arch-lint", "depguard", "`ddd` pack"}
 )
 
 func TestDDDSkillRuleIDs(t *testing.T) {
@@ -43,7 +45,7 @@ func TestDDDSkillRuleIDs(t *testing.T) {
 	}
 
 	named := 0
-	err := filepath.WalkDir(dddSkillDir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(repository.Path(t, dddSkillDir), func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -68,7 +70,7 @@ func TestDDDSkillRuleIDs(t *testing.T) {
 }
 
 func TestDDDSkillAgnostic(t *testing.T) {
-	skill := readDoc(t, dddSkill)
+	skill := repository.Read(t, dddSkill)
 	catalogue, err := rulecatalogue.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -92,11 +94,11 @@ func TestDDDSkillAgnostic(t *testing.T) {
 }
 
 func TestDDDSkillReferences(t *testing.T) {
-	skill := readDoc(t, dddSkill)
+	skill := repository.Read(t, dddSkill)
 	for _, language := range dddLanguages {
 		reference := dddReferences + language + ".md"
 		path := filepath.Join(dddSkillDir, reference)
-		doc := readDoc(t, path)
+		doc := repository.Read(t, path)
 		if !strings.Contains(skill, reference) {
 			t.Errorf("%s does not route to %s", dddSkill, reference)
 		}
@@ -105,12 +107,12 @@ func TestDDDSkillReferences(t *testing.T) {
 			t.Errorf("%s names no tested config under %s", path, examplesDir)
 		}
 		for _, m := range configs {
-			if _, err := os.Stat(m[1]); err != nil {
+			if _, err := os.Stat(repository.Path(t, m[1])); err != nil {
 				t.Errorf("%s names %s, which does not exist", path, m[1])
 			}
 		}
 	}
-	if keys := frontmatterKeys(t, dddSkill); !slices.Equal(keys, []string{"argument-hint", "description", "name"}) {
+	if keys := repository.FrontmatterKeys(t, dddSkill); !slices.Equal(keys, []string{"argument-hint", "description", "name"}) {
 		t.Errorf("%s frontmatter keys = %v, want argument-hint, description and name", dddSkill, keys)
 	}
 }

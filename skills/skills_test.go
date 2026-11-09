@@ -1,4 +1,4 @@
-package harness
+package skills_test
 
 import (
 	"io/fs"
@@ -7,9 +7,22 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
+	skillFile           = "skills/harness/SKILL.md"
+	explorerFile        = "agents/explorer.md"
+	skillDocName        = "SKILL.md"
+	skillDocs           = "skills/*/" + skillDocName
+	agentDocs           = "agents/*.md"
+	designFile          = "DESIGN.md"
+	readmeFile          = "README.md"
+	lintSetupSkill      = "skills/lint-setup/SKILL.md"
+	linterAgent         = "agents/linter.md"
+	reviewerAgent       = "agents/reviewer.md"
+	frontmatterEnd      = "\n---\n"
 	skillsDir           = "skills"
 	decisionTreeHeading = "## Decision tree"
 	levelTwoHeading     = "## "
@@ -19,13 +32,10 @@ const (
 	modelFieldText      = "`model` field"
 )
 
-var roleAgents = []string{"explorer", "advisor", "worker", "reviewer"}
-
 var (
-	crossReference = regexp.MustCompile("`([a-z][a-z-]*)` (" + skillKind + "|" + agentKind + ")\\b")
-	reportLimit    = regexp.MustCompile(`\b(?:under|at most) \d+ words\b`)
-	roleAgentLine  = regexp.MustCompile("`(" + strings.Join(roleAgents, "|") + ")` agents?\\b|model of the (?:`(?:" + strings.Join(roleAgents, "|") + ")` )?role\\b")
-
+	roleAgents         = []string{"explorer", "advisor", "worker", "reviewer"}
+	crossReference     = regexp.MustCompile("`([a-z][a-z-]*)` (" + skillKind + "|" + agentKind + ")\\b")
+	roleAgentLine      = regexp.MustCompile("`(" + strings.Join(roleAgents, "|") + ")` agents?\\b|model of the (?:`(?:" + strings.Join(roleAgents, "|") + ")` )?role\\b")
 	requiredReferences = map[string][]string{
 		linterAgent:    {"ddd"},
 		lintSetupSkill: {"ddd"},
@@ -38,32 +48,32 @@ var (
 func pluginDocs(t *testing.T) map[string]string {
 	t.Helper()
 	docs := map[string]string{}
-	err := filepath.WalkDir(skillsDir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(repository.Path(t, skillsDir), func(path string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && filepath.Ext(path) == ".md" {
-			docs[path] = readDoc(t, path)
+			docs[repository.Relative(t, path)] = repository.Read(t, path)
 		}
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	agents, err := filepath.Glob(agentDocs)
+	agents, err := repository.Glob(t, agentDocs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range agents {
-		docs[path] = readDoc(t, path)
+		docs[repository.Relative(t, path)] = repository.Read(t, path)
 	}
 	return docs
 }
 
 func TestSkillDecisionTree(t *testing.T) {
-	skills, err := filepath.Glob(skillDocs)
+	skills, err := repository.Glob(t, skillDocs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range skills {
-		_, body, _ := strings.Cut(strings.TrimPrefix(readDoc(t, path), "---\n"), frontmatterEnd)
+		_, body, _ := strings.Cut(strings.TrimPrefix(repository.Read(t, path), "---\n"), frontmatterEnd)
 		var headings []int
 		lines := strings.Split(body, "\n")
 		for i, line := range lines {
@@ -94,7 +104,7 @@ func TestSkillCrossReferencesExist(t *testing.T) {
 			if m[2] == agentKind {
 				target = filepath.Join(filepath.Dir(agentDocs), m[1]+".md")
 			}
-			if _, err := os.Stat(target); err != nil {
+			if _, err := os.Stat(repository.Path(t, target)); err != nil {
 				t.Errorf("%s names the %s %s, which has no file %s", path, m[2], m[1], target)
 			}
 		}
@@ -103,7 +113,7 @@ func TestSkillCrossReferencesExist(t *testing.T) {
 
 func TestSkillCrossReferencesRequired(t *testing.T) {
 	for path, names := range requiredReferences {
-		doc := readDoc(t, path)
+		doc := repository.Read(t, path)
 		for _, name := range names {
 			if !strings.Contains(doc, "`"+name+"` "+skillKind) {
 				t.Errorf("%s does not name the `%s` skill", path, name)
@@ -115,35 +125,23 @@ func TestSkillCrossReferencesRequired(t *testing.T) {
 func TestSkillsNoEmDash(t *testing.T) {
 	docs := pluginDocs(t)
 	for _, path := range []string{readmeFile, designFile} {
-		docs[path] = readDoc(t, path)
+		docs[repository.Relative(t, path)] = repository.Read(t, path)
 	}
 	for path, doc := range docs {
-		if strings.Contains(doc, emDash) {
+		if strings.Contains(doc, repository.EmDash) {
 			t.Errorf("%s has an em dash", path)
 		}
 	}
 }
 
-func TestAgentReportWordLimit(t *testing.T) {
-	agents, err := filepath.Glob(agentDocs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range agents {
-		if !reportLimit.MatchString(readDoc(t, path)) {
-			t.Errorf("%s gives no word limit for its report", path)
-		}
-	}
-}
-
 func TestSkillAgentStartsNameModelField(t *testing.T) {
-	skills, err := filepath.Glob(skillDocs)
+	skills, err := repository.Glob(t, skillDocs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range skills {
 		started := map[string]bool{}
-		for i, line := range strings.Split(readDoc(t, path), "\n") {
+		for i, line := range strings.Split(repository.Read(t, path), "\n") {
 			match := roleAgentLine.FindStringSubmatch(line)
 			if match == nil {
 				continue

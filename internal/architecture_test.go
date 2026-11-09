@@ -1,4 +1,4 @@
-package harness
+package internal_test
 
 import (
 	"go/build"
@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -47,7 +49,7 @@ func TestLayerImportsRules(t *testing.T) {
 }
 
 func TestLayerImports(t *testing.T) {
-	err := filepath.WalkDir(sourceRoot, func(dir string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir(repository.Path(t, sourceRoot), func(dir string, entry fs.DirEntry, err error) error {
 		if err != nil || !entry.IsDir() {
 			return err
 		}
@@ -59,7 +61,7 @@ func TestLayerImports(t *testing.T) {
 			return err
 		}
 		for _, imported := range pkg.Imports {
-			if problem := layerProblem(dir, imported); problem != "" {
+			if problem := layerProblem(repository.Relative(t, dir), imported); problem != "" {
 				t.Errorf("%s imports %s: %s", dir, imported, problem)
 			}
 		}

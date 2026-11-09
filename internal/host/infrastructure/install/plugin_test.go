@@ -1,10 +1,12 @@
-package harness
+package install_test
 
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -26,7 +28,7 @@ type manifest struct {
 
 func readJSON(t *testing.T, path string, v any) {
 	t.Helper()
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(repository.Path(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +77,7 @@ func TestPluginManifests(t *testing.T) {
 			t.Errorf("%s names an empty path", codexManifest)
 			continue
 		}
-		if _, err := os.Stat(filepath.Clean(path)); err != nil {
+		if _, err := os.Stat(repository.Path(t, path)); err != nil {
 			t.Errorf("manifest path %q: %v", path, err)
 		}
 	}

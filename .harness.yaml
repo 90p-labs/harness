@@ -12,7 +12,7 @@ gates:
       - '**/*.go'
   - id: go-vet
     run: go vet ./...
-  # No paths: the root tests read the docs, the examples and the plugin files.
+  # No paths: colocated tests also read the docs, the examples and the plugin files.
   - id: go-test
     run: go test ./...
     needs: [go-fmt, go-vet]

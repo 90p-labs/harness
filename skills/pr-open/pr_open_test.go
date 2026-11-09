@@ -1,12 +1,19 @@
-package harness
+package propen_test
 
 import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
-const prOpenSkill = "skills/pr-open/SKILL.md"
+const (
+	skillFile   = "skills/harness/SKILL.md"
+	designFile  = "DESIGN.md"
+	readmeFile  = "README.md"
+	prOpenSkill = "skills/pr-open/SKILL.md"
+)
 
 var (
 	prBodySections = []string{"## Why", "## What", "## How"}
@@ -14,7 +21,7 @@ var (
 )
 
 func TestPROpen(t *testing.T) {
-	skill := readDoc(t, prOpenSkill)
+	skill := repository.Read(t, prOpenSkill)
 
 	last := -1
 	for _, section := range prBodySections {
@@ -29,13 +36,13 @@ func TestPROpen(t *testing.T) {
 			t.Errorf("%s does not name %q", prOpenSkill, step)
 		}
 	}
-	if keys := frontmatterKeys(t, prOpenSkill); !slices.Equal(keys, []string{"argument-hint", "description", "name"}) {
+	if keys := repository.FrontmatterKeys(t, prOpenSkill); !slices.Equal(keys, []string{"argument-hint", "description", "name"}) {
 		t.Errorf("%s frontmatter keys = %v, want argument-hint, description and name", prOpenSkill, keys)
 	}
 }
 
 func TestPROpenDocs(t *testing.T) {
-	design, readme := readDoc(t, designFile), readDoc(t, readmeFile)
+	design, readme := repository.Read(t, designFile), repository.Read(t, readmeFile)
 	for _, section := range prBodySections {
 		if !strings.Contains(design, "`"+section+"`") {
 			t.Errorf("%s does not name the PR body section %s", designFile, section)
@@ -50,13 +57,13 @@ func TestPROpenDocs(t *testing.T) {
 }
 
 func TestPROpenBodyFile(t *testing.T) {
-	if skill := readDoc(t, prOpenSkill); strings.Contains(skill, "--body-file pr-body.md") {
+	if skill := repository.Read(t, prOpenSkill); strings.Contains(skill, "--body-file pr-body.md") {
 		t.Errorf("%s passes a relative body file, which the shell does not find from the repository", prOpenSkill)
 	}
 }
 
 func TestPROpenShipStep(t *testing.T) {
-	if skill := readDoc(t, skillFile); !strings.Contains(skill, "`pr-open`") {
+	if skill := repository.Read(t, skillFile); !strings.Contains(skill, "`pr-open`") {
 		t.Errorf("%s does not name the `pr-open` skill", skillFile)
 	}
 }

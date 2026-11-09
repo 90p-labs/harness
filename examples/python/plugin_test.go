@@ -1,4 +1,4 @@
-package harness
+package python_test
 
 import (
 	"bytes"
@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -20,9 +22,7 @@ const (
 	ruleLayerDirection = "ddd/layer-direction"
 	ruleCrossContext   = "ddd/cross-context"
 	renamedContract    = "Contexts are independent"
-)
-
-const brokenReport = `
+	brokenReport       = `
 ---------
 Contracts
 ---------
@@ -109,8 +109,7 @@ shop.billing is not allowed to import requests:
 
 -   shop.billing.domain.invoice -> requests (l.5)
 `
-
-const renamedReport = `
+	renamedReport = `
 ---------
 Contracts
 ---------
@@ -127,22 +126,26 @@ ddd/cross-context KEPT
 
 Contracts: 6 kept, 0 broken.
 `
+	harnessConfig  = ".harness.yaml"
+	executableMode = 0o755
+)
 
-var payloadFiles = []string{
-	"src/shop/__init__.py",
-	"src/shop/cart.py",
-	"src/shop/payment/__init__.py",
-	"src/shop/billing/domain/invoice.py",
-	"src/shop/billing/application/issue_invoice.py",
-	"src/shop/order/application/direct.py",
-	"src/shop/order/application/wire.py",
-	"src/shop/shared/domain/bad.py",
-	"src/shop/shared/application/rewire.py",
-	"src/shop/shared/application/wire.py",
-	"src/shop/shared/infrastructure/other.py",
-}
-
-var allRules = []string{ruleSrcRoots, ruleDomainPurity, ruleLayerDirection, ruleCrossContext}
+var (
+	payloadFiles = []string{
+		"src/shop/__init__.py",
+		"src/shop/cart.py",
+		"src/shop/payment/__init__.py",
+		"src/shop/billing/domain/invoice.py",
+		"src/shop/billing/application/issue_invoice.py",
+		"src/shop/order/application/direct.py",
+		"src/shop/order/application/wire.py",
+		"src/shop/shared/domain/bad.py",
+		"src/shop/shared/application/rewire.py",
+		"src/shop/shared/application/wire.py",
+		"src/shop/shared/infrastructure/other.py",
+	}
+	allRules = []string{ruleSrcRoots, ruleDomainPurity, ruleLayerDirection, ruleCrossContext}
+)
 
 type pluginFinding struct {
 	Rule string `json:"rule"`
@@ -207,10 +210,7 @@ func brokenReportFindings(t *testing.T, rules []string) []pluginFinding {
 
 func runImportLinterPlugin(t *testing.T, report string, rules []string) (int, string, string) {
 	t.Helper()
-	plugin, err := filepath.Abs(importLinterPlugin)
-	if err != nil {
-		t.Fatal(err)
-	}
+	plugin := repository.Path(t, importLinterPlugin)
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(fakeDocker), executableMode); err != nil {
 		t.Fatal(err)
@@ -244,4 +244,18 @@ func runImportLinterPlugin(t *testing.T, report string, rules []string) (int, st
 		t.Fatal(err)
 	}
 	return 0, stdout.String(), stderr.String()
+}
+
+func gitRepo(t *testing.T, configured bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "init", "--quiet", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	if configured {
+		if err := os.WriteFile(filepath.Join(dir, harnessConfig), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
 }

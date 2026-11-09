@@ -1,4 +1,4 @@
-package harness
+package examples_test
 
 import (
 	"context"
@@ -12,12 +12,13 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/90p-labs/harness/internal/gate/domain"
+	gatedomain "github.com/90p-labs/harness/internal/gate/domain"
 	gateconfig "github.com/90p-labs/harness/internal/gate/infrastructure/config"
 	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/execplugin"
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
@@ -32,6 +33,12 @@ const (
 var (
 	imageLine   = regexp.MustCompile(`(?m)^\s*(?:image:|FROM)\s+(\S+)`)
 	pinnedImage = regexp.MustCompile(`^[a-z0-9./_-]+:\d+\.\d+\.\d+[a-z0-9._-]*@sha256:[0-9a-f]{64}$`)
+	examples    = []example{
+		{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}},
+		{name: "go", lockfile: "go.sum", setup: "go-mod"},
+		{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install"},
+		{name: "python", lockfile: "uv.lock", setup: "py-install"},
+	}
 )
 
 type example struct {
@@ -41,20 +48,10 @@ type example struct {
 	detected []string
 }
 
-var examples = []example{
-	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}},
-	{name: "go", lockfile: "go.sum", setup: "go-mod"},
-	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install"},
-	{name: "python", lockfile: "uv.lock", setup: "py-install"},
-}
-
 func TestExamples(t *testing.T) {
 	for _, ex := range examples {
 		t.Run(ex.name, func(t *testing.T) {
-			dir, err := filepath.Abs(filepath.Join(examplesDir, ex.name))
-			if err != nil {
-				t.Fatal(err)
-			}
+			dir := repository.Path(t, examplesDir, ex.name)
 			cfg := loadExampleConfig(t, dir)
 			plugins, err := execplugin.FromConfig(cfg.Plugins)
 			if err != nil {
@@ -77,7 +74,7 @@ func TestExamples(t *testing.T) {
 			if len(setup) != 1 || setup[0].ID != ex.setup {
 				t.Fatalf("setup = %+v, want the one step %s", setup, ex.setup)
 			}
-			if !slices.ContainsFunc(gates, func(gate domain.Gate) bool { return len(gate.Needs) > 0 }) {
+			if !slices.ContainsFunc(gates, func(gate gatedomain.Gate) bool { return len(gate.Needs) > 0 }) {
 				t.Error("no gate has needs, so the tests do not wait for the fast checks")
 			}
 			if cfg.Verify.Parallel < 2 {
@@ -113,7 +110,7 @@ func TestExamples(t *testing.T) {
 	}
 }
 
-func decodeExample(t *testing.T, setupCfg []config.Setup, gatesCfg []config.Gate) ([]domain.Setup, []domain.Gate) {
+func decodeExample(t *testing.T, setupCfg []config.Setup, gatesCfg []config.Gate) ([]gatedomain.Setup, []gatedomain.Gate) {
 	t.Helper()
 	setup, err := gateconfig.DecodeSetup(setupCfg)
 	if err != nil {
@@ -137,7 +134,7 @@ func loadExampleConfig(t *testing.T, dir string) config.Config {
 	return cfg
 }
 
-func detectGates(t *testing.T, dir string, plugins []shareddomain.Plugin) ([]domain.Setup, []domain.Gate) {
+func detectGates(t *testing.T, dir string, plugins []shareddomain.Plugin) ([]gatedomain.Setup, []gatedomain.Gate) {
 	t.Helper()
 	payload, err := json.Marshal(shareddomain.GatesDetectPayload{Files: []string{}})
 	if err != nil {

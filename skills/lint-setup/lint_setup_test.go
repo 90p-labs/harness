@@ -1,41 +1,25 @@
-package harness
+package lintsetup_test
 
 import (
-	"maps"
 	"slices"
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/90p-labs/harness/internal/lint/infrastructure/rulecatalogue"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
 const (
 	lintSetupSkill = "skills/lint-setup/SKILL.md"
-	linterAgent    = "agents/linter.md"
-	reviewerAgent  = "agents/reviewer.md"
-	frontmatterEnd = "\n---\n"
-
-	initLintSetupLine = "next: run the lint-setup skill"
-	proofCommand      = "harness lint canaries --proof"
-	proofFolder       = "lint/proof/"
+	proofCommand   = "harness lint canaries --proof"
+	proofFolder    = "lint/proof/"
 )
 
-var committedProofPaths = []string{"lint/rules.yaml", "lint/canaries"}
-
-var knownLintTools = []string{"deptrac", "import-linter", "go-arch-lint", "depguard", "`ddd` pack"}
-
-func frontmatterKeys(t *testing.T, path string) []string {
-	t.Helper()
-	head, _, found := strings.Cut(strings.TrimPrefix(readDoc(t, path), "---\n"), frontmatterEnd)
-	var fields map[string]any
-	if !found || yaml.Unmarshal([]byte(head), &fields) != nil {
-		t.Fatalf("%s: no YAML frontmatter", path)
-	}
-	return slices.Sorted(maps.Keys(fields))
-}
+var (
+	committedProofPaths = []string{"lint/rules.yaml", "lint/canaries"}
+	knownLintTools      = []string{"deptrac", "import-linter", "go-arch-lint", "depguard", "`ddd` pack"}
+)
 
 func requireProof(t *testing.T, path, text string) {
 	t.Helper()
@@ -52,7 +36,7 @@ func requireProof(t *testing.T, path, text string) {
 }
 
 func TestLintSetupSkill(t *testing.T) {
-	skill := readDoc(t, lintSetupSkill)
+	skill := repository.Read(t, lintSetupSkill)
 	catalogue, err := rulecatalogue.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -79,26 +63,7 @@ func TestLintSetupSkill(t *testing.T) {
 		}
 	}
 	requireProof(t, lintSetupSkill, skill)
-	if keys := frontmatterKeys(t, lintSetupSkill); !slices.Contains(keys, "argument-hint") {
+	if keys := repository.FrontmatterKeys(t, lintSetupSkill); !slices.Contains(keys, "argument-hint") {
 		t.Errorf("%s frontmatter keys = %v, want argument-hint for the language", lintSetupSkill, keys)
-	}
-}
-
-func TestLintSetupStartsAfterInit(t *testing.T) {
-	skill := readDoc(t, skillFile)
-
-	for _, want := range []string{initLintSetupLine, "`lint-setup`"} {
-		if !strings.Contains(skill, want) {
-			t.Errorf("%s does not name %q", skillFile, want)
-		}
-	}
-}
-
-func TestLintSetupAgent(t *testing.T) {
-	requireProof(t, linterAgent, readDoc(t, linterAgent))
-	got, want := frontmatterKeys(t, linterAgent), frontmatterKeys(t, reviewerAgent)
-
-	if !slices.Equal(got, want) {
-		t.Errorf("%s frontmatter keys = %v, want the keys of %s: %v", linterAgent, got, reviewerAgent, want)
 	}
 }
