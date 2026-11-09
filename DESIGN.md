@@ -279,8 +279,10 @@ A plugin may implement the optional `Matcher` interface. The bus calls `Matches`
 The envelope goes to the plugin on stdin. Its version is 1.
 
 ```json
-{"version":1,"event":"tool.before","host":"claude","cwd":"/repo","run":{"id":"r1","phase":"working"},"payload":{"tool":"Bash","input":{"command":"git push"}}}
+{"version":1,"event":"tool.before","host":"claude","cwd":"/repo","session_id":"s1","run":{"id":"r1","phase":"working"},"payload":{"tool":"Bash","input":{"command":"git push"}}}
 ```
+
+`session_id` is the host session id from the hook input. It is absent when the host sends none.
 
 The plugin writes the verdict on stdout. An empty stdout is an allow.
 
@@ -307,7 +309,7 @@ The exec adapter `ExecPlugin{PluginName, Events, Command, Timeout}`:
 - It runs the command in the envelope `cwd`, so a relative command such as `./scripts/gate.sh` works from any subfolder. A `cwd` that does not exist is a plugin failure.
 - The plugin stderr goes to the harness stderr as it comes, once.
 - A timeout, a non-zero exit or invalid JSON returns `ErrPluginFailed` with the cause. The error holds no copy of the stderr.
-- It injects the W3C trace context into the env var `TRACEPARENT`.
+- It injects the W3C trace context into the env var `TRACEPARENT`. It also sets `HARNESS_RUN_ID` to the run id of the call, when the call has a run.
 
 ```mermaid
 classDiagram
@@ -322,6 +324,7 @@ classDiagram
         +Event EventName
         +Host Host
         +Cwd string
+        +SessionID string
         +Run RunRef
         +Payload json
     }
@@ -402,23 +405,33 @@ Signals of lint:
 | `harness.lint.findings` | counter | `harness.lint.rule`, `harness.lint.severity` |
 
 - On an engine error, `lint.engine` records the error and has the error status.
-- A gate child process gets `TRACEPARENT` from the gate runner. A command reads it at start and makes it the parent of its spans. The whole verify call forms one tree under `gate.verify`, with the lint spans under `gate.run`. A missing or bad value starts a new root.
+- A gate child process gets `TRACEPARENT` from the gate runner. A command reads it at start and makes it the parent of its spans. The whole verify call forms one tree under `gate.verify`, with the lint spans under `gate.run`. A missing or bad value starts a new root. The gate runner also passes `HARNESS_RUN_ID`, and a child with no active run of its own takes that run.
 
 Signals of verify:
 
 | Signal | Kind | Attributes |
 |---|---|---|
-| `gate.verify` | span, root of one verify call | `harness.gate.count`, `harness.worktree`, `harness.run.id` |
+| `gate.verify` | span, root of one verify call | `harness.gate.count`, `harness.worktree` |
 | `gate.setup` | span, child of `gate.verify`, one for each setup step that runs | `harness.setup.step` |
 | `gate.run` | span, child of `gate.verify`, one for each gate | `harness.gate`, `harness.gate.cached`, `harness.gate.result` |
-| `gate.verify_commits` | span, root of one `verify --commits` call | `harness.worktree`, `harness.run.id` |
+| `gate.verify_commits` | span, root of one `verify --commits` call | none |
 | `gate.verify_commit` | span, child of `gate.verify_commits`, one for each commit | `harness.commit` |
 
-- `harness.run.id` is set only when a run is active. Only the root span of a call has it.
-- Under `gate.verify_commit`, the `gate.verify` span has the path of the temporary worktree of that commit and no run id.
+- Under `gate.verify_commit`, the `gate.verify` span has the path of the temporary worktree of that commit in `harness.worktree`.
 - On an error, each span records the error and has the error status. `gate.verify` also has the error status when a gate fails, and `gate.verify_commits` when the commit check fails.
 
 Later modules add a span for each run transition, hook and live check.
+
+### Run attributes on every span
+
+- Every span carries `harness.run.id` and `harness.worktree`. A span processor sets them at the span start.
+- The run id comes from the span itself, else from its parent span, else from the run that the CLI finds before the command runs.
+- The CLI finds the active run of the worktree only when the state database file exists.
+- A span with no run carries `harness.run.active=false` and no `harness.run.id`. Examples are a hook before `harness run start` or after `harness run done`, and `harness version`.
+- `run.transition` sets its own run id, because `harness run start` creates the run in the same call.
+- `live.check` sets `harness.run.id` and `harness.worktree` of the run that it checks, which can be a run of another worktree.
+- `hook.handle` also carries `harness.session.id` when the hook input has a session id.
+- A child process gets `HARNESS_RUN_ID` beside `TRACEPARENT`. A child with no active run of its own takes that run.
 
 ## State
 
