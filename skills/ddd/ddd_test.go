@@ -16,20 +16,30 @@ import (
 )
 
 const (
-	dddSkillDir        = "skills/ddd"
-	dddSkill           = dddSkillDir + "/SKILL.md"
-	dddReferences      = "references/"
-	dddBuiltInLanguage = "typescript"
-	examplesDir        = "examples"
+	dddSkillDir         = "skills/ddd"
+	dddSkill            = dddSkillDir + "/SKILL.md"
+	dddReferences       = "references/"
+	dddBuiltInLanguage  = "typescript"
+	examplesDir         = "examples"
+	decisionTreeHeading = "\n## Decision tree\n"
+
+	maxTopicWords = 700
+	maxSkillWords = 1200
 )
 
 var (
-	dddRuleRef        = regexp.MustCompile("`((?:ddd|ddd-es)/[a-z-]+)`")
-	dddLanguages      = []string{"typescript", "php", "python", "go"}
-	languageSpecifics = append([]string{"biome"}, knownLintTools...)
-	languageExtension = regexp.MustCompile(`\.(?:tsx?|jsx?|php|py|go)\b`)
-	examplePath       = regexp.MustCompile("`(" + examplesDir + "/[^`]+)`")
-	knownLintTools    = []string{"deptrac", "import-linter", "go-arch-lint", "depguard", "`ddd` pack"}
+	dddRuleRef   = regexp.MustCompile("`((?:ddd|ddd-es)[/-][a-z-]+)`")
+	dddLanguages = []string{"typescript", "php", "python", "go"}
+	dddTopics    = []string{
+		"use-cases", "aggregates", "repositories-and-mappers", "events", "composition-root",
+		"delivery-edge", "api-contracts", "contexts", "tests", "porting-legacy", "style",
+	}
+	dddTopicsInLanguageFiles = []string{"use-cases", "composition-root", "events", "tests"}
+	frameworkNames           = regexp.MustCompile(`(?i)\b(?:inversify|zod|express|jest|vitest|typeorm|prisma|nestjs|doctrine|symfony|laravel|sqlalchemy|django|fastapi|pytest|phpunit|hollywood|postgres|postgresql|mysql|mongodb|kafka|rabbitmq)\b`)
+	languageSpecifics        = append([]string{"biome"}, knownLintTools...)
+	languageExtension        = regexp.MustCompile(`\.(?:tsx?|jsx?|php|py|go)\b`)
+	examplePath              = regexp.MustCompile("`(" + examplesDir + "/[^`]+)`")
+	knownLintTools           = []string{"deptrac", "import-linter", "go-arch-lint", "depguard", "`ddd` pack"}
 )
 
 func TestDDDSkillRuleIDs(t *testing.T) {
@@ -69,6 +79,23 @@ func TestDDDSkillRuleIDs(t *testing.T) {
 	}
 }
 
+func requireAgnostic(t *testing.T, path, doc string) {
+	t.Helper()
+	lower := strings.ToLower(doc)
+	for _, specific := range languageSpecifics {
+		if strings.Contains(lower, strings.ToLower(specific)) {
+			t.Errorf("%s names %q, which belongs in a file of %s", path, specific, dddReferences)
+		}
+	}
+	if ext := languageExtension.FindString(doc); ext != "" {
+		t.Errorf("%s names the file extension %s, which belongs in a file of %s", path, ext, dddReferences)
+	}
+}
+
+func topicPath(topic string) string {
+	return filepath.Join(dddSkillDir, dddReferences+topic+".md")
+}
+
 func TestDDDSkillAgnostic(t *testing.T) {
 	skill := repository.Read(t, dddSkill)
 	catalogue, err := rulecatalogue.Load()
@@ -82,25 +109,66 @@ func TestDDDSkillAgnostic(t *testing.T) {
 			}
 		}
 	}
-	lower := strings.ToLower(skill)
-	for _, specific := range languageSpecifics {
-		if strings.Contains(lower, strings.ToLower(specific)) {
-			t.Errorf("%s names %q, which belongs in a file of %s", dddSkill, specific, dddReferences)
+	requireAgnostic(t, dddSkill, skill)
+}
+
+func TestDDDSkillTopics(t *testing.T) {
+	tree := repository.Section(t, repository.Read(t, dddSkill), decisionTreeHeading)
+	for _, topic := range dddTopics {
+		if _, err := os.Stat(repository.Path(t, topicPath(topic))); err != nil {
+			t.Errorf("the topic file %s does not exist", topicPath(topic))
+		}
+		if reference := dddReferences + topic + ".md"; !strings.Contains(tree, reference) {
+			t.Errorf("the decision tree of %s does not route to %s", dddSkill, reference)
 		}
 	}
-	if ext := languageExtension.FindString(skill); ext != "" {
-		t.Errorf("%s names the file extension %s, which belongs in a file of %s", dddSkill, ext, dddReferences)
+	entries, err := os.ReadDir(repository.Path(t, dddSkillDir, dddReferences))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name, isMarkdown := strings.CutSuffix(entry.Name(), ".md")
+		if !isMarkdown || !slices.Contains(dddLanguages, name) && !slices.Contains(dddTopics, name) {
+			t.Errorf("%s is neither a language file nor a topic file", filepath.Join(dddSkillDir, dddReferences, entry.Name()))
+		}
+	}
+}
+
+func TestDDDSkillTopicsAgnostic(t *testing.T) {
+	for _, topic := range dddTopics {
+		path := topicPath(topic)
+		doc := repository.Read(t, path)
+		requireAgnostic(t, path, doc)
+		if name := frameworkNames.FindString(doc); name != "" {
+			t.Errorf("%s names the framework %q, which belongs in a file of a language", path, name)
+		}
+	}
+}
+
+func TestDDDSkillSize(t *testing.T) {
+	for _, topic := range dddTopics {
+		if words := len(strings.Fields(repository.Read(t, topicPath(topic)))); words > maxTopicWords {
+			t.Errorf("%s has %d words, want at most %d", topicPath(topic), words, maxTopicWords)
+		}
+	}
+	if words := len(strings.Fields(repository.Read(t, dddSkill))); words > maxSkillWords {
+		t.Errorf("%s has %d words, want at most %d", dddSkill, words, maxSkillWords)
 	}
 }
 
 func TestDDDSkillReferences(t *testing.T) {
-	skill := repository.Read(t, dddSkill)
+	tree := repository.Section(t, repository.Read(t, dddSkill), decisionTreeHeading)
 	for _, language := range dddLanguages {
 		reference := dddReferences + language + ".md"
 		path := filepath.Join(dddSkillDir, reference)
 		doc := repository.Read(t, path)
-		if !strings.Contains(skill, reference) {
-			t.Errorf("%s does not route to %s", dddSkill, reference)
+		if !strings.Contains(tree, reference) {
+			t.Errorf("the decision tree of %s does not route to %s", dddSkill, reference)
+		}
+		for _, topic := range dddTopicsInLanguageFiles {
+			if !strings.Contains(doc, topic+".md") {
+				t.Errorf("%s does not name %s.md", path, topic)
+			}
 		}
 		configs := examplePath.FindAllStringSubmatch(doc, -1)
 		if language != dddBuiltInLanguage && len(configs) == 0 {
