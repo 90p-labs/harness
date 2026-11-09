@@ -37,9 +37,12 @@ func TestDenyReviewModels(t *testing.T) {
 		{"claude list misses one", []string{testHaiku, testSonnet}, bothLists, true, []string{testOpus}, nil},
 		{"claude list complete", claudeList, bothLists, false, nil, nil},
 		{"one record", []string{testOpus}, bothLists, true, []string{testOpus}, nil},
+		{"one record names the missing models", []string{testSonnet}, bothLists, true, []string{"misses " + testHaiku + modelSeparator + testOpus + " of " + claudeName, nextStepMissingModels}, nil},
 		{"one listed model", []string{testOpus}, opusOnly, true, []string{NextStepReviewerList}, nil},
+		{"one listed model, other record", []string{testSonnet}, opusOnly, true, []string{"misses " + testOpus, NextStepReviewerList}, []string{nextStepMissingModels}},
+		{"no record names every listed model", nil, bothLists, true, []string{noModel, "misses " + strings.Join(claudeList, modelSeparator) + " of " + claudeName, nextStepMissingModels}, nil},
 		{"no lists, two records", []string{testOpus, testSonnet}, nil, false, nil, nil},
-		{"no lists, one record", []string{testOpus}, nil, true, []string{testOpus}, nil},
+		{"no lists, one record", []string{testOpus}, nil, true, []string{testOpus, nextStepReviewModels}, nil},
 		{"fuller host list wins", []string{testSol, testTerra}, bothLists, true, []string{testAstra, codexName}, []string{claudeName}},
 		{"tie goes to the first host", []string{testSonnet, testAstra}, bothLists, true, []string{claudeName, testHaiku, testOpus}, []string{codexName}},
 	}

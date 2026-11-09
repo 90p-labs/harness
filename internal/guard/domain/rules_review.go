@@ -29,21 +29,24 @@ func DenyReviewModels(models []string, listed map[shareddomain.Host][]string) (s
 	if len(models) > 0 {
 		found = strings.Join(models, modelSeparator)
 	}
-	if len(models) < minReviewModels {
-		nextStep := nextStepReviewModels
-		if len(list) > 0 && len(list) < minReviewModels {
-			nextStep = NextStepReviewerList
-		}
-		return deny(
-			fmt.Sprintf("the review of this HEAD needs %d different models, and it has %s", minReviewModels, found),
-			nextStep,
-		)
-	}
 	var missing []string
 	for _, model := range list {
 		if !slices.Contains(models, model) {
 			missing = append(missing, model)
 		}
+	}
+	if len(models) < minReviewModels {
+		reason := fmt.Sprintf("the review of this HEAD needs %d different models, and it has %s", minReviewModels, found)
+		if len(missing) > 0 {
+			reason += fmt.Sprintf(" and misses %s of %s", strings.Join(missing, modelSeparator), host)
+		}
+		nextStep := nextStepReviewModels
+		if len(list) > 0 && len(list) < minReviewModels {
+			nextStep = NextStepReviewerList
+		} else if len(missing) > 0 {
+			nextStep = nextStepMissingModels
+		}
+		return deny(reason, nextStep)
 	}
 	if len(missing) == 0 {
 		return "", false
