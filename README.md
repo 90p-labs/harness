@@ -14,7 +14,7 @@ Status: pre-alpha.
 
 The harness is a plugin for Claude Code and for Codex. The plugin installs these parts:
 
-- The skills `harness` (the loop), `pr-open` (the pull request of the ship step), `lint-setup` (the architecture rules of a project), `ddd` (the DDD layout that the lint packs check) and `report` (a bug about the harness).
+- The skills `harness` (the loop), `pr-open` (the pull request of the ship step), `lint-setup` (the architecture rules of a project), `ddd` (the DDD layout that the lint packs check), `demo` (a watched browser walkthrough) and `report` (a bug about the harness).
 - The agents `explorer` (the facts for a plan), `advisor` (the check of a plan), `worker` (one task of a plan), `reviewer` (the review of a run, through one lens) and `linter` (the lint setup).
 - The hooks of the host.
 
