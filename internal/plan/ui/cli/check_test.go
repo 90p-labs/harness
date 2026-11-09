@@ -80,6 +80,20 @@ func TestPlanHelp(t *testing.T) {
 	}
 }
 
+func TestPlanHelpProgram(t *testing.T) {
+	out, err := execute(t, connect(nil, new(bool)), "--help")
+
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	want := append([]string{domain.HeadingRuns, domain.HeadingMeasurement, domain.FormRunHeading, domain.FormRunDepends}, domain.ProgramFields...)
+	for _, w := range want {
+		if !strings.Contains(out, w) {
+			t.Errorf("help does not hold %q", w)
+		}
+	}
+}
+
 func TestPlanCheckCommand(t *testing.T) {
 	broken := filepath.Join(t.TempDir(), "plan.md")
 	if err := os.WriteFile(broken, []byte(brokenPlan), 0o600); err != nil {

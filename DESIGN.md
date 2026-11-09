@@ -675,6 +675,18 @@ A plan has the heading `## Open questions`. It holds `- none` alone, or one ques
 
 An agent writes each diagram through `harness diagram`. It reads plain mermaid on stdin, with a `+`, `*` or `-` at the end of each new, changed or removed line. It prints the fenced block with the fixed `classDef` and `class` lines. It needs no git repo, and exits 2 with the reason on a refused input. The plan `diagram` rule refuses an unmarked or restyled diagram.
 
+### Multi-run plan
+
+A plan with a `## Runs` line outside a code fence is a multi-run plan. `IsProgram` makes this switch. The check and view handlers call `ParseProgram` and `CheckProgram` for it, and the single-run path stays the same.
+
+- The rule `run-field` refuses a missing or wrong run field.
+- The rule `run-depends` refuses a dependency that names no run of an earlier wave.
+- The rule `run-overlap` refuses two runs of one wave that own a common path.
+- The rule `plan-kind` makes `harness run plan` refuse a multi-run plan.
+- The view handler has no branch and reads no proof. The page shows the wave lanes, the dependency flowchart, the measurement, the decisions and the problems.
+- Decision: the page shows no live state of the runs. The run state command of R5 adds it later.
+- Decision: `plan view` still needs a git repository as the working folder. The plan file can be anywhere.
+
 ## Gates and lint packs
 
 ### Gates
