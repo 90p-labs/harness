@@ -23,6 +23,7 @@ import (
 )
 
 const (
+	sessionIDAttr     = "harness.session.id"
 	preToolInput      = `{"cwd":"/work","tool_name":"Bash","tool_input":{"command":"ls"}}`
 	sessionInput      = `{"cwd":"/work","source":"startup"}`
 	firstStopInput    = `{"cwd":"/work","stop_hook_active":false}`
@@ -334,12 +335,12 @@ func TestHandleHookSessionIDAttribute(t *testing.T) {
 			var got string
 			var found bool
 			for _, kv := range spans[0].Attributes() {
-				if kv.Key == "harness.session.id" {
+				if string(kv.Key) == sessionIDAttr {
 					got, found = kv.Value.AsString(), true
 				}
 			}
 			if found != tc.found || got != tc.want {
-				t.Fatalf("harness.session.id = %q (present %v), want %q (present %v)", got, found, tc.want, tc.found)
+				t.Fatalf("%s = %q (present %v), want %q (present %v)", sessionIDAttr, got, found, tc.want, tc.found)
 			}
 		})
 	}

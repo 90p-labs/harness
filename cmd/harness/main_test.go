@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -616,6 +617,73 @@ func TestRunStartSpansCarryTheRun(t *testing.T) {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
 	assertSpansCarryRun(t, spans(), startedRunID(t, stdout), dir)
+}
+
+const (
+	schemaTable      = "harness_schema"
+	defaultStateFile = "state.db"
+	stateDirName     = ".harness"
+	gitDirName       = ".git"
+)
+
+func defaultStatePath(repo string) string {
+	return filepath.Join(repo, gitDirName, stateDirName, defaultStateFile)
+}
+
+func TestPreRunMigratesTheState(t *testing.T) {
+	clearHarnessEnv(t)
+	statePath := defaultStatePath(initRepo(t))
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, stderr := execute(t, "version")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	db, err := sql.Open("sqlite", statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	var name string
+	err = db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", schemaTable).Scan(&name)
+	if err != nil {
+		t.Fatalf("table %s missing after the pre-run: %v", schemaTable, err)
+	}
+}
+
+func TestPreRunCreatesNoState(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+
+	code, _, stderr := execute(t, "version")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if _, err := os.Stat(defaultStatePath(dir)); !os.IsNotExist(err) {
+		t.Fatalf("stat %s: err = %v, want the file to not exist", defaultStatePath(dir), err)
+	}
+}
+
+func TestRunAbandonSpansCarryTheRun(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	_, stdout, _ := execute(t, commandRun, "start", "Add the login page")
+	runID := startedRunID(t, stdout)
+	spans := collectSpans(t)
+
+	code, _, stderr := execute(t, commandRun, "abandon")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), runID, dir)
 }
 
 func TestReviewNeedsProofEvidence(t *testing.T) {
