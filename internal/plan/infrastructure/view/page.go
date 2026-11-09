@@ -108,8 +108,7 @@ func NewRenderer() Renderer {
 	return Renderer{}
 }
 
-type page struct {
-	model
+type assets struct {
 	Fonts   template.CSS
 	Tokens  template.CSS
 	CSS     template.CSS
@@ -117,19 +116,27 @@ type page struct {
 	Mermaid template.JS
 }
 
+type page struct {
+	model
+	assets
+}
+
 func (Renderer) Render(in domain.ViewInput) ([]byte, error) {
 	fonts, err := fontCSS()
 	if err != nil {
 		return nil, err
 	}
-	p := page{
-		model:   newBuilder(in).model(),
+	a := assets{
 		Fonts:   fonts,
 		Tokens:  tokenCSS(),
 		CSS:     template.CSS(pageCSS),
 		JS:      template.JS(pageJS),
 		Mermaid: template.JS(mermaidJS),
 	}
+	if in.Program != nil {
+		return renderProgram(in, a)
+	}
+	p := page{model: newBuilder(in).model(), assets: a}
 	var buf bytes.Buffer
 	if err := pageTemplate.Execute(&buf, p); err != nil {
 		return nil, fmt.Errorf("render plan page: %w", err)
@@ -421,10 +428,14 @@ func (b *builder) nav(m model) []navGroup {
 }
 
 func (b *builder) problems() []problemRow {
-	rows := make([]problemRow, len(b.in.Problems))
-	for i, p := range b.in.Problems {
+	return problemRows(b.in.Problems, len(b.in.Doc.Lines))
+}
+
+func problemRows(problems []domain.Problem, lines int) []problemRow {
+	rows := make([]problemRow, len(problems))
+	for i, p := range problems {
 		rows[i] = problemRow{Rule: string(p.Rule), Message: p.Message, Line: p.Line}
-		if p.Line >= 1 && p.Line <= len(b.in.Doc.Lines) {
+		if p.Line >= 1 && p.Line <= lines {
 			rows[i].Anchor = number(keyLine, p.Line)
 		}
 	}
@@ -663,13 +674,17 @@ func (b *builder) matrix() matrixView {
 }
 
 func (b *builder) source() []sourceLine {
+	return sourceLines(b.in.Doc.Lines, b.in.Problems)
+}
+
+func sourceLines(text []string, problems []domain.Problem) []sourceLine {
 	bad := map[int]bool{}
-	for _, p := range b.in.Problems {
+	for _, p := range problems {
 		bad[p.Line] = true
 	}
-	lines := make([]sourceLine, len(b.in.Doc.Lines))
-	for i, text := range b.in.Doc.Lines {
-		lines[i] = sourceLine{N: i + 1, Text: text, Bad: bad[i+1]}
+	lines := make([]sourceLine, len(text))
+	for i, t := range text {
+		lines[i] = sourceLine{N: i + 1, Text: t, Bad: bad[i+1]}
 	}
 	return lines
 }

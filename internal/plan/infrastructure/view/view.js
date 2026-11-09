@@ -45,6 +45,12 @@
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderDiagrams);
 
+  const tracer = document.getElementById('tracer');
+  if (!tracer) {
+    renderDiagrams();
+    return;
+  }
+
   const neighbours = (key) => data.graph[key] || [];
   const traceOf = (key) => {
     const kind = kindOf(key);
@@ -56,7 +62,6 @@
     return lit;
   };
 
-  const tracer = document.getElementById('tracer');
   const body = document.getElementById('tracer-body');
   let pinned = null;
   const clear = () => {

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}: program</title>
+<style>{{.Fonts}}</style>
+<style>{{.Tokens}}</style>
+<style>{{.CSS}}</style>
+</head>
+<body>
+<div class="shell">
+<nav class="rail" aria-label="Sections">
+<div class="brand"><span class="brand-mark" aria-hidden="true"></span>harness<span class="brand-sub">program view</span></div>
+<div class="navgroups">
+{{range $g := .Nav}}<div class="navgrp" data-nav-group="{{$g.Name}}"><p class="navgrp-h"><span>{{$g.Number}}</span>{{$g.Name}}</p><ol>
+{{range $g.Items}}<li><a href="#{{.Anchor}}">{{.Label}}{{if .Count}}<span class="count{{if .Bad}} bad{{end}}">{{.Count}}</span>{{end}}</a></li>
+{{end}}</ol></div>
+{{end}}</div>
+<button class="theme" type="button" data-theme-toggle aria-label="Switch the color theme">Theme: <span>auto</span></button>
+</nav>
+<main>
+<div class="group" id="grp-program">
+<p class="group-h"><span>01</span>{{.GroupName}}</p>
+<section id="summary" class="masthead" data-group="{{.GroupName}}">
+<p class="eyebrow"><span>program</span></p>
+<h1>{{.Title}}</h1>
+{{range .Goal}}<p class="goal">{{.}}</p>
+{{end}}<dl class="facts">
+<div><dt>Runs</dt><dd>{{.Counts.Runs}}</dd></div>
+<div><dt>Waves</dt><dd>{{.Counts.Waves}}</dd></div>
+<div><dt>Problems</dt><dd>{{.Counts.Problems}}</dd></div>
+</dl>
+</section>
+<section id="waves" data-group="{{.GroupName}}" aria-labelledby="waves-h"><h2 id="waves-h">Runs by wave</h2>
+<p class="lede">Runs in one wave share no dependency, so they can run in parallel.</p><div class="waves">
+{{range .Waves}}<div class="wave"><p class="wave-n">Wave {{.Number}}</p>
+{{range .Runs}}<article id="{{.Key}}" class="task run"><header><span class="tn">{{.ID}}</span><h3>{{.Slug}}</h3></header>
+<p class="branch"><em>Branch</em><code>{{.Branch}}</code></p>
+<ul class="owned">{{range .Owned}}<li><code>{{.}}</code></li>{{end}}</ul>
+<ol class="scope">{{range .Scope}}<li>{{.}}</li>{{end}}</ol>
+<p class="done"><em>Done when</em>{{.DoneWhen}}</p>
+{{if .After}}<div class="links"><span class="lk"><em>After</em>{{range .After}}{{if .Href}}<a class="chip" href="#{{.Href}}">{{.Label}}</a>{{else}}<span class="chip broken" title="No such run">{{.Label}}</span>{{end}}{{end}}</span></div>
+{{end}}</article>
+{{end}}</div>
+{{end}}</div></section>
+<section id="dependencies" data-group="{{.GroupName}}" aria-labelledby="dependencies-h"><h2 id="dependencies-h">Dependencies</h2>
+<p class="lede">An arrow points from a run to the run that waits for it.</p>
+{{range $i, $d := .Data.Diagrams}}<figure class="diagram"><div class="mm" data-diagram="{{$i}}" role="img" aria-label="Run dependency diagram"></div>
+<figcaption><span>flowchart</span><details><summary>Diagram source</summary><pre class="src">{{$d}}</pre></details></figcaption></figure>
+{{end}}</section>
+{{if .Rows}}<section id="measurement" data-group="{{.GroupName}}" aria-labelledby="measurement-h"><h2 id="measurement-h">Measurement</h2>
+<div class="table-wrap"><table class="measure"><thead><tr>{{range .Header}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
+{{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>
+{{end}}</tbody></table></div></section>{{end}}
+{{if .Decisions}}<section id="decisions" data-group="{{.GroupName}}" aria-labelledby="decisions-h"><h2 id="decisions-h">Decisions</h2><div class="notes"><div><ul>{{range .Decisions}}<li>{{.}}</li>{{end}}</ul></div></div></section>{{end}}
+</div>
+
+<div class="group" id="grp-qa">
+<p class="group-h"><span>02</span>{{.GroupQA}}</p>
+<section id="problems" class="problems" data-group="{{.GroupQA}}" aria-labelledby="problems-h"><h2 id="problems-h">Problems <span class="n">{{.Counts.Problems}}</span></h2>
+{{if .Problems}}<ul>
+{{range .Problems}}<li class="problem">{{if .Anchor}}<a class="loc" href="#{{.Anchor}}">plan.md:{{.Line}}</a>{{else}}<span class="loc">plan.md{{with .Line}}:{{.}}{{end}}</span>{{end}}<span class="rule">{{.Rule}}</span><span class="ptext">{{.Message}}</span></li>
+{{end}}</ul>{{else}}<p class="clean">The plan passes every check.</p>{{end}}
+</section>
+<section id="source" data-group="{{.GroupQA}}" aria-labelledby="source-h"><h2 id="source-h">Source</h2>
+<details class="source" id="source-details"><summary><code>plan.md</code>, {{len .Source}} lines</summary><pre class="lines">{{range .Source}}<span id="L{{.N}}" class="ln{{if .Bad}} bad{{end}}"><a href="#L{{.N}}">{{.N}}</a>{{.Text}}</span>
+{{end}}</pre></details></section>
+</div>
+<footer class="foot">Rendered by <code>harness plan view</code> from <code>plan.md</code>. This page loads nothing from the network.</footer>
+</main>
+</div>
+<script type="application/json" id="plan-data">{{.Data}}</script>
+<script>{{.Mermaid}}</script>
+<script>{{.JS}}</script>
+</body>
+</html>
