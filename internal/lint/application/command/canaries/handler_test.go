@@ -21,8 +21,9 @@ const (
 	suffix    = "ddd/file-suffix"
 	engine    = domain.EngineName("deptrac")
 
-	purityCanary    = "lint/canaries/ddd-domain-purity"
-	directionCanary = "lint/canaries/ddd-layer-direction"
+	proofFolder     = "lint/proof"
+	purityCanary    = "ddd-domain-purity"
+	directionCanary = "ddd-layer-direction"
 	waiver          = "deptrac checks dependencies, not file names"
 	canaryFile      = "src/Order/Domain/Order.php"
 )
@@ -82,11 +83,15 @@ func fullManifest() domain.Manifest {
 
 var reason = waiver
 
+func proofDir(repo string) string {
+	return filepath.Join(repo, filepath.FromSlash(proofFolder))
+}
+
 func repoWithCanaries(t *testing.T, folders ...string) string {
 	t.Helper()
 	repo := t.TempDir()
 	for _, folder := range folders {
-		file := filepath.Join(repo, filepath.FromSlash(folder), filepath.FromSlash(canaryFile))
+		file := filepath.Join(proofDir(repo), filepath.FromSlash(folder), filepath.FromSlash(canaryFile))
 		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -106,13 +111,13 @@ func handle(t *testing.T, repo string, manifest domain.Manifest, rules map[domai
 
 func handleWith(t *testing.T, repo string, read canaries.ReadManifest, check canaries.CheckVersion, rules map[domain.EngineName][]domain.Rule, set *engines) ([]domain.CanaryResult, error) {
 	t.Helper()
-	inRepo := func(dir string) (domain.Manifest, error) {
-		if dir != repo {
-			t.Fatalf("manifest read in %s, want %s", dir, repo)
+	inProof := func(dir string) (domain.Manifest, error) {
+		if dir != proofDir(repo) {
+			t.Fatalf("manifest read in %s, want %s", dir, proofDir(repo))
 		}
 		return read(dir)
 	}
-	return canaries.NewHandler(catalogue(), inRepo, rules, set, check).Handle(context.Background(), canaries.Command{Dir: repo})
+	return canaries.NewHandler(catalogue(), inProof, rules, set, check).Handle(context.Background(), canaries.Command{Dir: repo, Proof: proofFolder})
 }
 
 func finding(id string) shareddomain.Finding {
@@ -224,8 +229,8 @@ func TestHandlerRunsEachCanary(t *testing.T) {
 		t.Fatalf("results = %+v, want %+v", got, want)
 	}
 	wantChecks := []check{
-		{dir: filepath.Join(repo, filepath.FromSlash(purityCanary)), engine: engine, rules: []domain.Rule{rule(purity)}},
-		{dir: filepath.Join(repo, filepath.FromSlash(directionCanary)), engine: engine, rules: []domain.Rule{rule(direction)}},
+		{dir: filepath.Join(proofDir(repo), purityCanary), engine: engine, rules: []domain.Rule{rule(purity)}},
+		{dir: filepath.Join(proofDir(repo), directionCanary), engine: engine, rules: []domain.Rule{rule(direction)}},
 	}
 	if !reflect.DeepEqual(set.checks, wantChecks) {
 		t.Fatalf("checks = %+v, want %+v", set.checks, wantChecks)
@@ -233,7 +238,7 @@ func TestHandlerRunsEachCanary(t *testing.T) {
 }
 
 func TestHandlerEnginesCanary(t *testing.T) {
-	const tsCanary = "lint/canaries/ts-domain-purity"
+	const tsCanary = "ts-domain-purity"
 	repo := repoWithCanaries(t, purityCanary, tsCanary)
 	builtIn := domain.Rule{ID: purity, Engine: domain.EngineHarness, Severity: shareddomain.SeverityError, Scope: "src/**"}
 	rules := map[domain.EngineName][]domain.Rule{engine: {rule(purity)}, domain.EngineHarness: {builtIn}}
@@ -262,8 +267,8 @@ func TestHandlerEnginesCanary(t *testing.T) {
 		t.Fatalf("results = %+v, want %+v", got, want)
 	}
 	wantChecks := []check{
-		{dir: filepath.Join(repo, filepath.FromSlash(purityCanary)), engine: engine, rules: []domain.Rule{rule(purity)}},
-		{dir: filepath.Join(repo, filepath.FromSlash(tsCanary)), engine: domain.EngineHarness, rules: []domain.Rule{builtIn}},
+		{dir: filepath.Join(proofDir(repo), purityCanary), engine: engine, rules: []domain.Rule{rule(purity)}},
+		{dir: filepath.Join(proofDir(repo), tsCanary), engine: domain.EngineHarness, rules: []domain.Rule{builtIn}},
 	}
 	if !reflect.DeepEqual(set.checks, wantChecks) {
 		t.Fatalf("checks = %+v, want %+v", set.checks, wantChecks)
@@ -319,7 +324,7 @@ func TestHandlerStops(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := repoWithCanaries(t, tc.folders...)
 			if tc.file != "" {
-				if err := os.WriteFile(filepath.Join(repo, filepath.FromSlash(tc.file)), nil, 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(proofDir(repo), tc.file), nil, 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -328,6 +333,44 @@ func TestHandlerStops(t *testing.T) {
 
 			if !errors.Is(err, tc.want) || !strings.Contains(err.Error(), tc.names) {
 				t.Fatalf("Handle = %v, want %v naming %s", err, tc.want, tc.names)
+			}
+		})
+	}
+}
+
+func TestHandlerProofFolder(t *testing.T) {
+	repo := repoWithCanaries(t, purityCanary, directionCanary)
+	read := func(string) (domain.Manifest, error) { return fullManifest(), nil }
+	linkedRepo := filepath.Join(t.TempDir(), "linked")
+	if err := os.Symlink(repo, linkedRepo); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(repo, "lint", "outside")); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name    string
+		proof   string
+		outside bool
+	}{
+		{name: "an absolute path inside the work tree", proof: proofDir(repo)},
+		{name: "an absolute path through a symlinked parent", proof: proofDir(linkedRepo)},
+		{name: "a parent path", proof: "../x", outside: true},
+		{name: "an absolute path outside the work tree", proof: t.TempDir(), outside: true},
+		{name: "a symlink to a folder outside the work tree", proof: "lint/outside", outside: true},
+		{name: "the work tree itself", proof: ".", outside: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := canaries.NewHandler(catalogue(), read, active(), &engines{}, fresh)
+
+			_, err := handler.Handle(context.Background(), canaries.Command{Dir: repo, Proof: tc.proof})
+
+			if tc.outside && (!errors.Is(err, domain.ErrProofOutsideRepo) || !strings.Contains(err.Error(), tc.proof)) {
+				t.Fatalf("Handle = %v, want ErrProofOutsideRepo naming %s", err, tc.proof)
+			}
+			if !tc.outside && errors.Is(err, domain.ErrProofOutsideRepo) {
+				t.Fatalf("Handle = %v, want the proof folder accepted", err)
 			}
 		})
 	}

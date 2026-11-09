@@ -14,8 +14,6 @@ The example holds only the files that you add to your project:
 | `Dockerfile` | A pinned `node` image with a pinned `pnpm`. |
 | `compose.yaml` | The service `node`. It mounts the project and keeps `node_modules` in a named volume. |
 | `.harness.yaml` | The keys `lint` (with the pack `ddd`), `verify`, `setup` and `gates`. |
-| `lint/rules.yaml` | The manifest. It gives a canary to each of the five rules of the `ddd` catalogue pack. It is optional. |
-| `lint/canaries/` | One folder for each rule. Each folder breaks its rule on purpose. |
 
 The project is not in this folder. The example was tested with Next.js 16.4.5 (`create-next-app@16.4.5`) and `shadcn@4.23.0`.
 The proof made the app with these commands:
@@ -119,10 +117,7 @@ Remove the files that this run wrote before the next step: `.harness.yaml`, `.ha
 
 ```console
 $ cp /path/to/harness/examples/nextjs/compose.yaml /path/to/harness/examples/nextjs/Dockerfile /path/to/harness/examples/nextjs/.harness.yaml .
-$ cp -R /path/to/harness/examples/nextjs/lint .
 ```
-
-The `lint` folder holds the optional canaries. Without it, remove the gate `lint-canaries` from `.harness.yaml`, and remove `lint-canaries` from the `needs` of `node-build`. The section [Canaries](#canaries) tells what they prove.
 
 The gate ids `node-typecheck`, `node-lint` and `lint` are the ids of the built-in detection.
 The setup step `node-install` runs `pnpm install --frozen-lockfile` in the container.
@@ -161,18 +156,11 @@ gates: kept
 lint init: wrote .harness-lint
 lint baseline: wrote .harness-lint/baseline.json (10 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
-$ harness lint canaries
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-PASS ddd/layer-direction lint/canaries/ddd-layer-direction
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-PASS ddd/file-suffix lint/canaries/ddd-file-suffix
 ```
 
 The `ddd` pack reads the business root `src/contexts/`. The proof app has two contexts, `cart` and `catalog`, each with the folders `domain`, `application` and `infrastructure`, and the file `src/contexts/kernel.ts`.
 The baseline accepts the findings of the new app: the 11 findings of step 1 without the `lib` finding.
-`harness lint` gives no finding in `lint/canaries/`, so the canaries do not change the baseline.
-Commit `.harness.yaml`, `lint/`, `.harness-lint/` and `.claude/`.
+Commit `.harness.yaml`, `.harness-lint/` and `.claude/`.
 
 ### 4. Verify two times
 
@@ -186,21 +174,19 @@ setup node-install 3.064s
 PASS node-typecheck 5.112s
 PASS node-lint 4.889s
 PASS lint 401ms
-PASS lint-canaries 142ms
 PASS node-build 8.944s
 $ harness verify
 CACHED node-typecheck 5.111s
 CACHED node-lint 4.889s
 CACHED lint 400ms
-CACHED lint-canaries 142ms
 CACHED node-build 8.943s
 ```
 
 The three keys that shape this run:
 
 - `setup` holds the install step. The harness runs it before the gates, and prints `setup <id> <duration>` when it runs. A step runs only when the hash of its `paths` changed since its last pass, or when its `creates` file is missing.
-- `verify.parallel: 3` lets the harness run three gates at the same time. The gates `node-typecheck`, `node-lint` and `lint` start together, and `lint-canaries` starts when one of them ends.
-- `needs` on `node-build` makes the gate wait. `node-build` starts only after `node-typecheck`, `node-lint`, `lint` and `lint-canaries` are `PASS` or `CACHED`.
+- `verify.parallel: 3` lets the harness run three gates at the same time. The gates `node-typecheck`, `node-lint` and `lint` start together.
+- `needs` on `node-build` makes the gate wait. `node-build` starts only after `node-typecheck`, `node-lint` and `lint` are `PASS` or `CACHED`.
 
 The gates print in the order of the file.
 
@@ -218,13 +204,11 @@ setup node-install 3.247s
 PASS node-typecheck 4.983s
 PASS node-lint 4.81s
 PASS lint 442ms
-PASS lint-canaries 213ms
 PASS node-build 6.557s
 $ harness verify
 CACHED node-typecheck 4.982s
 CACHED node-lint 4.81s
 CACHED lint 441ms
-CACHED lint-canaries 213ms
 CACHED node-build 6.557s
 $ git checkout pnpm-lock.yaml
 ```
@@ -241,7 +225,6 @@ setup node-install 2.845s
 PASS node-typecheck 4.566s
 FAIL node-lint 4.389s
 PASS lint 579ms
-PASS lint-canaries 141ms
 SKIPPED node-build needs node-lint
 
 node-lint:
@@ -274,7 +257,6 @@ $ harness verify; echo "exit $?"
 CACHED node-typecheck 5.111s
 CACHED node-lint 4.889s
 CACHED lint 400ms
-CACHED lint-canaries 142ms
 CACHED node-build 8.943s
 exit 0
 ```
@@ -296,69 +278,10 @@ The skill adds `ddd` to `lint.packs` and stops. This example shows what that giv
 
 - `.harness.yaml` has `packs: [nextjs, shadcn, ddd]`. The skill adds the one word `ddd`.
 - No tool config, no wrapper plugin and no `lint/architecture/` pack.
-- No canary is necessary. The tests of the `harness` binary prove each built-in rule with embedded fixtures.
+- No canary and no proof folder. The tests of the `harness` binary prove each built-in rule with embedded fixtures, so the project needs no copy of that proof.
 
 The example uses `ddd` beside `nextjs` and `shadcn`. The pack `nextjs-ddd-shadcn` needs all three packs in `lint.packs`, and it adds only the rules for the borders between them.
 The `ddd` pack holds 23 rules.
-
-### Canaries
-
-The canaries are optional. They prove that the rules still catch a violation with the `lint.ddd` keys of your project, such as `domain_allow`.
-Without `lint/rules.yaml`, `harness lint canaries` prints one line and exits with code 0:
-
-```console
-$ harness lint canaries
-lint canaries: only built-in rules are active, so there is no canary to run
-$ echo $?
-0
-```
-
-The example adds `lint/rules.yaml` and one canary for each of the five rules of the `ddd` catalogue pack:
-
-- `ddd-src-roots` has `src/lib/utils.ts`. The folder `src/lib` is not `app`, `components` or the business root.
-- `ddd-domain-purity` has `src/contexts/cart/domain/checkout-date.entity.ts`, which imports `version` from `react`.
-- `ddd-layer-direction` has an application handler that imports `cart.memory-repository.ts` from the infrastructure.
-- `ddd-cross-context` has a `cart` handler that imports `product.aggregate.ts` from the `catalog` domain.
-- `ddd-file-suffix` has `src/contexts/cart/domain/cart.ts`, a domain file with no suffix.
-
-Each canary is valid TypeScript, so the gates `node-typecheck`, `node-lint` and `node-build` pass with the canaries in the project. `harness lint` gives no finding in `lint/canaries/`.
-A canary proves that the rule catches one fixture. It does not prove that the rule catches each violation in the project.
-
-The proof let the domain use `react`:
-
-```diff
- lint:
-   packs: [nextjs, shadcn, ddd]
-+  ddd:
-+    domain_allow: [react]
-```
-
-The canary `ddd-domain-purity` then gave no finding, so the gate `lint-canaries` failed:
-
-```console
-$ time harness verify
-CACHED node-typecheck 5.111s
-CACHED node-lint 4.889s
-PASS lint 483ms
-FAIL lint-canaries 128ms
-SKIPPED node-build needs lint-canaries
-
-lint-canaries:
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-FAIL ddd/domain-purity lint/canaries/ddd-domain-purity: the engine harness gave no ddd/domain-purity finding, and the built-in engine reads only TypeScript and JavaScript
-PASS ddd/layer-direction lint/canaries/ddd-layer-direction
-PASS ddd/cross-context lint/canaries/ddd-cross-context
-PASS ddd/file-suffix lint/canaries/ddd-file-suffix
-error: a lint canary failed
-
-error: gates failed
-
-real	0m0.575s
-user	0m0.327s
-sys	0m0.349s
-```
-
-The gate `lint` passes, because the code has no violation. The proof then restored `.harness.yaml`.
 
 ### A rule finds a domain file
 
@@ -402,7 +325,6 @@ $ harness verify
 CACHED node-typecheck 4.617s
 CACHED node-lint 4.535s
 PASS lint 350ms
-PASS lint-canaries 113ms
 PASS node-build 5.954s
 ```
 
@@ -425,7 +347,6 @@ $ harness verify
 PASS node-typecheck 4.625s
 PASS node-lint 4.25s
 PASS lint 383ms
-PASS lint-canaries 143ms
 PASS node-build 5.993s
 ```
 
@@ -472,46 +393,6 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   ├── VERSION              harness writes (lint init), commit
 │   ├── baseline.json        harness writes (lint baseline), commit
 │   └── oxlintrc.json        harness writes (lint init), commit
-├── lint
-│   ├── canaries
-│   │   ├── ddd-cross-context
-│   │   │   └── src
-│   │   │       └── contexts
-│   │   │           ├── cart
-│   │   │           │   └── application
-│   │   │           │       └── commands
-│   │   │           │           └── add-item
-│   │   │           │               └── add-item.handler.ts   you add, commit
-│   │   │           └── catalog
-│   │   │               └── domain
-│   │   │                   └── product.aggregate.ts   you add, commit
-│   │   ├── ddd-domain-purity
-│   │   │   └── src
-│   │   │       └── contexts
-│   │   │           └── cart
-│   │   │               └── domain
-│   │   │                   └── checkout-date.entity.ts   you add, commit
-│   │   ├── ddd-file-suffix
-│   │   │   └── src
-│   │   │       └── contexts
-│   │   │           └── cart
-│   │   │               └── domain
-│   │   │                   └── cart.ts   you add, commit
-│   │   ├── ddd-layer-direction
-│   │   │   └── src
-│   │   │       └── contexts
-│   │   │           └── cart
-│   │   │               ├── application
-│   │   │               │   └── commands
-│   │   │               │       └── add-item
-│   │   │               │           └── add-item.handler.ts   you add, commit
-│   │   │               └── infrastructure
-│   │   │                   └── cart.memory-repository.ts   you add, commit
-│   │   └── ddd-src-roots
-│   │       └── src
-│   │           └── lib
-│   │               └── utils.ts   you add, commit
-│   └── rules.yaml           you add, commit
 ├── public
 │   ├── file.svg
 │   ├── globe.svg
@@ -573,8 +454,6 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 ├── pnpm-workspace.yaml
 ├── tsconfig.json
 └── tsconfig.tsbuildinfo     ignore
-
-64 directories, 69 files
 ```
 
 The tree comes from the end of the proof. It holds `checkout-date.entity.ts` and `legacy-total.entity.ts` from the `ddd` section, and the `.harness.yaml` there holds `domain_allow: [date-fns]`.

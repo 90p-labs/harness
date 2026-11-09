@@ -737,7 +737,7 @@ Commands:
 
 - `harness verify` runs the setup steps first, then the gates by their `needs`, at most `verify.parallel` at the same time. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate, in file order. A skipped gate prints `SKIPPED <id> needs <need>`. It exits 1 when one gate fails, is vetoed or is skipped.
 - `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree, with the same setup steps, `needs` and `verify.parallel`. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
-- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change a `gates` or `setup` key that holds an item, and the error names that key. An empty list or a null value counts as absent, and the write replaces it. With no gate to write, it writes no `gates` key. It also adds the `lint` gate when `lint.packs` is set, and the `lint-canaries` gate (`harness lint canaries`, no `paths`) when `lint/rules.yaml` exists. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. A line with `"setup":true` goes to the `setup` key, with its `creates`, before the `gates` key. The built-in detection writes no `needs` and no setup step. A plugin failure, a deny, a bad line, a duplicate id, a bad `needs`, a setup line with `needs` or a gate line with `creates` stops it before it writes.
+- `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change a `gates` or `setup` key that holds an item, and the error names that key. An empty list or a null value counts as absent, and the write replaces it. With no gate to write, it writes no `gates` key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. A line with `"setup":true` goes to the `setup` key, with its `creates`, before the `gates` key. The built-in detection writes no `needs` and no setup step. A plugin failure, a deny, a bad line, a duplicate id, a bad `needs`, a setup line with `needs` or a gate line with `creates` stops it before it writes.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.
 - A built-in guard rule, `commits-checked`, denies `git push` and `gh pr create` without a passed commit check for the current `HEAD`. The rule asks the check only for these two commands, so other tool calls open no state. A repo with no commit has no `HEAD`: the rule denies, and the next step is to commit and run `harness verify --commits`. A push that only deletes remote refs sends no commit, so the rule allows it: `--delete` or `-d` with refs, or refs that are all `:<ref>`. A push that mixes a delete and another ref, or a lone `:`, is checked. `git-no-push-default` still denies a delete of the default branch.
@@ -794,7 +794,7 @@ The payload of both events:
 
 - `rules` uses the `pack.yaml` key names. The `plugin` key is the GritQL path with the pack name first, such as `team/rules/x.grit`.
 - On `lint.check`, `files` is always a list: the git files that match the rule scopes, or the whole tree when a rule has no scope. An empty list means that no file matches. The default plugins list their own files.
-- The envelope `cwd` is the repo root. Under `harness lint canaries`, it is the canary folder, and `files` is relative to it.
+- The envelope `cwd` is the repo root. Under `harness lint canaries --proof`, it is the canary folder, and `files` is relative to it.
 
 An exec lint plugin writes its findings in the verdict. An empty stdout is an allow with no findings.
 
@@ -960,13 +960,16 @@ The shadcn `cn` helper lives in `src/components/shared/utils.ts`.
 
 #### Architecture rules in any language
 
-A project in another language checks the architecture rules with its own tool, through a lint plugin (ADR 0013). One repository can prove the rules for several languages (ADR 0014). The `lint-setup` skill and the `linter` agent write the setup. The binary proves it on each run.
+A project in another language checks the architecture rules with its own tool, through a lint plugin (ADR 0013). One repository can prove the rules for several languages (ADR 0014). The `lint-setup` skill and the `linter` agent write the setup. The binary proves it once, at setup, from a temporary proof folder (ADR 0015).
 
 - The rule catalogue is a data file embedded in the binary. Each rule has an id and a one-line description. Pack `ddd` holds `ddd/src-roots`, `ddd/domain-purity`, `ddd/layer-direction`, `ddd/cross-context` and `ddd/file-suffix`, the ids of the built-in `ddd` pack.
 - `ddd/src-roots` is the coverage rule: the tool reports each source file and each dependency that it cannot place in a context or a layer, and never drops one. A tool that cannot report an unplaced file leaves a gap that no canary shows.
 - `harness lint catalogue` prints one `id description` line for each rule, and `--json` prints the catalogue. It needs no `.harness.yaml` and no repo.
-- The setup writes the native tool config, a wrapper plugin on `lint.check`, a custom pack with the catalogue ids and the wrapper as engine, one canary folder for each rule and the manifest `lint/rules.yaml`.
-- A canary folder breaks one rule on purpose. It mirrors the source layout, such as `lint/canaries/ddd-layer-direction/src/...`, so the rule scope matches its files. The tool config and the pack scopes exclude `lint/canaries/`.
+- The setup writes the native tool config, a wrapper plugin on `lint.check`, a custom pack with the catalogue ids and the wrapper as engine, and the proof folder `lint/proof/`. The proof folder holds `rules.yaml` and one canary folder for each rule. It is untracked, and no `.gitignore` rule may match it, because the file list drops an ignored file. A project commits no canary, no manifest and no `lint-canaries` gate.
+- A canary folder breaks one rule on purpose. It mirrors the source layout, such as `lint/proof/ddd-layer-direction/src/...`, so the rule scope matches its files. The tool config and the pack scopes exclude `lint/proof/`.
+- The proof folder sits inside the work tree. A folder outside the repository fails: `git ls-files` exits 128, and the wrappers find the repository with `git rev-parse`.
+- On a `FAIL`, the skill stops and keeps the folder. On success, it deletes `lint/proof/`, checks that `git status --porcelain` names no file under it, and reports each `PASS` and each `WAIVED` line to the user. A waived rule id has no rule in the custom pack.
+- Accepted cost: a later edit of the tool config that breaks a rule stays green until someone runs the skill again.
 - The wrapper command finds its script from the repo root, because the exec plugin runs in the envelope `cwd`: `[sh, -c, 'exec sh "$(git rev-parse --show-toplevel)/.harness/plugins/<name>.sh"']`.
 - The wrapper maps an unplaced file to `ddd/src-roots`, and an unplaced dependency to the rule of the layer that holds the dependant file. A pack rule scope ends with the file extension of its language, such as `src/**/*.php`.
 - A wrapper that starts a container names it, traps SIGTERM and kills the container, because the harness stops only its own process group on a timeout:
@@ -978,29 +981,29 @@ docker compose run --rm -T --name "$name" php vendor/bin/deptrac analyse --forma
 wait $!
 ```
 
-The manifest gives each rule of one catalogue pack a canary or a waiver. The engine and the scope come from the active pack rule.
-Remove the canary entry of a turned-off rule from `lint/rules.yaml`.
+The proof `lint/proof/rules.yaml` gives each rule of one catalogue pack a canary or a waiver. A canary path is relative to the proof folder. The engine and the scope come from the active pack rule.
+A rule turned off in `lint.disabled` gets no canary entry in the proof.
 
 ```yaml
 pack: ddd
 rules:
   - id: ddd/layer-direction
-    canary: lint/canaries/ddd-layer-direction
+    canary: ddd-layer-direction
   - id: ddd/file-suffix
     waived: deptrac checks the dependencies, not the file names.
 ```
 
-`harness lint canaries` reads the manifest and prints one line for each catalogue rule, in the catalogue order:
+`harness lint canaries --proof lint/proof` reads `rules.yaml` in the proof folder and prints one line for each catalogue rule, in the catalogue order:
 
 ```text
-PASS ddd/src-roots lint/canaries/ddd-src-roots
-PASS ddd/domain-purity lint/canaries/ddd-domain-purity
-FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding
-FAIL ddd/cross-context: not in lint/rules.yaml
+PASS ddd/src-roots ddd-src-roots
+PASS ddd/domain-purity ddd-domain-purity
+FAIL ddd/layer-direction ddd-layer-direction: the engine deptrac gave no ddd/layer-direction finding
+FAIL ddd/cross-context: not in rules.yaml
 WAIVED ddd/file-suffix: deptrac checks the dependencies, not the file names.
 ```
 
-A repository with two languages has one manifest. A rule that two active packs hold on two engines gives one canary or one waiver for each engine under `engines`. The single form stays valid for a rule on one engine. This is the TypeScript and PHP repository of the end-to-end proof, with the built-in `ddd` pack and a deptrac pack:
+A repository with two languages has one proof `rules.yaml`. A rule that two active packs hold on two engines gives one canary or one waiver for each engine under `engines`. The single form stays valid for a rule on one engine. This is the TypeScript and PHP repository of the end-to-end proof, with the built-in `ddd` pack and a deptrac pack:
 
 ```yaml
 pack: ddd
@@ -1008,55 +1011,56 @@ rules:
   - id: ddd/src-roots
     engines:
       harness:
-        canary: lint/canaries/ts-src-roots
+        canary: ts-src-roots
       deptrac:
-        canary: lint/canaries/ddd-src-roots
+        canary: ddd-src-roots
   - id: ddd/domain-purity
     engines:
       harness:
-        canary: lint/canaries/ts-domain-purity
+        canary: ts-domain-purity
       deptrac:
-        canary: lint/canaries/ddd-domain-purity
+        canary: ddd-domain-purity
   - id: ddd/layer-direction
     engines:
       harness:
-        canary: lint/canaries/ts-layer-direction
+        canary: ts-layer-direction
       deptrac:
-        canary: lint/canaries/ddd-layer-direction
+        canary: ddd-layer-direction
   - id: ddd/cross-context
     engines:
       harness:
         waived: the binary fixtures prove the built-in rule.
       deptrac:
-        canary: lint/canaries/ddd-cross-context
+        canary: ddd-cross-context
   - id: ddd/file-suffix
     waived: the binary fixtures prove the built-in rule.
 ```
 
 ```text
-PASS ddd/src-roots deptrac lint/canaries/ddd-src-roots
-PASS ddd/src-roots harness lint/canaries/ts-src-roots
-PASS ddd/domain-purity deptrac lint/canaries/ddd-domain-purity
-PASS ddd/domain-purity harness lint/canaries/ts-domain-purity
-PASS ddd/layer-direction deptrac lint/canaries/ddd-layer-direction
-PASS ddd/layer-direction harness lint/canaries/ts-layer-direction
-PASS ddd/cross-context deptrac lint/canaries/ddd-cross-context
+PASS ddd/src-roots deptrac ddd-src-roots
+PASS ddd/src-roots harness ts-src-roots
+PASS ddd/domain-purity deptrac ddd-domain-purity
+PASS ddd/domain-purity harness ts-domain-purity
+PASS ddd/layer-direction deptrac ddd-layer-direction
+PASS ddd/layer-direction harness ts-layer-direction
+PASS ddd/cross-context deptrac ddd-cross-context
 WAIVED ddd/cross-context harness: the binary fixtures prove the built-in rule.
 WAIVED ddd/file-suffix: the binary fixtures prove the built-in rule.
 ```
 
 - The check proves each (rule, engine) pair. A line from an `engines` entry names the engine after the rule id. A single-form line names no engine.
-- Each engine that holds a rule in an active pack needs an entry, also the engine `harness`. An engine with no entry is a `FAIL` line for that engine: `FAIL ddd/domain-purity harness: not in lint/rules.yaml`. A rule that is not in the manifest gives one `FAIL` line for each engine.
-- For each canary, the check sends `lint.check` to the engine of the active rule, with the canary folder as `cwd`, the one rule, and the git files of the canary folder in the rule scope. Untracked files count.
+- Each engine that holds a rule in an active pack needs an entry, also the engine `harness`. An engine with no entry is a `FAIL` line for that engine: `FAIL ddd/domain-purity harness: not in rules.yaml`. A rule that is not in `rules.yaml` gives one `FAIL` line for each engine.
+- For each canary, the check sends `lint.check` to the engine of the active rule, with the canary folder as `cwd`, the one rule, and the git files of the canary folder in the rule scope. Untracked files count, and ignored files do not.
 - A finding is a `PASS` only when it has the rule id and its `file`, relative to the canary folder, exists inside the canary folder. A file or a folder of the canary counts.
 - A finding with the rule id for a file outside the canary is a `FAIL` that names the file: `the engine deptrac gave a ddd/domain-purity finding for ../../../src/Kernel.php, which is outside the canary`. So a wrapper that points the tool at the repository `src/` cannot pass.
-- No finding with the rule id, and a catalogue rule that is not in the manifest, are a `FAIL`. A `FAIL` exits 1. For the engine `harness`, the `FAIL` adds `and the built-in engine reads only TypeScript and JavaScript`.
-- The manifest decodes strictly. These are config errors, and exit 1 before an engine runs: no `lint/rules.yaml` (the error names the `lint-setup` skill), a file that is not YAML, an unknown key, an empty file or no `pack` key, an unknown pack, an unknown or duplicate rule id, a rule or an engine entry with both or neither of `canary` and `waived`, a rule with `engines` and a `canary` or a `waived` key, an empty `engines` map, an engine named twice, a waiver reason of fewer than 3 words, a manifest that lists rules and waives each of them, a canary path outside the repo, a missing canary folder, a canary that is a file, a canary rule that no active pack holds, an `engines` entry for an engine that holds no such active rule, and a single-form entry for a rule on two engines (the error names both engines).
+- No finding with the rule id, and a catalogue rule that is not in `rules.yaml`, are a `FAIL`. A `FAIL` exits 1. For the engine `harness`, the `FAIL` adds `and the built-in engine reads only TypeScript and JavaScript`.
+- The flag `--proof` is required: a missing flag exits 2 with the usage. A repository that still has a `lint-canaries` gate gets this usage error and removes the gate.
+- `rules.yaml` decodes strictly. These are config errors, and exit 1 before an engine runs: a proof folder outside the work tree, no `rules.yaml` in the proof folder (the error names the path and the `lint-setup` skill), a file that is not YAML, an unknown key, an empty file or no `pack` key, an unknown pack, an unknown or duplicate rule id, a rule or an engine entry with both or neither of `canary` and `waived`, a rule with `engines` and a `canary` or a `waived` key, an empty `engines` map, an engine named twice, a waiver reason of fewer than 3 words, a proof that lists rules and waives each of them, a canary path that leaves the proof folder, a missing canary folder, a canary that is a file, a canary rule that no active pack holds, an `engines` entry for an engine that holds no such active rule, and a single-form entry for a rule on two engines (the error names both engines).
 - Stale lint files stop the check with the error of `harness lint`: run `harness lint init`.
 - An engine error stops the check.
-- The embedded fixtures of the built-in `ddd` pack prove each rule in the binary tests. Alone, the pack needs no manifest. When no active plugin rule has a catalogue id, `harness lint canaries` with no `lint/rules.yaml` prints `lint canaries: only built-in rules are active, so there is no canary to run` and exits 0. With no lint pack, the missing manifest stays an error.
-- A waiver shows only in `lint/rules.yaml` and in the `WAIVED` lines of `harness lint canaries`. The `lint-canaries` gate passes with waivers, and `harness verify` prints only the gate status.
-- `harness init` prints `next: run the lint-setup skill to set up the architecture rules for <language>` for each detected language with no built-in pack: PHP (`composer.json`), Python (`pyproject.toml` or `requirements.txt`) and Go (`go.mod`). A language is covered when an active plugin rule with a catalogue id has a scope that ends with its extension (`.php`, `.py` or `.go`). With `lint/rules.yaml`, a covered language gets no line. With or without `lint/rules.yaml`, an uncovered language gets the line, so a second language gets its setup step too.
+- The embedded fixtures of the built-in `ddd` pack prove each rule in the binary tests. Alone, the pack needs no proof. When no active plugin rule has a catalogue id, `harness lint canaries --proof <folder>` with no `rules.yaml` prints `lint canaries: only built-in rules are active, so there is no canary to run` and exits 0. With no lint pack, the missing `rules.yaml` stays an error.
+- A waiver shows only in the proof `rules.yaml` and in the `WAIVED` lines of `harness lint canaries --proof`. The skill reports each one to the user.
+- `harness init` prints `next: run the lint-setup skill to set up the architecture rules for <language>` for each detected language with no built-in pack: PHP (`composer.json`), Python (`pyproject.toml` or `requirements.txt`) and Go (`go.mod`). A language is covered when an active plugin rule with a catalogue id has a scope that ends with its extension (`.php`, `.py` or `.go`). `harness init` reads no manifest. A covered language gets no line, and an uncovered language gets the line, so a second language gets its setup step too.
 - The built-in `ddd` pack reads only TypeScript and JavaScript. In a repository with a PHP `src/` next to the TypeScript app, a root file such as `src/Kernel.php` and a folder with no script, such as `src/Order`, are not `ddd/src-roots` findings.
 
 ## Go-live

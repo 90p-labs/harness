@@ -13,10 +13,11 @@ import (
 	"github.com/jorge07/harness/internal/lint/domain"
 )
 
-func Read(repo string) (domain.Manifest, error) {
-	file, err := os.Open(filepath.Join(repo, filepath.FromSlash(domain.ManifestFile)))
+func Read(proof string) (domain.Manifest, error) {
+	path := filepath.Join(proof, domain.ManifestFile)
+	file, err := os.Open(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return domain.Manifest{}, domain.ErrNoManifest
+		return domain.Manifest{}, fmt.Errorf("%w: %s", domain.ErrNoManifest, path)
 	}
 	if err != nil {
 		return domain.Manifest{}, err

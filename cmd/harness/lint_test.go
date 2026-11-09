@@ -19,6 +19,9 @@ const (
 	commandCatalogue = "catalogue"
 	flagLintJSON     = "--json"
 	commandCanaries  = "canaries"
+	flagProof        = "--proof"
+	proofFolder      = "lint/proof"
+	proofManifest    = proofFolder + "/rules.yaml"
 	todoLintScript   = "testdata/todo-lint.sh"
 	canaryLintScript = "testdata/canary-lint.sh"
 	todoRuleID       = "team/no-todo"
@@ -40,12 +43,36 @@ func TestLintCatalogue(t *testing.T) {
 const canaryManifest = `pack: ddd
 rules:
   - id: ddd/domain-purity
-    canary: lint/canaries/ddd-domain-purity
+    canary: ddd-domain-purity
   - id: ddd/layer-direction
-    canary: lint/canaries/ddd-layer-direction
+    canary: ddd-layer-direction
   - id: ddd/file-suffix
     waived: the tool checks dependencies, not file names.
 `
+
+func TestLintCanariesNeedsProof(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+
+	for _, args := range [][]string{{commandLint, commandCanaries}, {commandLint, commandCanaries, flagProof, ""}} {
+		code, _, stderr := execute(t, args...)
+
+		if code != exitUsage || !strings.Contains(stderr, "Usage:") || !strings.Contains(stderr, flagProof) {
+			t.Fatalf("%v: code = %d, stderr = %q, want exit %d and the usage with %s", args, code, stderr, exitUsage, flagProof)
+		}
+	}
+}
+
+func TestLintCanariesProofOutsideTheRepo(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+
+	code, _, stderr := execute(t, commandLint, commandCanaries, flagProof, "../x")
+
+	if code != exitRuntime || !strings.Contains(stderr, lintdomain.ErrProofOutsideRepo.Error()) || !strings.Contains(stderr, "../x") {
+		t.Fatalf("code = %d, stderr = %q, want exit %d and the proof outside the repository error naming ../x", code, stderr, exitRuntime)
+	}
+}
 
 func TestLintCanaries(t *testing.T) {
 	clearHarnessEnv(t)
@@ -55,9 +82,9 @@ func TestLintCanaries(t *testing.T) {
 	}
 	dir := initRepo(t)
 
-	code, _, stderr := execute(t, commandLint, commandCanaries)
-	if code != exitRuntime || !strings.Contains(stderr, lintdomain.ManifestFile) || !strings.Contains(stderr, "lint-setup") {
-		t.Fatalf("no manifest: code = %d, stderr = %q, want exit %d naming %s and the lint-setup skill", code, stderr, exitRuntime, lintdomain.ManifestFile)
+	code, _, stderr := execute(t, commandLint, commandCanaries, flagProof, proofFolder)
+	if code != exitRuntime || !strings.Contains(stderr, proofManifest) || !strings.Contains(stderr, "lint-setup") {
+		t.Fatalf("no manifest: code = %d, stderr = %q, want exit %d naming %s and the lint-setup skill", code, stderr, exitRuntime, proofManifest)
 	}
 
 	commitFiles(t, dir, "chore: canary repo", map[string]string{
@@ -81,12 +108,12 @@ rules:
     scope: "src/**/*.php"
     message: The application never depends on the infrastructure.
 `,
-		lintdomain.ManifestFile: canaryManifest,
-		"lint/canaries/ddd-domain-purity/src/Order/Domain/Order.php":             "<?php\n// violates: ddd/domain-purity\n",
-		"lint/canaries/ddd-layer-direction/src/Order/Application/PlaceOrder.php": "<?php\n// a canary that the engine misses\n",
+		proofManifest: canaryManifest,
+		proofFolder + "/ddd-domain-purity/src/Order/Domain/Order.php":             "<?php\n// violates: ddd/domain-purity\n",
+		proofFolder + "/ddd-layer-direction/src/Order/Application/PlaceOrder.php": "<?php\n// a canary that the engine misses\n",
 	})
 
-	code, _, stderr = execute(t, commandLint, commandCanaries)
+	code, _, stderr = execute(t, commandLint, commandCanaries, flagProof, proofFolder)
 	if code != exitRuntime || !strings.Contains(stderr, lintdomain.ErrStaleLintFiles.Error()) {
 		t.Fatalf("no lint init: code = %d, stderr = %q, want exit %d and the stale lint files error", code, stderr, exitRuntime)
 	}
@@ -94,25 +121,25 @@ rules:
 		t.Fatalf("lint init: code = %d, stderr = %q", code, stderr)
 	}
 
-	code, stdout, stderr := execute(t, commandLint, commandCanaries)
+	code, stdout, stderr := execute(t, commandLint, commandCanaries, flagProof, proofFolder)
 
-	want := "FAIL ddd/src-roots: not in lint/rules.yaml\n" +
-		"PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n" +
-		"FAIL ddd/layer-direction lint/canaries/ddd-layer-direction: the engine canary-lint gave no ddd/layer-direction finding\n" +
-		"FAIL ddd/cross-context: not in lint/rules.yaml\n" +
+	want := "FAIL ddd/src-roots: not in rules.yaml\n" +
+		"PASS ddd/domain-purity ddd-domain-purity\n" +
+		"FAIL ddd/layer-direction ddd-layer-direction: the engine canary-lint gave no ddd/layer-direction finding\n" +
+		"FAIL ddd/cross-context: not in rules.yaml\n" +
 		"WAIVED ddd/file-suffix: the tool checks dependencies, not file names.\n"
 	if code != exitRuntime || stdout != want {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want exit %d and %q", code, stdout, stderr, exitRuntime, want)
 	}
 
-	writeRepoFile(t, dir, "lint/canaries/ddd-layer-direction/src/Order/Application/PlaceOrder.php", "<?php\n// violates: ddd/layer-direction\n")
-	writeRepoFile(t, dir, lintdomain.ManifestFile, canaryManifest+"  - id: ddd/cross-context\n    waived: the tool cannot see the contexts.\n  - id: ddd/src-roots\n    waived: the test pack places no file.\n")
+	writeRepoFile(t, dir, proofFolder+"/ddd-layer-direction/src/Order/Application/PlaceOrder.php", "<?php\n// violates: ddd/layer-direction\n")
+	writeRepoFile(t, dir, proofManifest, canaryManifest+"  - id: ddd/cross-context\n    waived: the tool cannot see the contexts.\n  - id: ddd/src-roots\n    waived: the test pack places no file.\n")
 
-	code, stdout, stderr = execute(t, commandLint, commandCanaries)
+	code, stdout, stderr = execute(t, commandLint, commandCanaries, flagProof, proofFolder)
 
 	want = "WAIVED ddd/src-roots: the test pack places no file.\n" +
-		"PASS ddd/domain-purity lint/canaries/ddd-domain-purity\n" +
-		"PASS ddd/layer-direction lint/canaries/ddd-layer-direction\n" +
+		"PASS ddd/domain-purity ddd-domain-purity\n" +
+		"PASS ddd/layer-direction ddd-layer-direction\n" +
 		"WAIVED ddd/cross-context: the tool cannot see the contexts.\n" +
 		"WAIVED ddd/file-suffix: the tool checks dependencies, not file names.\n"
 	if code != exitOK || stdout != want {
@@ -121,7 +148,7 @@ rules:
 
 	writeRepoFile(t, dir, configFile, "lint:\n  packs: [./lint/architecture]\n")
 
-	code, _, stderr = execute(t, commandLint, commandCanaries)
+	code, _, stderr = execute(t, commandLint, commandCanaries, flagProof, proofFolder)
 
 	if code != exitRuntime || !strings.Contains(stderr, "no lint plugin has that name") {
 		t.Fatalf("no plugin: code = %d, stderr = %q, want exit %d and the unknown engine error", code, stderr, exitRuntime)
@@ -139,19 +166,19 @@ func TestLintCanariesEngines(t *testing.T) {
 		".harness.yaml": "plugins:\n  - name: canary-lint\n    command: [sh, " + script + "]\n    events: [lint.check]\nlint:\n  packs: [./lint/architecture]\n",
 		"lint/architecture/pack.yaml": "name: architecture\nrules:\n  - id: ddd/domain-purity\n    engine: canary-lint\n    severity: error\n" +
 			"    scope: \"src/**/*.php\"\n    message: The domain depends only on itself.\n",
-		lintdomain.ManifestFile: "pack: ddd\nrules:\n  - id: ddd/domain-purity\n    engines:\n      canary-lint:\n        canary: lint/canaries/php-domain-purity\n" +
+		proofManifest: "pack: ddd\nrules:\n  - id: ddd/domain-purity\n    engines:\n      canary-lint:\n        canary: php-domain-purity\n" +
 			"  - id: ddd/src-roots\n    waived: the test pack places no file.\n  - id: ddd/layer-direction\n    waived: the test pack has no layers.\n" +
 			"  - id: ddd/cross-context\n    waived: the tool cannot see the contexts.\n  - id: ddd/file-suffix\n    waived: the tool checks dependencies, not file names.\n",
-		"lint/canaries/php-domain-purity/src/Order/Domain/Order.php": "<?php\n// violates: ddd/domain-purity\n",
+		proofFolder + "/php-domain-purity/src/Order/Domain/Order.php": "<?php\n// violates: ddd/domain-purity\n",
 	})
 	if code, _, stderr := execute(t, commandLint, commandInit); code != exitOK {
 		t.Fatalf("lint init: code = %d, stderr = %q", code, stderr)
 	}
 
-	code, stdout, stderr := execute(t, commandLint, commandCanaries)
+	code, stdout, stderr := execute(t, commandLint, commandCanaries, flagProof, proofFolder)
 
 	want := "WAIVED ddd/src-roots: the test pack places no file.\n" +
-		"PASS ddd/domain-purity canary-lint lint/canaries/php-domain-purity\n" +
+		"PASS ddd/domain-purity canary-lint php-domain-purity\n" +
 		"WAIVED ddd/layer-direction: the test pack has no layers.\n" +
 		"WAIVED ddd/cross-context: the tool cannot see the contexts.\n" +
 		"WAIVED ddd/file-suffix: the tool checks dependencies, not file names.\n"

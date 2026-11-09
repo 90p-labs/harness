@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-08.
+Accepted, 2026-11-08. Superseded in part by ADR 0015, 2026-11-09: the canaries, the manifest and the gate.
 
 ## Context
 

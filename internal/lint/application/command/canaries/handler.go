@@ -21,7 +21,8 @@ const (
 )
 
 type Command struct {
-	Dir string
+	Dir   string
+	Proof string
 }
 
 type ReadManifest func(dir string) (domain.Manifest, error)
@@ -52,7 +53,11 @@ func NewHandler(catalogue domain.RuleCatalogue, read ReadManifest, rules map[dom
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) ([]domain.CanaryResult, error) {
-	manifest, err := h.read(cmd.Dir)
+	proof, err := proofDir(cmd.Dir, cmd.Proof)
+	if err != nil {
+		return nil, err
+	}
+	manifest, err := h.read(proof)
 	if errors.Is(err, domain.ErrNoManifest) && len(h.active) > 0 && !h.needsManifest {
 		return nil, nil
 	}
@@ -79,7 +84,7 @@ func (h Handler) Handle(ctx context.Context, cmd Command) ([]domain.CanaryResult
 		if result.Status != domain.CanaryToRun {
 			continue
 		}
-		info, err := os.Stat(canaryDir(cmd.Dir, result.Canary))
+		info, err := os.Stat(canaryDir(proof, result.Canary))
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s for %s", domain.ErrCanaryMissing, result.Canary, result.Rule)
 		}
@@ -91,16 +96,16 @@ func (h Handler) Handle(ctx context.Context, cmd Command) ([]domain.CanaryResult
 		if result.Status != domain.CanaryToRun {
 			continue
 		}
-		if results[i], err = h.run(ctx, cmd.Dir, result, engines[result.Rule]); err != nil {
+		if results[i], err = h.run(ctx, proof, result, engines[result.Rule]); err != nil {
 			return nil, err
 		}
 	}
 	return results, nil
 }
 
-func (h Handler) run(ctx context.Context, repo string, result domain.CanaryResult, engines []domain.EngineName) (domain.CanaryResult, error) {
+func (h Handler) run(ctx context.Context, proof string, result domain.CanaryResult, engines []domain.EngineName) (domain.CanaryResult, error) {
 	engine := cmp.Or(result.Engine, engines[0])
-	canary := canaryDir(repo, result.Canary)
+	canary := canaryDir(proof, result.Canary)
 	findings, err := h.engines.Check(ctx, canary, engine, []domain.Rule{h.active[result.Rule][engine]})
 	if err != nil {
 		return result, fmt.Errorf("canary %s for %s: %w", result.Canary, result.Rule, err)
@@ -137,6 +142,24 @@ func inside(canary string, f shareddomain.Finding) bool {
 	return err == nil
 }
 
-func canaryDir(repo, canary string) string {
-	return filepath.Join(repo, filepath.FromSlash(canary))
+func canaryDir(proof, canary string) string {
+	return filepath.Join(proof, filepath.FromSlash(canary))
+}
+
+func proofDir(repo, proof string) (string, error) {
+	dir := proof
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(repo, proof)
+	}
+	realRepo, realDir := repo, dir
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		if realRepo, err = filepath.EvalSymlinks(repo); err != nil {
+			return "", err
+		}
+		realDir = resolved
+	}
+	if rel, err := filepath.Rel(realRepo, realDir); err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("%w: %s", domain.ErrProofOutsideRepo, proof)
+	}
+	return dir, nil
 }

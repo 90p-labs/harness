@@ -151,7 +151,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		fmt.Fprint(out, line)
 	}
 
-	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintdomain.BaselinePath, Manifest: lintdomain.ManifestFile}, env.bus).
+	written, err := gatemodule.NewInit(toolchain.Lint{Packs: cfg.Lint.Packs, Baseline: lintdomain.BaselinePath}, env.bus).
 		Handle(ctx, initgates.Command{Dir: worktree})
 	switch {
 	case errors.Is(err, gatedomain.ErrGatesExist):
@@ -197,11 +197,6 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 }
 
 func lintSetupLines(dir string, pluginRules []lintdomain.Rule) ([]string, error) {
-	_, err := os.Stat(filepath.Join(dir, lintdomain.ManifestFile))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("read %s: %w", lintdomain.ManifestFile, err)
-	}
-	hasManifest := err == nil
 	var lines []string
 	for _, language := range languagesWithNoPack {
 		found, err := anyFile(dir, language.markers)
@@ -209,7 +204,7 @@ func lintSetupLines(dir string, pluginRules []lintdomain.Rule) ([]string, error)
 			return nil, err
 		}
 		covered := slices.ContainsFunc(pluginRules, func(r lintdomain.Rule) bool { return strings.HasSuffix(r.Scope, language.extension) })
-		if found && !(hasManifest && covered) {
+		if found && !covered {
 			lines = append(lines, fmt.Sprintf(lintSetupFormat, language.name))
 		}
 	}

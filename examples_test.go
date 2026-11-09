@@ -14,10 +14,7 @@ import (
 
 	"github.com/jorge07/harness/internal/gate/domain"
 	gateconfig "github.com/jorge07/harness/internal/gate/infrastructure/config"
-	lintdomain "github.com/jorge07/harness/internal/lint/domain"
-	lintmanifest "github.com/jorge07/harness/internal/lint/infrastructure/manifest"
 	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
-	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
@@ -42,15 +39,13 @@ type example struct {
 	lockfile string
 	setup    string
 	detected []string
-	canaries bool
-	waived   []string
 }
 
 var examples = []example{
-	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}, canaries: true, waived: []string{lintdomain.RuleFileSuffix}},
-	{name: "go", lockfile: "go.sum", setup: "go-mod", canaries: true, waived: []string{lintdomain.RuleFileSuffix}},
-	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install", canaries: true},
-	{name: "python", lockfile: "uv.lock", setup: "py-install", canaries: true},
+	{name: "symfony", lockfile: "composer.lock", setup: "make-install", detected: []string{"make-cs", "make-phpstan", "make-lint-container", "make-test"}},
+	{name: "go", lockfile: "go.sum", setup: "go-mod"},
+	{name: "nextjs", lockfile: "pnpm-lock.yaml", setup: "node-install"},
+	{name: "python", lockfile: "uv.lock", setup: "py-install"},
 }
 
 func TestExamples(t *testing.T) {
@@ -114,42 +109,7 @@ func TestExamples(t *testing.T) {
 			if _, _, err := packs.Load(dir, cfg.Lint.Packs); err != nil {
 				t.Fatalf("lint packs %v: %v", cfg.Lint.Packs, err)
 			}
-			if ex.canaries {
-				checkCanaries(t, dir, ex.waived)
-			}
 		})
-	}
-}
-
-func checkCanaries(t *testing.T, dir string, wantWaived []string) {
-	t.Helper()
-	catalogue, err := rulecatalogue.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rules, err := lintmanifest.Read(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	results, err := rules.Results(catalogue)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var waived []string
-	for _, result := range results {
-		switch result.Status {
-		case lintdomain.CanaryFail:
-			t.Errorf("rule %s: %s", result.Rule, result.Detail)
-		case lintdomain.CanaryWaived:
-			waived = append(waived, result.Rule)
-		case lintdomain.CanaryToRun:
-			if info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(result.Canary))); err != nil || !info.IsDir() {
-				t.Errorf("rule %s: canary folder %s is missing", result.Rule, result.Canary)
-			}
-		}
-	}
-	if wantWaived != nil && !slices.Equal(waived, wantWaived) {
-		t.Errorf("waived rules = %q, want %q", waived, wantWaived)
 	}
 }
 

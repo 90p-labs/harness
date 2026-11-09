@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"testing"
 
 	"github.com/jorge07/harness/internal/gate/domain"
@@ -173,24 +172,10 @@ func TestDetectLintGates(t *testing.T) {
 	}
 }
 
-func TestDetectCanaryGate(t *testing.T) {
-	const manifest = "lint/rules.yaml"
-	lint := toolchain.Lint{Packs: []string{"./lint/architecture"}, Manifest: manifest}
-	canaries := gate(t, "lint-canaries", "harness lint canaries", nil)
+func TestDetectNoCanaryGate(t *testing.T) {
+	got, err := toolchain.Detect(repo(t, map[string]string{"lint/rules.yaml": "pack: ddd\n"}), toolchain.Lint{Packs: []string{"./lint/architecture"}})
 
-	t.Run("a manifest adds the canary gate", func(t *testing.T) {
-		got, err := toolchain.Detect(repo(t, map[string]string{manifest: "pack: ddd\n"}), lint)
-
-		if err != nil || len(got) != 2 || !reflect.DeepEqual(got[1], canaries) {
-			t.Fatalf("gates = %+v, %v, want the lint gate and %+v", got, err, canaries)
-		}
-	})
-
-	t.Run("no manifest adds no canary gate", func(t *testing.T) {
-		got, err := toolchain.Detect(repo(t, nil), lint)
-
-		if err != nil || slices.ContainsFunc(got, func(g domain.Gate) bool { return g.ID == canaries.ID }) {
-			t.Fatalf("gates = %+v, %v, want no %s gate", got, err, canaries.ID)
-		}
-	})
+	if err != nil || len(got) != 1 || got[0].ID != "lint" {
+		t.Fatalf("gates = %+v, %v, want only the lint gate", got, err)
+	}
 }

@@ -8,9 +8,9 @@ trap 'rm -f "$report"' EXIT
 # A TERM stops the compose client, not the container.
 trap 'docker kill "$container" >/dev/null 2>&1; exit 143' TERM
 
-# A pack scope is one glob with no exclusion, so ruff itself leaves out the canaries.
+# A pack scope is one glob with no exclusion, so ruff itself leaves out the setup proof.
 docker compose --progress quiet run --rm -T --name "$container" python uv run --no-sync \
-  ruff check --no-cache --output-format json --exit-zero --extend-exclude lint/canaries . </dev/null >"$report" &
+  ruff check --no-cache --output-format json --exit-zero --extend-exclude lint/proof . </dev/null >"$report" &
 wait $!
 
 printf '%s\n' "$envelope" | jq --slurpfile ruff "$report" '.payload as $payload | {

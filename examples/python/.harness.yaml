@@ -25,9 +25,7 @@ gates:
   - id: lint
     run: harness lint --json
     baseline: .harness-lint/baseline.json
-  - id: lint-canaries
-    run: harness lint canaries
   - id: py-test
     run: docker compose run --rm -T python uv run --no-sync pytest
     paths: *python-inputs
-    needs: [py-typecheck, lint, lint-canaries]
+    needs: [py-typecheck, lint]

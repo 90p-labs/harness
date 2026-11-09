@@ -20,6 +20,7 @@ const (
 	commandCatalogue = "catalogue"
 	commandCanaries  = "canaries"
 	flagJSON         = "json"
+	flagProof        = "proof"
 
 	findingFormat       = "%s %s %s:%d %s\n"
 	catalogueRuleFormat = "%s %s\n"
@@ -31,13 +32,14 @@ const (
 var (
 	ErrFindings       = errors.New("lint found error findings")
 	ErrCanariesFailed = errors.New("a lint canary failed")
+	ErrProofRequired  = errors.New("the --proof flag needs a folder")
 )
 
 type Handlers struct {
 	Lint     func(ctx context.Context) (shareddomain.Report, error)
 	Init     func(ctx context.Context) error
 	Baseline func(ctx context.Context) error
-	Canaries func(ctx context.Context) ([]domain.CanaryResult, error)
+	Canaries func(ctx context.Context, proof string) ([]domain.CanaryResult, error)
 	NoPacks  bool
 }
 
@@ -93,21 +95,36 @@ func NewLintCommand(connect Connect, catalogue func() (domain.RuleCatalogue, err
 			},
 		},
 		newCatalogueCommand(catalogue),
-		&cobra.Command{
-			Use:   commandCanaries,
-			Short: "Prove that the engine catches the canary of each architecture rule",
-			Args:  cobra.NoArgs,
-			RunE: func(cmd *cobra.Command, _ []string) error {
-				return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
-					results, err := h.Canaries(ctx)
-					if err != nil {
-						return err
-					}
-					return printCanaries(cmd.OutOrStdout(), results)
-				})
-			},
-		},
+		newCanariesCommand(connect),
 	)
+	return cmd
+}
+
+func newCanariesCommand(connect Connect) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   commandCanaries,
+		Short: "Prove that the engine catches the canary of each architecture rule",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.NoArgs(cmd, args); err != nil {
+				return err
+			}
+			if proof, _ := cmd.Flags().GetString(flagProof); proof == "" {
+				return ErrProofRequired
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			proof, _ := cmd.Flags().GetString(flagProof)
+			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
+				results, err := h.Canaries(ctx, proof)
+				if err != nil {
+					return err
+				}
+				return printCanaries(cmd.OutOrStdout(), results)
+			})
+		},
+	}
+	cmd.Flags().String(flagProof, "", "folder of the proof, with rules.yaml and the canaries, in the work tree")
 	return cmd
 }
 
