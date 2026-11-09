@@ -172,7 +172,7 @@ lint:
 <the last 4 KiB of the lint output>
 ```
 
-[`docs/configuration.md`](docs/configuration.md) explains every config key, its default and its env variable, with recipes.
+[`docs/configuration.md`](docs/configuration.md) explains every config key, its default and its env variable, with recipes. The [full configuration](docs/configuration-full.md) page shows every key and one example for each case.
 
 ## Plugins
 
@@ -489,6 +489,7 @@ The command refuses a draft with a missing section, adds the harness version, th
 
 - [`examples/`](examples/): set up the harness on a Symfony, a Go or a Next.js project, with the gates in containers.
 - [`docs/configuration.md`](docs/configuration.md): every key of `.harness.yaml` and how to configure it.
+- [`docs/configuration-full.md`](docs/configuration-full.md): a full `.harness.yaml` and one example for each case.
 - [`docs/go-live.md`](docs/go-live.md): follow a run from the merge to production.
 - [`docs/adr/`](docs/adr/): the architecture decision records.
 - [`DESIGN.md`](DESIGN.md): the modules, the loop, the events, the config keys and the rules.
