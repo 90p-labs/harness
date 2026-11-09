@@ -74,6 +74,7 @@ func TestLoadDefaults(t *testing.T) {
 		"worker":   {"claude": {"sonnet", "haiku"}},
 		"reviewer": {"claude": {"sonnet", "haiku", "opus"}},
 		"advisor":  {"claude": {"fable"}},
+		"lead":     {"claude": {"opus"}},
 	}
 	if !reflect.DeepEqual(got.Roles, wantRoles) {
 		t.Errorf("roles = %+v, want %+v", got.Roles, wantRoles)
@@ -382,7 +383,7 @@ func TestLoadRoles(t *testing.T) {
 	}
 
 	want := map[string]config.RoleHost{
-		"lead":     {"codex": {"gpt-5"}},
+		"lead":     {"codex": {"gpt-5"}, "claude": {"opus"}},
 		"reviewer": {"claude": {"opus"}},
 		"worker":   {"claude": {"opus", "sonnet"}},
 		"explorer": {"claude": {"haiku"}},
@@ -390,6 +391,17 @@ func TestLoadRoles(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Roles, want) {
 		t.Errorf("roles = %+v, want %+v", got.Roles, want)
+	}
+}
+
+func TestLoadLeadEnv(t *testing.T) {
+	t.Setenv("HARNESS_ROLES_LEAD_CLAUDE", "sonnet")
+	got, err := load(t, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if want := []string{"sonnet"}; !reflect.DeepEqual(got.Roles["lead"]["claude"], want) {
+		t.Errorf("lead.claude = %+v, want %+v", got.Roles["lead"]["claude"], want)
 	}
 }
 

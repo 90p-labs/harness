@@ -228,6 +228,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyLintRules, defaultLintRules)
 	v.SetDefault(keyLintDashboards, defaultLintDashboard)
 	v.SetDefault(keyRoles, map[string]any{
+		string(shareddomain.RoleLead):     map[string]any{string(shareddomain.HostClaude): []string{"opus"}},
 		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): []string{"haiku"}},
 		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku"}},
 		string(shareddomain.RoleReviewer): map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku", "opus"}},
