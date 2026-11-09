@@ -421,6 +421,83 @@ func TestReviewVerifiesTrace(t *testing.T) {
 	}
 }
 
+type receivedSpan struct {
+	name, traceID, parentID string
+	attrs                   map[string]string
+}
+
+func TestVerifyTrace(t *testing.T) {
+	const (
+		rootSpan   = "gate.verify"
+		gateSpan   = "gate.run"
+		attrRunID  = "harness.run.id"
+		tracesPath = "/v1/traces"
+	)
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	cfg := "gates:\n  - id: first\n    run: \"true\"\n  - id: second\n    run: \"true\"\n"
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runID := startWithPlan(t, dir, plan)
+	var mu sync.Mutex
+	var spans []receivedSpan
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		request := &collectortrace.ExportTraceServiceRequest{}
+		if r.URL.Path != tracesPath || proto.Unmarshal(body, request) != nil {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, resource := range request.GetResourceSpans() {
+			for _, scope := range resource.GetScopeSpans() {
+				for _, span := range scope.GetSpans() {
+					got := receivedSpan{
+						name: span.GetName(), traceID: fmt.Sprintf("%x", span.GetTraceId()),
+						parentID: fmt.Sprintf("%x", span.GetParentSpanId()), attrs: map[string]string{},
+					}
+					for _, kv := range span.GetAttributes() {
+						got.attrs[kv.GetKey()] = kv.GetValue().GetStringValue()
+					}
+					spans = append(spans, got)
+				}
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(telemetry.EnvEndpoint, server.URL)
+
+	code, _, stderr := execute(t, commandVerify)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if len(spans) == 0 {
+		t.Fatal("the collector got no span")
+	}
+	var roots []receivedSpan
+	for _, span := range spans {
+		if span.traceID != spans[0].traceID {
+			t.Errorf("span %s trace id = %s, want %s", span.name, span.traceID, spans[0].traceID)
+		}
+		if span.parentID == "" {
+			roots = append(roots, span)
+		}
+		if span.name == gateSpan && span.parentID == "" {
+			t.Errorf("span %s has no parent", span.name)
+		}
+	}
+	if len(roots) != 1 || roots[0].name != rootSpan {
+		t.Fatalf("root spans = %+v, want one %s", roots, rootSpan)
+	}
+	if got := roots[0].attrs[attrRunID]; got != runID {
+		t.Errorf("%s = %q, want %q", attrRunID, got, runID)
+	}
+}
+
 func TestReviewNeedsProofEvidence(t *testing.T) {
 	clearHarnessEnv(t)
 	dir, plan := tracedRepo(t)
