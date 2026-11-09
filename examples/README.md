@@ -58,7 +58,7 @@ Many projects already wrap each check in a Makefile target. A small exec plugin 
    	docker compose run --rm -T php vendor/bin/phpunit
    ```
 
-2. Add an exec plugin on `gates.detect`. It reads the Makefile and prints one line for each marked target, `{"id":"make-<target>","run":"make <target>","paths":[...]}`, inside the `context` of an allow verdict. A gate line can add `"needs":["make-<target>"]`. A setup line adds `"setup":true` and `"creates":"<file>"`. The plugin exits 1 on an unknown marker. The plugin of the Symfony example is [`symfony/.harness/plugins/make-gates.sh`](symfony/.harness/plugins/make-gates.sh). The [Plugins](../README.md#plugins) section of the root README gives the verdict format.
+2. Add an exec plugin on `gates.detect`. It reads the Makefile and prints one line for each marked target, `{"id":"make-<target>","run":"make <target>","paths":[...]}`, inside the `context` of an allow verdict. A gate line can add `"needs":["make-<target>"]`. A setup line adds `"setup":true` and `"creates":"<file>"`. The plugin exits 1 on an unknown marker. The plugin of the Symfony example is [`symfony/.harness/plugins/make-gates.sh`](symfony/.harness/plugins/make-gates.sh). The [Plugins](../docs/plugins.md) page gives the verdict format.
 
 3. Register the plugin under `plugins:` in `.harness.yaml`:
 
@@ -107,4 +107,4 @@ A team linter can feed the same lint report, baseline ratchet and gate `lint` as
 4. Run `harness lint init`, `harness lint` and `harness lint baseline`. Then add the gate `lint`, `harness lint --json` with the baseline `.harness-lint/baseline.json`.
 
 The harness calls a lint engine only when an active pack has a rule for it. A pack with only plugin rules needs no Biome, no oxlint and no Node.
-Run `harness lint init` again after each edit of the pack. The [Custom lint pack](../README.md#custom-lint-pack-and-lint-engine-plugin) section of the root README gives the contract.
+Run `harness lint init` again after each edit of the pack. The [Custom lint pack](../docs/plugins.md#custom-lint-pack-and-lint-engine-plugin) section of the plugins page gives the contract.
