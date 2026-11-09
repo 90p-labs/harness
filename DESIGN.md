@@ -482,6 +482,8 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 - The root flag `--state-dsn` binds to `state.dsn`.
 - An unknown key is an error that names the key.
 
+[`docs/configuration.md`](docs/configuration.md) is the user reference: each key with its type, env variable, effect and an example.
+
 | Key | Default | Rule |
 |---|---|---|
 | `state.dsn` | `sqlite:.harness/state.db` | Not empty |
