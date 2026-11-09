@@ -20,15 +20,21 @@ import (
 const ShutdownTimeout = 2 * time.Second
 
 const (
-	envEndpoint        = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	envTracesEndpoint  = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
-	envMetricsEndpoint = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
+	EnvAliasPrefix     = "HARNESS_"
+	EnvEndpoint        = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	EnvTracesEndpoint  = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+	EnvMetricsEndpoint = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
 )
 
 const (
 	attrServiceName    = "service.name"
 	attrServiceVersion = "service.version"
 	serviceName        = "harness"
+)
+
+const (
+	tracesPath  = "/v1/traces"
+	metricsPath = "/v1/metrics"
 )
 
 const (
@@ -72,10 +78,11 @@ func exporters(ctx context.Context) (sdktrace.SpanExporter, sdkmetric.Exporter, 
 	var metricExporter sdkmetric.Exporter
 	var errs []error
 
-	if endpoint := signalEndpoint(envTracesEndpoint); endpoint != "" {
-		if err := validateEndpoint(envTracesEndpoint, endpoint); err != nil {
-			errs = append(errs, err)
-		} else if exporter, err := otlptracehttp.New(ctx,
+	if endpoint, err := resolveEndpoint(EnvTracesEndpoint, tracesPath); err != nil {
+		errs = append(errs, err)
+	} else if endpoint != "" {
+		if exporter, err := otlptracehttp.New(ctx,
+			otlptracehttp.WithEndpointURL(endpoint),
 			otlptracehttp.WithRetry(otlptracehttp.RetryConfig{}),
 			otlptracehttp.WithTimeout(ShutdownTimeout),
 		); err != nil {
@@ -85,10 +92,11 @@ func exporters(ctx context.Context) (sdktrace.SpanExporter, sdkmetric.Exporter, 
 		}
 	}
 
-	if endpoint := signalEndpoint(envMetricsEndpoint); endpoint != "" {
-		if err := validateEndpoint(envMetricsEndpoint, endpoint); err != nil {
-			errs = append(errs, err)
-		} else if exporter, err := otlpmetrichttp.New(ctx,
+	if endpoint, err := resolveEndpoint(EnvMetricsEndpoint, metricsPath); err != nil {
+		errs = append(errs, err)
+	} else if endpoint != "" {
+		if exporter, err := otlpmetrichttp.New(ctx,
+			otlpmetrichttp.WithEndpointURL(endpoint),
 			otlpmetrichttp.WithRetry(otlpmetrichttp.RetryConfig{}),
 			otlpmetrichttp.WithTimeout(ShutdownTimeout),
 		); err != nil {
@@ -101,11 +109,31 @@ func exporters(ctx context.Context) (sdktrace.SpanExporter, sdkmetric.Exporter, 
 	return spanExporter, metricExporter, errors.Join(errs...)
 }
 
-func signalEndpoint(signalEnv string) string {
-	if endpoint := os.Getenv(signalEnv); endpoint != "" {
-		return endpoint
+func resolveEndpoint(signalEnv, signalPath string) (string, error) {
+	name, raw := lookupEndpoint(signalEnv)
+	if raw == "" {
+		return "", nil
 	}
-	return os.Getenv(envEndpoint)
+	if err := validateEndpoint(name, raw); err != nil {
+		return "", err
+	}
+	if name == signalEnv || name == EnvAliasPrefix+signalEnv {
+		return raw, nil
+	}
+	joined, err := url.JoinPath(raw, signalPath)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", name, err)
+	}
+	return joined, nil
+}
+
+func lookupEndpoint(signalEnv string) (string, string) {
+	for _, name := range []string{EnvAliasPrefix + signalEnv, signalEnv, EnvAliasPrefix + EnvEndpoint, EnvEndpoint} {
+		if raw := os.Getenv(name); raw != "" {
+			return name, raw
+		}
+	}
+	return "", ""
 }
 
 func validateEndpoint(name, endpoint string) error {

@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,8 +22,6 @@ import (
 
 const (
 	testVersion     = "9.9.9-test"
-	tracesPath      = "/v1/traces"
-	metricsPath     = "/v1/metrics"
 	resourceService = "service.name"
 	resourceVersion = "service.version"
 	wantServiceName = "harness"
@@ -81,8 +81,9 @@ func okResponse(w http.ResponseWriter, _ *http.Request) {
 
 func clearEndpointEnv(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{envEndpoint, envTracesEndpoint, envMetricsEndpoint} {
+	for _, name := range []string{EnvEndpoint, EnvTracesEndpoint, EnvMetricsEndpoint} {
 		t.Setenv(name, "")
+		t.Setenv(EnvAliasPrefix+name, "")
 	}
 }
 
@@ -109,7 +110,7 @@ func resourceAttr(res *resourcev1.Resource, key string) string {
 func TestSetupExports(t *testing.T) {
 	clearEndpointEnv(t)
 	c := newCollector(t, okResponse)
-	t.Setenv(envEndpoint, c.server.URL)
+	t.Setenv(EnvEndpoint, c.server.URL)
 
 	ctx := context.Background()
 	shutdown, err := Setup(ctx, testVersion)
@@ -160,7 +161,7 @@ func TestSetupNoEndpoint(t *testing.T) {
 func TestSetupSignalEndpoint(t *testing.T) {
 	clearEndpointEnv(t)
 	c := newCollector(t, okResponse)
-	t.Setenv(envTracesEndpoint, c.server.URL+tracesPath)
+	t.Setenv(EnvTracesEndpoint, c.server.URL+tracesPath)
 
 	ctx := context.Background()
 	shutdown, err := Setup(ctx, testVersion)
@@ -186,7 +187,7 @@ func TestExportNoRetry(t *testing.T) {
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
-	t.Setenv(envEndpoint, c.server.URL)
+	t.Setenv(EnvEndpoint, c.server.URL)
 
 	ctx := context.Background()
 	shutdown, err := Setup(ctx, testVersion)
@@ -213,7 +214,7 @@ func TestShutdownDeadline(t *testing.T) {
 		}
 	})
 	t.Cleanup(func() { close(release) })
-	t.Setenv(envEndpoint, c.server.URL)
+	t.Setenv(EnvEndpoint, c.server.URL)
 
 	ctx := context.Background()
 	shutdown, err := Setup(ctx, testVersion)
@@ -234,29 +235,151 @@ func TestShutdownDeadline(t *testing.T) {
 	}
 }
 
-func TestSetupInvalidEndpoint(t *testing.T) {
+func exportOnce(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	shutdown, err := Setup(ctx, testVersion)
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	emitSignals(ctx, t)
+	if err := shutdown(ctx); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+func TestSetupHarnessSignalEndpoint(t *testing.T) {
+	cases := []struct{ name, env, path, otherPath string }{
+		{"traces", EnvTracesEndpoint, tracesPath, metricsPath},
+		{"metrics", EnvMetricsEndpoint, metricsPath, tracesPath},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearEndpointEnv(t)
+			c := newCollector(t, okResponse)
+			t.Setenv(EnvAliasPrefix+tc.env, c.server.URL+tc.path)
+
+			exportOnce(t)
+
+			if got := c.hitCount(tc.path); got != 1 {
+				t.Errorf("%s requests = %d, want 1", tc.path, got)
+			}
+			if got := c.hitCount(tc.otherPath); got != 0 {
+				t.Errorf("%s requests = %d, want 0", tc.otherPath, got)
+			}
+		})
+	}
+}
+
+func TestSetupHarnessEndpoint(t *testing.T) {
+	cases := []struct{ name, prefix string }{
+		{"bare", ""},
+		{"prefix", "/prefix"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearEndpointEnv(t)
+			c := newCollector(t, okResponse)
+			t.Setenv(EnvAliasPrefix+EnvEndpoint, c.server.URL+tc.prefix)
+
+			exportOnce(t)
+
+			for _, path := range []string{tc.prefix + tracesPath, tc.prefix + metricsPath} {
+				if got := c.hitCount(path); got != 1 {
+					t.Errorf("%s requests = %d, want 1", path, got)
+				}
+			}
+		})
+	}
+}
+
+func TestLookupEndpointOrder(t *testing.T) {
+	for _, signalEnv := range []string{EnvTracesEndpoint, EnvMetricsEndpoint} {
+		t.Run(signalEnv, func(t *testing.T) {
+			clearEndpointEnv(t)
+			order := []string{EnvAliasPrefix + signalEnv, signalEnv, EnvAliasPrefix + EnvEndpoint, EnvEndpoint}
+			for i, name := range order {
+				t.Setenv(name, "http://host"+strconv.Itoa(i))
+			}
+			for i, want := range order {
+				gotName, gotRaw := lookupEndpoint(signalEnv)
+				if gotName != want || gotRaw != "http://host"+strconv.Itoa(i) {
+					t.Errorf("slot %d = %q, %q, want %q", i, gotName, gotRaw, want)
+				}
+				t.Setenv(want, "")
+			}
+			if gotName, gotRaw := lookupEndpoint(signalEnv); gotName != "" || gotRaw != "" {
+				t.Errorf("all clear = %q, %q, want empty", gotName, gotRaw)
+			}
+		})
+	}
+}
+
+func TestSetupAliasWins(t *testing.T) {
 	clearEndpointEnv(t)
-	c := newCollector(t, okResponse)
-	t.Setenv(envTracesEndpoint, "localhost:4318")
-	t.Setenv(envMetricsEndpoint, c.server.URL+metricsPath)
+	standard := newCollector(t, okResponse)
+	alias := newCollector(t, okResponse)
+	t.Setenv(EnvTracesEndpoint, standard.server.URL+tracesPath)
+	t.Setenv(EnvAliasPrefix+EnvTracesEndpoint, alias.server.URL+tracesPath)
 
-	shutdown, err := Setup(context.Background(), testVersion)
-	if err == nil {
-		t.Fatal("Setup returned no error for an endpoint without a scheme")
-	}
-	if shutdown == nil {
-		t.Fatal("Setup returned a nil shutdown with an error")
-	}
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	exportOnce(t)
 
-	spans, metrics, err := exporters(context.Background())
-	if err == nil {
-		t.Error("exporters returned no error")
+	if got := alias.hitCount(tracesPath); got != 1 {
+		t.Errorf("alias trace requests = %d, want 1", got)
 	}
-	if spans != nil {
-		t.Errorf("span exporter = %v, want nil", spans)
+	if got := standard.hitCount(tracesPath); got != 0 {
+		t.Errorf("standard trace requests = %d, want 0", got)
 	}
-	if metrics == nil {
-		t.Error("metric exporter is nil, want one for the valid endpoint")
+}
+
+func TestSetupSignalBeatsGeneral(t *testing.T) {
+	clearEndpointEnv(t)
+	signal := newCollector(t, okResponse)
+	general := newCollector(t, okResponse)
+	t.Setenv(EnvAliasPrefix+EnvTracesEndpoint, signal.server.URL+tracesPath)
+	t.Setenv(EnvEndpoint, general.server.URL)
+
+	exportOnce(t)
+
+	if got := signal.hitCount(tracesPath); got != 1 {
+		t.Errorf("signal trace requests = %d, want 1", got)
+	}
+	if got := general.hitCount(tracesPath); got != 0 {
+		t.Errorf("general trace requests = %d, want 0", got)
+	}
+}
+
+func TestSetupInvalidEndpoint(t *testing.T) {
+	const invalid = "localhost:4318"
+	for _, name := range []string{EnvTracesEndpoint, EnvAliasPrefix + EnvTracesEndpoint} {
+		t.Run(name, func(t *testing.T) {
+			clearEndpointEnv(t)
+			c := newCollector(t, okResponse)
+			t.Setenv(name, invalid)
+			t.Setenv(EnvMetricsEndpoint, c.server.URL+metricsPath)
+
+			shutdown, err := Setup(context.Background(), testVersion)
+			if err == nil {
+				t.Fatal("Setup returned no error for an endpoint without a scheme")
+			}
+			if shutdown == nil {
+				t.Fatal("Setup returned a nil shutdown with an error")
+			}
+			t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+			spans, metrics, err := exporters(context.Background())
+			if err == nil {
+				t.Fatal("exporters returned no error")
+			}
+			if !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), invalid) {
+				t.Errorf("error = %q, want the name %q and the value %q", err, name, invalid)
+			}
+			if spans != nil {
+				t.Errorf("span exporter = %v, want nil", spans)
+			}
+			if metrics == nil {
+				t.Error("metric exporter is nil, want one for the valid endpoint")
+			}
+		})
 	}
 }

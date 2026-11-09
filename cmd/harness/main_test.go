@@ -28,9 +28,6 @@ import (
 
 const (
 	testBuildVersion   = "1.2.3-test"
-	envOTLPEndpoint    = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	envOTLPTraces      = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
-	envOTLPMetrics     = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
 	invalidOTLPAddress = "localhost:4318"
 	telemetryPrefix    = "telemetry: "
 	harnessEnvPrefix   = "HARNESS_"
@@ -38,9 +35,11 @@ const (
 
 func clearOTLPEnv(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{envOTLPEndpoint, envOTLPTraces, envOTLPMetrics, telemetry.EnvTraceparent} {
+	for _, name := range []string{telemetry.EnvEndpoint, telemetry.EnvTracesEndpoint, telemetry.EnvMetricsEndpoint} {
 		t.Setenv(name, "")
+		t.Setenv(telemetry.EnvAliasPrefix+name, "")
 	}
+	t.Setenv(telemetry.EnvTraceparent, "")
 }
 
 const (
@@ -71,7 +70,7 @@ func TestTraceparentParent(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
-	t.Setenv(envOTLPEndpoint, server.URL)
+	t.Setenv(telemetry.EnvEndpoint, server.URL)
 	t.Setenv(telemetry.EnvTraceparent, parentTraceparent)
 
 	code, _, stderr := executeWithStdin(t, diagramInput, commandDiagram)
@@ -280,19 +279,23 @@ func TestConfigFlagMissingFile(t *testing.T) {
 }
 
 func TestTelemetryErrorKeepsExitCode(t *testing.T) {
-	clearOTLPEnv(t)
-	t.Setenv(envOTLPEndpoint, invalidOTLPAddress)
-	code, stdout, stderr := execute(t, "version")
+	for _, name := range []string{telemetry.EnvEndpoint, telemetry.EnvAliasPrefix + telemetry.EnvEndpoint} {
+		t.Run(name, func(t *testing.T) {
+			clearOTLPEnv(t)
+			t.Setenv(name, invalidOTLPAddress)
+			code, stdout, stderr := execute(t, "version")
 
-	if code != 0 {
-		t.Errorf("exit code = %d, want 0", code)
-	}
-	if stdout != "harness 1.2.3-test\n" {
-		t.Errorf("stdout = %q, want %q", stdout, "harness 1.2.3-test\n")
-	}
-	lines := strings.Split(strings.TrimSuffix(stderr, "\n"), "\n")
-	if len(lines) != 1 || !strings.HasPrefix(lines[0], telemetryPrefix) {
-		t.Errorf("stderr = %q, want one line starting with %q", stderr, telemetryPrefix)
+			if code != 0 {
+				t.Errorf("exit code = %d, want 0", code)
+			}
+			if stdout != "harness 1.2.3-test\n" {
+				t.Errorf("stdout = %q, want %q", stdout, "harness 1.2.3-test\n")
+			}
+			lines := strings.Split(strings.TrimSuffix(stderr, "\n"), "\n")
+			if len(lines) != 1 || !strings.HasPrefix(lines[0], telemetryPrefix) {
+				t.Errorf("stderr = %q, want one line starting with %q", stderr, telemetryPrefix)
+			}
+		})
 	}
 }
 
