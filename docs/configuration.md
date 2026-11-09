@@ -399,7 +399,7 @@ guard:
 
 1. Run `harness init --host codex`. It writes the hooks into `.codex/hooks.json`.
 2. The default roles name Codex models. The guard lets a Codex agent call with no model pass, because Codex sends none. It still denies a wrong model.
-3. Add `review-models` to `guard.disabled`. Codex sends no model in an agent call, Without this setting, `harness run ship` is always denied.
+3. Add `review-models` to `guard.disabled`. Codex sends no model in an agent call. Without this setting, `harness run ship` is always denied.
 4. Model names go stale. Check `~/.codex/models_cache.json` for the local Codex model list, and override any name in `.harness.yaml`.
 5. Commit `.harness.yaml` and `.codex/hooks.json`.
 
