@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/90p-labs/harness/internal/live/application/command/check"
 	"github.com/90p-labs/harness/internal/live/domain"
@@ -182,6 +183,7 @@ type fixture struct {
 	folder   *fakeFolder
 	bus      *fakeBus
 	spans    *tracetest.SpanRecorder
+	runTrace *fakeRunTrace
 	reader   *sdkmetric.ManualReader
 	handler  check.Handler
 }
@@ -199,8 +201,23 @@ func newFixture(t *testing.T) *fixture {
 	}
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(f.spans)).Tracer("test")
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(f.reader)).Meter("test")
-	f.handler = check.NewHandler(f.runs, f.releases, f.github, f.folder, f.bus, environment, rollback, tracer, meter)
+	f.runTrace = &fakeRunTrace{parents: map[string]trace.SpanContext{}}
+	f.handler = check.NewHandler(f.runs, f.releases, f.github, f.folder, f.bus, environment, rollback, tracer, f.runTrace, meter)
 	return f
+}
+
+type fakeRunTrace struct {
+	parents map[string]trace.SpanContext
+	under   []string
+}
+
+func (f *fakeRunTrace) Under(ctx context.Context, run domain.LiveRun) context.Context {
+	f.under = append(f.under, run.ID)
+	parent, ok := f.parents[run.ID]
+	if !ok {
+		return ctx
+	}
+	return trace.ContextWithRemoteSpanContext(ctx, parent)
 }
 
 func (f *fixture) handle(t *testing.T) ([]check.Result, error) {
@@ -613,6 +630,39 @@ func TestCheckSpanNamesTheRun(t *testing.T) {
 		}
 		if attrs[attrRunID] != runs[i].ID || attrs[attrWorktree] != runs[i].Worktree {
 			t.Errorf("span %d attributes = %v, want run %s in %s", i, attrs, runs[i].ID, runs[i].Worktree)
+		}
+	}
+}
+
+func TestCheckTracesEachRun(t *testing.T) {
+	f := newFixture(t)
+	runs := []domain.LiveRun{observing("run-a", 0), releasing("run-b")}
+	f.runs.runs = runs
+	f.releases.stored["run-a"] = deployedRelease("run-a")
+	f.releases.stored["run-b"] = deployedRelease("run-b")
+	f.runTrace.parents["run-a"] = trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{1}, SpanID: trace.SpanID{1}, TraceFlags: trace.FlagsSampled, Remote: true,
+	})
+	f.runTrace.parents["run-b"] = trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{2}, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled, Remote: true,
+	})
+
+	if _, err := f.handle(t); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []string{"run-a", "run-b"}; !reflect.DeepEqual(f.runTrace.under, want) {
+		t.Fatalf("Under calls = %v, want %v", f.runTrace.under, want)
+	}
+	spans := f.spans.Ended()
+	if len(spans) != len(runs) {
+		t.Fatalf("spans = %d, want %d", len(spans), len(runs))
+	}
+	for i, span := range spans {
+		want := f.runTrace.parents[runs[i].ID]
+		if span.SpanContext().TraceID() != want.TraceID() || span.Parent().SpanID() != want.SpanID() {
+			t.Errorf("span %d trace %s parent %s, want trace %s parent %s",
+				i, span.SpanContext().TraceID(), span.Parent().SpanID(), want.TraceID(), want.SpanID())
 		}
 	}
 }

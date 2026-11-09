@@ -17,6 +17,10 @@ type Runs interface {
 	Signals(ctx context.Context, run LiveRun) ([]Threshold, error)
 }
 
+type RunTrace interface {
+	Under(ctx context.Context, run LiveRun) context.Context
+}
+
 type RunFolder interface {
 	Archive(run LiveRun, round int) error
 }

@@ -52,6 +52,7 @@ type Handler struct {
 	environment string
 	rollback    string
 	tracer      trace.Tracer
+	runTrace    domain.RunTrace
 	checks      metric.Int64Counter
 }
 
@@ -63,12 +64,13 @@ func NewHandler(
 	bus shareddomain.Dispatcher,
 	environment, rollback string,
 	tracer trace.Tracer,
+	runTrace domain.RunTrace,
 	meter metric.Meter,
 ) Handler {
 	checks, _ := meter.Int64Counter(metricLiveChecks)
 	return Handler{
 		runs: runs, releases: releases, github: github, folder: folder, bus: bus,
-		environment: environment, rollback: rollback, tracer: tracer, checks: checks,
+		environment: environment, rollback: rollback, tracer: tracer, runTrace: runTrace, checks: checks,
 	}
 }
 
@@ -90,6 +92,7 @@ func (h Handler) Handle(ctx context.Context, cmd Command) ([]Result, error) {
 }
 
 func (h Handler) checkRun(ctx context.Context, run domain.LiveRun, now time.Time) Result {
+	ctx = h.runTrace.Under(ctx, run)
 	ctx, span := h.tracer.Start(ctx, spanLiveCheck, trace.WithAttributes(
 		attrRunID.String(run.ID), attrWorktree.String(run.Worktree), attrPhase.String(string(run.Phase)),
 	))
