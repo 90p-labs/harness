@@ -5,9 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -72,10 +70,10 @@ func resolveActiveRun(ctx context.Context, flags *pflag.FlagSet, cwd string, key
 		return shareddomain.RunRef{}
 	}
 	cfg, err := config.Load(flags, key.Worktree)
-	if err != nil || !stateFileExists(cfg.State.DSN, commonDir) {
+	if err != nil || !dbal.FileExists(cfg.State.DSN, commonDir) {
 		return shareddomain.RunRef{}
 	}
-	db, err := openState(ctx, cfg, commonDir)
+	db, err := dbal.Open(ctx, cfg.State.DSN, commonDir)
 	if err != nil {
 		return shareddomain.RunRef{}
 	}
@@ -85,18 +83,6 @@ func resolveActiveRun(ctx context.Context, flags *pflag.FlagSet, cwd string, key
 		return shareddomain.RunRef{}
 	}
 	return shareddomain.RunRef{ID: current.ID, Phase: string(current.Phase)}
-}
-
-func stateFileExists(dsn, commonDir string) bool {
-	path, found := strings.CutPrefix(dsn, string(dbal.EngineSQLite)+":")
-	if !found {
-		return false
-	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(commonDir, path)
-	}
-	_, err := os.Stat(path)
-	return err == nil
 }
 
 type environment struct {

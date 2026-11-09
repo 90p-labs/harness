@@ -17,6 +17,7 @@ import (
 	"github.com/jorge07/harness/internal/shared/application/eventbus"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (
@@ -181,24 +182,21 @@ func TestActiveRunRef(t *testing.T) {
 }
 
 func TestRunDispatcherFillsTheRun(t *testing.T) {
-	errState := errors.New("state does not open")
 	working := shareddomain.RunRef{ID: "r1", Phase: string(domain.PhaseWorking)}
 	cases := []struct {
-		name      string
-		activeRun shareddomain.RunRef
-		activeErr error
-		want      shareddomain.RunRef
+		name string
+		ctx  context.Context
+		want shareddomain.RunRef
 	}{
-		{name: "the active run fills the envelope", activeRun: working, want: working},
-		{name: "no active run leaves the run empty", activeRun: working, activeErr: domain.ErrRunNotFound},
-		{name: "a state that does not open leaves the run empty", activeRun: working, activeErr: errState},
+		{name: "the run of the context fills the envelope", ctx: context.WithValue(context.Background(), runRefKey{}, working), want: working},
+		{name: "no run leaves the run empty", ctx: context.Background()},
+		{name: "the run of a parent process stays out of the envelope", ctx: telemetry.WithRun(context.Background(), "", "parent-run")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			next := &recordingDispatcher{}
-			active := func(context.Context) (shareddomain.RunRef, error) { return tc.activeRun, tc.activeErr }
 
-			_, err := runDispatcher{next: next, active: active}.Dispatch(context.Background(), shareddomain.Envelope{Event: shareddomain.EventSessionStarted})
+			_, err := runDispatcher{next: next}.Dispatch(tc.ctx, shareddomain.Envelope{Event: shareddomain.EventSessionStarted})
 
 			if err != nil {
 				t.Fatalf("dispatch: %v", err)

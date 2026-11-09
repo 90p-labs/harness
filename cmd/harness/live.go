@@ -123,19 +123,12 @@ func runLiveCheck(ctx context.Context, env environment) ([]check.Result, error) 
 }
 
 type runDispatcher struct {
-	next   shareddomain.Dispatcher
-	active func(ctx context.Context) (shareddomain.RunRef, error)
+	next shareddomain.Dispatcher
 }
 
 func (d runDispatcher) Dispatch(ctx context.Context, envelope shareddomain.Envelope) (shareddomain.DispatchResult, error) {
-	if ref, err := d.active(ctx); err == nil {
-		envelope.Run = ref
-	}
+	envelope.Run = runRefFrom(ctx)
 	return d.next.Dispatch(ctx, envelope)
-}
-
-func resolvedRunRef(ctx context.Context) (shareddomain.RunRef, error) {
-	return runRefFrom(ctx), nil
 }
 
 func activeRunRef(env environment) func(ctx context.Context) (shareddomain.RunRef, error) {

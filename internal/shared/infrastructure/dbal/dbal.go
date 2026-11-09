@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -34,6 +35,16 @@ func Open(ctx context.Context, dsn, baseDir string) (*DB, error) {
 		return nil, fmt.Errorf("open %s database: %w", scheme, err)
 	}
 	return &DB{DB: conn, dialect: dialect}, nil
+}
+
+// FileExists reports whether the database file of dsn exists, without creating it.
+func FileExists(dsn, baseDir string) bool {
+	scheme, path, _ := strings.Cut(dsn, dsnSchemeSeparator)
+	if Engine(scheme) != EngineSQLite {
+		return false
+	}
+	_, err := os.Stat(newSQLite(baseDir).filePath(path))
+	return err == nil
 }
 
 func (db *DB) Dialect() Dialect { return db.dialect }

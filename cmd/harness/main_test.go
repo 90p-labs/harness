@@ -564,7 +564,7 @@ func TestHookSpansMarkNoRun(t *testing.T) {
 		if id, has := span.attrs[telemetry.AttrRunID]; has {
 			t.Errorf("span %s: %s = %q, want none", span.name, telemetry.AttrRunID, id)
 		}
-		if span.attrs[telemetry.AttrRunActive] != "false" {
+		if span.attrs[telemetry.AttrRunActive] != strconv.FormatBool(false) {
 			t.Errorf("span %s: %s = %q, want false", span.name, telemetry.AttrRunActive, span.attrs[telemetry.AttrRunActive])
 		}
 		if span.name == hookHandleSpan {
@@ -576,6 +576,32 @@ func TestHookSpansMarkNoRun(t *testing.T) {
 	}
 	if !handled {
 		t.Errorf("no %s span in %+v", hookHandleSpan, got)
+	}
+}
+
+func TestHookSpansTakeTheParentRun(t *testing.T) {
+	const parentRun = "parent-run"
+	clearHarnessEnv(t)
+	initRepo(t)
+	t.Setenv(telemetry.EnvRunID, parentRun)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	got := spans()
+	if len(got) == 0 {
+		t.Fatal("no spans")
+	}
+	for _, span := range got {
+		if span.attrs[telemetry.AttrRunID] != parentRun {
+			t.Errorf("span %s: %s = %q, want %q", span.name, telemetry.AttrRunID, span.attrs[telemetry.AttrRunID], parentRun)
+		}
+		if active, has := span.attrs[telemetry.AttrRunActive]; has {
+			t.Errorf("span %s: %s = %q, want none", span.name, telemetry.AttrRunActive, active)
+		}
 	}
 }
 
