@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -32,6 +33,12 @@ const (
 	lintGate      = "lint"
 	baselinePath  = ".harness-lint/baseline.json"
 	spanName      = "gate.run"
+	spanVerify    = "gate.verify"
+	spanSetup     = "gate.setup"
+	attrCount     = "harness.gate.count"
+	attrWorktree  = "harness.worktree"
+	attrRunID     = "harness.run.id"
+	runID         = "20261109-140744-trace"
 	metricName    = "harness.gate.duration"
 	attrGate      = "harness.gate"
 	attrResult    = "harness.gate.result"
@@ -356,7 +363,12 @@ func TestVerifyTelemetry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	spans := f.spans.Ended()
+	var spans []sdktrace.ReadOnlySpan
+	for _, span := range f.spans.Ended() {
+		if span.Name() == spanName {
+			spans = append(spans, span)
+		}
+	}
 	if len(spans) != 2 {
 		t.Fatalf("spans = %d, want 2", len(spans))
 	}
@@ -960,5 +972,95 @@ func TestHandleSetupFails(t *testing.T) {
 	}
 	if len(f.setups.saved) != 0 || len(f.evidence.saved) != 0 || len(f.dispatcher.envelopes) != 0 {
 		t.Errorf("setup saved = %q, evidence = %+v, events = %d, want nothing", f.setups.saved, f.evidence.saved, len(f.dispatcher.envelopes))
+	}
+}
+
+func spanAttrs(span sdktrace.ReadOnlySpan) map[string]string {
+	attrs := map[string]string{}
+	for _, a := range span.Attributes() {
+		attrs[string(a.Key)] = a.Value.Emit()
+	}
+	return attrs
+}
+
+func TestVerifyTrace(t *testing.T) {
+	f := newFixture(nil)
+	f.runner.outcomes[depsStep] = passOutcome()
+	f.runner.outcomes[testGate] = passOutcome()
+	f.runner.outcomes[lintGate] = passOutcome()
+
+	_, err := f.handler.Handle(context.Background(), withSetup(command(gate(testGate), gate(lintGate)), setupStep(depsStep, "")))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roots []sdktrace.ReadOnlySpan
+	names := map[string]int{}
+	for _, span := range f.spans.Ended() {
+		names[span.Name()]++
+		if !span.Parent().IsValid() {
+			roots = append(roots, span)
+		}
+	}
+	if len(roots) != 1 || roots[0].Name() != spanVerify {
+		t.Fatalf("roots = %d, want one %s", len(roots), spanVerify)
+	}
+	root := roots[0]
+	for _, span := range f.spans.Ended() {
+		if span == root {
+			continue
+		}
+		if span.SpanContext().TraceID() != root.SpanContext().TraceID() || span.Parent().SpanID() != root.SpanContext().SpanID() {
+			t.Errorf("span %s is not a direct child of %s", span.Name(), spanVerify)
+		}
+	}
+	if names[spanSetup] != 1 || names[spanName] != 2 || names[spanVerify] != 1 {
+		t.Fatalf("span names = %v, want one setup, two runs, one verify", names)
+	}
+}
+
+func TestVerifyRootAttributes(t *testing.T) {
+	cases := []struct {
+		name       string
+		runID      string
+		outcome    domain.Outcome
+		wantStatus codes.Code
+	}{
+		{"a passing call with a run id", runID, passOutcome(), codes.Unset},
+		{"a failing gate with no run id", "", failOutcome(), codes.Error},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(nil)
+			f.runner.outcomes[testGate] = tc.outcome
+			cmd := command(gate(testGate), gate(lintGate))
+			cmd.RunID = tc.runID
+			f.runner.outcomes[lintGate] = tc.outcome
+
+			if _, err := f.handler.Handle(context.Background(), cmd); err != nil {
+				t.Fatal(err)
+			}
+
+			var root sdktrace.ReadOnlySpan
+			for _, span := range f.spans.Ended() {
+				if span.Name() == spanVerify {
+					root = span
+				}
+			}
+			if root == nil {
+				t.Fatalf("no %s span", spanVerify)
+			}
+			attrs := spanAttrs(root)
+			id, hasID := attrs[attrRunID]
+			if hasID != (tc.runID != "") || id != tc.runID {
+				t.Errorf("%s = %q (present %v), want %q", attrRunID, id, hasID, tc.runID)
+			}
+			if attrs[attrCount] != "2" || attrs[attrWorktree] != workDir {
+				t.Errorf("attributes = %v, want count 2 and worktree %s", attrs, workDir)
+			}
+			if root.Status().Code != tc.wantStatus {
+				t.Errorf("status = %v, want %v", root.Status().Code, tc.wantStatus)
+			}
+		})
 	}
 }

@@ -23,6 +23,9 @@ import (
 
 const (
 	spanGateRun       = "gate.run"
+	spanGateVerify    = "gate.verify"
+	spanGateSetup     = "gate.setup"
+	descGateFailed    = "a gate failed"
 	metricGateSeconds = "harness.gate.duration"
 	metricUnitSeconds = "s"
 	reportErrorFormat = "\nfindings report: %v"
@@ -32,6 +35,11 @@ const (
 	attrGate   = attribute.Key("harness.gate")
 	attrResult = attribute.Key("harness.gate.result")
 	attrCached = attribute.Key("harness.gate.cached")
+
+	attrGateCount = attribute.Key("harness.gate.count")
+	attrWorktree  = attribute.Key("harness.worktree")
+	attrRunID     = attribute.Key("harness.run.id")
+	attrSetupStep = attribute.Key("harness.setup.step")
 )
 
 var (
@@ -57,6 +65,7 @@ type Command struct {
 	Setup    []domain.Setup
 	Gates    []domain.Gate
 	Parallel int
+	RunID    string
 }
 
 type SetupLine struct {
@@ -131,7 +140,23 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (Result, error) {
 	return h.HandleConfigured(ctx, cmd)
 }
 
-func (h Handler) HandleConfigured(ctx context.Context, cmd Command) (Result, error) {
+func (h Handler) HandleConfigured(ctx context.Context, cmd Command) (result Result, err error) {
+	attrs := []attribute.KeyValue{attrGateCount.Int(len(cmd.Gates)), attrWorktree.String(cmd.Dir)}
+	if cmd.RunID != "" {
+		attrs = append(attrs, attrRunID.String(cmd.RunID))
+	}
+	ctx, span := h.tracer.Start(ctx, spanGateVerify, trace.WithAttributes(attrs...))
+	defer span.End()
+	defer func() {
+		switch {
+		case err != nil:
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		case result.Failed:
+			span.SetStatus(codes.Error, descGateFailed)
+		}
+	}()
+
 	setup, err := h.runSetup(ctx, cmd)
 	if err != nil {
 		return Result{}, err
@@ -140,7 +165,7 @@ func (h Handler) HandleConfigured(ctx context.Context, cmd Command) (Result, err
 	if err != nil {
 		return Result{}, err
 	}
-	result := Result{Setup: setup, Lines: lines}
+	result = Result{Setup: setup, Lines: lines}
 	for _, line := range lines {
 		result.Failed = result.Failed || !line.Status.Passed()
 	}
@@ -161,19 +186,36 @@ func (h Handler) runSetup(ctx context.Context, cmd Command) ([]SetupLine, error)
 		if current {
 			continue
 		}
-		outcome, err := h.runner.Run(ctx, cmd.Dir, step.Gate)
+		line, err := h.runSetupStep(ctx, cmd, step, hash)
 		if err != nil {
 			return nil, err
 		}
-		if outcome.Result != domain.ResultPass {
-			return nil, fmt.Errorf("%w: %s\n%s", domain.ErrSetupFailed, step.ID, outcome.Tail)
-		}
-		if err := h.setups.SavePass(ctx, cmd.Repo, step.ID, hash, h.now()); err != nil {
-			return nil, err
-		}
-		lines = append(lines, SetupLine{Step: step.ID, Duration: outcome.Duration})
+		lines = append(lines, line)
 	}
 	return lines, nil
+}
+
+func (h Handler) runSetupStep(ctx context.Context, cmd Command, step domain.Setup, hash string) (line SetupLine, err error) {
+	ctx, span := h.tracer.Start(ctx, spanGateSetup, trace.WithAttributes(attrSetupStep.String(step.ID)))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+	}()
+
+	outcome, err := h.runner.Run(ctx, cmd.Dir, step.Gate)
+	if err != nil {
+		return SetupLine{}, err
+	}
+	if outcome.Result != domain.ResultPass {
+		return SetupLine{}, fmt.Errorf("%w: %s\n%s", domain.ErrSetupFailed, step.ID, outcome.Tail)
+	}
+	if err := h.setups.SavePass(ctx, cmd.Repo, step.ID, hash, h.now()); err != nil {
+		return SetupLine{}, err
+	}
+	return SetupLine{Step: step.ID, Duration: outcome.Duration}, nil
 }
 
 func (h Handler) setupCurrent(ctx context.Context, cmd Command, step domain.Setup, hash string) (bool, error) {
