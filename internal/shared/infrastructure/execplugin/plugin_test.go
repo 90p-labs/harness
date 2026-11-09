@@ -19,6 +19,7 @@ import (
 
 	"github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (
@@ -66,7 +67,7 @@ func TestHelperProcess(t *testing.T) {
 		}
 		fmt.Printf(`{"verdict":"deny","reason":"saw %s on %s","context":"ctx"}`, envelope.Event, envelope.Run.ID)
 	case modeEchoEnv:
-		value, found := os.LookupEnv("TRACEPARENT")
+		value, found := os.LookupEnv(telemetry.EnvTraceparent)
 		if !found {
 			value = traceparentUnset
 		}
@@ -302,8 +303,9 @@ func TestExecPluginTraceparent(t *testing.T) {
 }
 
 func TestTraceparentNoSpan(t *testing.T) {
-	t.Setenv("TRACEPARENT", "")
-	if err := os.Unsetenv("TRACEPARENT"); err != nil {
+	// Setenv registers the restore at cleanup; Unsetenv then removes the variable.
+	t.Setenv(telemetry.EnvTraceparent, "")
+	if err := os.Unsetenv(telemetry.EnvTraceparent); err != nil {
 		t.Fatal(err)
 	}
 	plugin := newPlugin(t, modeEchoEnv, callTimeout)

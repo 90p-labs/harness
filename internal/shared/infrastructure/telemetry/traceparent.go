@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	envTraceparent = "TRACEPARENT"
+	EnvTraceparent = "TRACEPARENT"
 	keyTraceparent = "traceparent"
 )
 
@@ -19,10 +19,10 @@ func TraceparentEntry(ctx context.Context) (string, bool) {
 	}
 	carrier := propagation.MapCarrier{}
 	propagation.TraceContext{}.Inject(ctx, carrier)
-	return envTraceparent + "=" + carrier.Get(keyTraceparent), true
+	return EnvTraceparent + "=" + carrier.Get(keyTraceparent), true
 }
 
 func ParentFromEnv(ctx context.Context) context.Context {
-	carrier := propagation.MapCarrier{keyTraceparent: os.Getenv(envTraceparent)}
+	carrier := propagation.MapCarrier{keyTraceparent: os.Getenv(EnvTraceparent)}
 	return propagation.TraceContext{}.Extract(ctx, carrier)
 }

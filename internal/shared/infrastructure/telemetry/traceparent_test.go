@@ -26,7 +26,7 @@ func TestParentFromEnv(t *testing.T) {
 		{"bad", "not-a-traceparent", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(envTraceparent, tc.value)
+			t.Setenv(EnvTraceparent, tc.value)
 
 			got := trace.SpanContextFromContext(ParentFromEnv(context.Background()))
 
@@ -49,7 +49,7 @@ func TestParentFromEnvFlags(t *testing.T) {
 		{"flag 00 drops the span", traceparentOff, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(envTraceparent, tc.value)
+			t.Setenv(EnvTraceparent, tc.value)
 			recorder := tracetest.NewSpanRecorder()
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 
@@ -70,11 +70,11 @@ func TestTraceparentEntry(t *testing.T) {
 	if _, ok := TraceparentEntry(context.Background()); ok {
 		t.Fatal("ok = true for a context with no span")
 	}
-	t.Setenv(envTraceparent, traceparentValid)
+	t.Setenv(EnvTraceparent, traceparentValid)
 
 	got, ok := TraceparentEntry(ParentFromEnv(context.Background()))
 
-	if want := envTraceparent + "=" + traceparentValid; !ok || got != want {
+	if want := EnvTraceparent + "=" + traceparentValid; !ok || got != want {
 		t.Fatalf("got %q, %v, want %q", got, ok, want)
 	}
 }

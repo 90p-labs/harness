@@ -23,6 +23,7 @@ import (
 	"github.com/jorge07/harness/internal/run/domain"
 	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (
@@ -37,13 +38,12 @@ const (
 
 func clearOTLPEnv(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{envOTLPEndpoint, envOTLPTraces, envOTLPMetrics, envTraceparent} {
+	for _, name := range []string{envOTLPEndpoint, envOTLPTraces, envOTLPMetrics, telemetry.EnvTraceparent} {
 		t.Setenv(name, "")
 	}
 }
 
 const (
-	envTraceparent    = "TRACEPARENT"
 	parentTraceID     = "0af7651916cd43dd8448eb211c80319c"
 	parentTraceparent = "00-" + parentTraceID + "-b7ad6b7169203331-01"
 	diagramInput      = "flowchart TD\n    a --> b +\n"
@@ -72,7 +72,7 @@ func TestTraceparentParent(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	t.Setenv(envOTLPEndpoint, server.URL)
-	t.Setenv(envTraceparent, parentTraceparent)
+	t.Setenv(telemetry.EnvTraceparent, parentTraceparent)
 
 	code, _, stderr := executeWithStdin(t, diagramInput, commandDiagram)
 

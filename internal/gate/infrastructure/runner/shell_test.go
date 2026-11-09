@@ -10,6 +10,7 @@ import (
 
 	"github.com/jorge07/harness/internal/gate/domain"
 	"github.com/jorge07/harness/internal/gate/infrastructure/runner"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 var _ domain.Runner = runner.Shell{}
@@ -92,12 +93,12 @@ func TestShellRunnerTimeoutKillsChildren(t *testing.T) {
 }
 
 const (
-	printTraceparent = "printenv TRACEPARENT"
+	printTraceparent = "printenv " + telemetry.EnvTraceparent
 	inheritedParent  = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
 )
 
 func TestTraceparent(t *testing.T) {
-	t.Setenv("TRACEPARENT", inheritedParent)
+	t.Setenv(telemetry.EnvTraceparent, inheritedParent)
 
 	t.Run("span in context", func(t *testing.T) {
 		ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "gate")

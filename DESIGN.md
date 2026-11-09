@@ -401,7 +401,7 @@ Signals of lint:
 | `harness.lint.findings` | counter | `harness.lint.rule`, `harness.lint.severity` |
 
 - On an engine error, `lint.engine` records the error and has the error status.
-- A gate child process gets `TRACEPARENT` from the gate runner. A command reads it at start and makes it the parent of its spans, so the lint spans of a verify run form one tree under `gate.run`. A missing or bad value starts a new root.
+- A gate child process gets `TRACEPARENT` from the gate runner. A command reads it at start and makes it the parent of its spans. The lint spans of a verify run then form one tree under `gate.run`. A missing or bad value starts a new root.
 
 Later modules add a span for each run transition, hook and live check.
 
