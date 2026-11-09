@@ -19,6 +19,7 @@ import (
 
 	"github.com/jorge07/harness/internal/shared/domain"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (
@@ -36,6 +37,8 @@ const (
 	modeDetached      = "detached"
 	modeSleepChild    = "sleep-child"
 	modeStubbornChild = "stubborn-child"
+
+	traceparentUnset = "unset"
 
 	pidFileEnv   = "HELPER_PID_FILE"
 	childSeconds = "30"
@@ -64,7 +67,11 @@ func TestHelperProcess(t *testing.T) {
 		}
 		fmt.Printf(`{"verdict":"deny","reason":"saw %s on %s","context":"ctx"}`, envelope.Event, envelope.Run.ID)
 	case modeEchoEnv:
-		fmt.Printf(`{"verdict":"context","context":%q}`, os.Getenv("TRACEPARENT"))
+		value, found := os.LookupEnv(telemetry.EnvTraceparent)
+		if !found {
+			value = traceparentUnset
+		}
+		fmt.Printf(`{"verdict":"context","context":%q}`, value)
 	case modeFail:
 		fmt.Fprint(os.Stderr, "boom")
 		os.Exit(3)
@@ -292,5 +299,22 @@ func TestExecPluginTraceparent(t *testing.T) {
 	const want = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
 	if got.Kind != domain.VerdictContext || got.Context != want {
 		t.Fatalf("got %+v, want TRACEPARENT %s", got, want)
+	}
+}
+
+func TestTraceparentNoSpan(t *testing.T) {
+	// Setenv registers the restore at cleanup; Unsetenv then removes the variable.
+	t.Setenv(telemetry.EnvTraceparent, "")
+	if err := os.Unsetenv(telemetry.EnvTraceparent); err != nil {
+		t.Fatal(err)
+	}
+	plugin := newPlugin(t, modeEchoEnv, callTimeout)
+
+	got, err := plugin.Handle(context.Background(), testEnvelope(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if got.Kind != domain.VerdictContext || got.Context != traceparentUnset {
+		t.Fatalf("got %+v, want TRACEPARENT unset", got)
 	}
 }

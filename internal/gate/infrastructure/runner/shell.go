@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/jorge07/harness/internal/gate/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (
@@ -31,6 +33,9 @@ func (Shell) Run(ctx context.Context, dir string, gate domain.Gate) (domain.Outc
 	tail := &tailBuffer{}
 	cmd := exec.CommandContext(ctx, shell, shellFlag, gate.Run)
 	cmd.Dir = dir
+	if entry, ok := telemetry.TraceparentEntry(ctx); ok {
+		cmd.Env = append(os.Environ(), entry)
+	}
 	cmd.Stdout = io.MultiWriter(&stdout, tail)
 	cmd.Stderr = tail
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

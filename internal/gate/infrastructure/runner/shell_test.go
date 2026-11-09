@@ -6,8 +6,11 @@ import (
 	"testing"
 	"time"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
 	"github.com/jorge07/harness/internal/gate/domain"
 	"github.com/jorge07/harness/internal/gate/infrastructure/runner"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 var _ domain.Runner = runner.Shell{}
@@ -87,4 +90,33 @@ func TestShellRunnerTimeoutKillsChildren(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > 3*time.Second {
 		t.Fatalf("timeout took %v, want the process group killed", elapsed)
 	}
+}
+
+const (
+	printTraceparent = "printenv " + telemetry.EnvTraceparent
+	inheritedParent  = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+)
+
+func TestTraceparent(t *testing.T) {
+	t.Setenv(telemetry.EnvTraceparent, inheritedParent)
+
+	t.Run("span in context", func(t *testing.T) {
+		ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "gate")
+		defer span.End()
+		out, err := runner.Shell{}.Run(ctx, t.TempDir(), newGate(t, printTraceparent, time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := span.SpanContext().TraceID().String()
+		if !strings.Contains(out.Stdout, want) || strings.Contains(out.Stdout, inheritedParent) {
+			t.Fatalf("TRACEPARENT = %q, want trace id %s", out.Stdout, want)
+		}
+	})
+
+	t.Run("no span in context", func(t *testing.T) {
+		out, err := runner.Shell{}.Run(context.Background(), t.TempDir(), newGate(t, printTraceparent, time.Minute))
+		if err != nil || strings.TrimSpace(out.Stdout) != inheritedParent {
+			t.Fatalf("TRACEPARENT = %q, %v, want the inherited value", out.Stdout, err)
+		}
+	})
 }

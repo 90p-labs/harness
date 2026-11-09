@@ -391,7 +391,19 @@ Signals of the plugin bus:
 - The histogram buckets are 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5 and 10 seconds.
 - The instrumentation scope is the import path of the eventbus package.
 
-Later modules add a span for each run transition, gate, hook and live check.
+Signals of lint:
+
+| Signal | Kind | Attributes |
+|---|---|---|
+| `lint.run` | span | none |
+| `lint.engine` | span, child of `lint.run`, one for each engine | `harness.lint.engine`, `harness.lint.rules`, `harness.lint.findings` |
+| `lint.findings` | event of `lint.engine`, one for each rule and severity pair | `harness.lint.rule`, `harness.lint.severity`, `harness.lint.count` |
+| `harness.lint.findings` | counter | `harness.lint.rule`, `harness.lint.severity` |
+
+- On an engine error, `lint.engine` records the error and has the error status.
+- A gate child process gets `TRACEPARENT` from the gate runner. A command reads it at start and makes it the parent of its spans. The lint spans of a verify run then form one tree under `gate.run`. A missing or bad value starts a new root.
+
+Later modules add a span for each run transition, hook and live check.
 
 ## State
 
