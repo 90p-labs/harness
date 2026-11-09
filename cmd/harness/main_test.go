@@ -866,6 +866,12 @@ func editPlan(t *testing.T, dir, runID string, edit func(string) string) {
 	}
 }
 
+const (
+	reviewerDoneFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"subagent_type":"harness:reviewer","model":%q,"prompt":"review"}}`
+	modelSonnet        = "sonnet"
+	modelHaiku         = "haiku"
+)
+
 func TestRunLifecycle(t *testing.T) {
 	clearHarnessEnv(t)
 	dir, valid := tracedRepo(t)
@@ -884,6 +890,11 @@ func TestRunLifecycle(t *testing.T) {
 	for _, step := range steps {
 		if step.args[0] == "review" {
 			verifyPasses(t)
+		}
+		if step.args[0] == "ship" {
+			for _, model := range []string{modelSonnet, modelHaiku} {
+				answer(t, hostClaude, fmt.Sprintf(reviewerDoneFormat, model))
+			}
 		}
 		code, stdout, stderr := execute(t, append([]string{commandRun}, step.args...)...)
 		if code != exitOK || stderr != "" {

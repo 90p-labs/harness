@@ -77,7 +77,9 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	key := domain.RunKey{Repo: repo, Worktree: worktree}
 	guards, err := guard.NewPlugins(cfg.Guard.Disabled, cfg.Git.DefaultBranch, modelsByHost(cfg.Roles), worktree,
 		stopAdapter{cfg: cfg, commonDir: commonDir, key: key},
-		commitCheckAdapter{cfg: cfg}.Passed)
+		commitCheckAdapter{cfg: cfg}.Passed,
+		reviewRecordAdapter{cfg: cfg}.Save,
+		reviewRecordAdapter{cfg: cfg}.Models)
 	if err != nil {
 		return environment{}, err
 	}
