@@ -10,6 +10,19 @@ The harness keeps a catalogue of architecture rules. A native tool of the projec
 
 Language: `$ARGUMENTS`. When it is empty, the `linter` agent finds the languages.
 
+## Decision tree
+
+```
+Start: run harness version ("Binary")
+├── the layout of the contexts and the layers, or the folder names of a language
+│   └── load the `ddd` skill, and give its path to the linter agent with the step 1 inputs
+├── TypeScript only → "Known tools": add the ddd pack to lint.packs, and stop
+├── a language in "Known tools", or a language with no known tool → "Steps"
+├── a canary fails → "Steps", step 6
+├── a rule needs a waiver → "Steps", step 5
+└── the wrapper plugin or a file format → "Files" and "Wrapper contract"
+```
+
 ## Binary
 
 - In each command below, `harness` means the full path `"${CLAUDE_PLUGIN_ROOT}/bin/harness"`. Write the full path in each command: a shell variable does not stay from one Bash call to the next.

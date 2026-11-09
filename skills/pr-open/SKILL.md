@@ -10,6 +10,17 @@ A reviewer reads the body before the diff. The body answers three questions, in 
 
 Arguments: `$ARGUMENTS`
 
+## Decision tree
+
+```
+Start: run harness version ("Binary"), then step 1
+├── harness run status shows a run → step 2 keeps the plan diagrams of the changed files
+├── no run → step 2 draws a diagram only for a changed state machine or flow
+├── no pull request for the branch → step 4 creates a draft
+├── an open pull request → step 4 edits its body
+└── the guard denies the body → fix the body file of step 3, and run the command again
+```
+
 ## Binary
 
 - In each command below, `harness` means the full path `"${CLAUDE_PLUGIN_ROOT}/bin/harness"`. Write the full path in each command.

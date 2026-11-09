@@ -1218,6 +1218,14 @@ The tool kind in the payload is `shell`, `edit`, `write`, `read`, `search`, `age
 
 The plugin is the second install path, for a user and not for one repository. `.claude-plugin/` and `.codex-plugin/` hold the manifests, and `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` list the plugin at the repository root. `hooks/hooks.json` (Claude Code) and `hooks/codex.json` (Codex) call `"${CLAUDE_PLUGIN_ROOT}/bin/harness" hook --host H <hook>` for each event of the codec. A test in the codec package reads the two plugin files and the two install templates. Each file must hold one hook for each event of `Capabilities()`, under the host event name of that hook.
 
+The plugin ships the skills and the agents that the loop uses:
+
+- The user starts the skills `harness`, `pr-open`, `lint-setup` and `report`. Each one runs a workflow.
+- The model loads the skill `ddd` when a change touches a bounded context. It holds the DDD layout of the packs ddd and ddd-es, with the rule id of each rule, and one reference file for each language.
+- The agents `explorer`, `reviewer` and `linter` return a report of 400 words at most to the lead. The `linter` agent adds the last output of `harness lint canaries --proof lint/proof`.
+- Each `SKILL.md` starts with `## Decision tree`, which routes the reader to the one section or reference file that it needs.
+- A file names a skill or an agent by its name, such as the `ddd` skill, never by a file path. A root test checks that each name exists.
+
 The launcher `bin/harness` rules:
 
 - A hook acts only in a git repository with `.harness.yaml` at its top level, from `git rev-parse --show-toplevel` in the working folder. Elsewhere it prints `{}` and exits 0. A repository-local `host install` opts in by its hooks, so the binary still fails closed outside git.
