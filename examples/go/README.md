@@ -206,9 +206,12 @@ The skill proved the rules once at the setup. It wrote a temporary proof folder 
 The skill reported each PASS and each WAIVED line with its reason to the user, and then it deleted the folder.
 The project commits no canary, no manifest and no canary gate. A later edit of `.go-arch-lint.yml` that lets a rule through stays green until someone runs the `lint-setup` skill again.
 
-`.go-arch-lint.yml` has one component for each layer of each context, for example `order-domain` for `internal/order/domain`. The `deps` key lets the domain use nothing, the application layer use the domain and any third-party library, and the infrastructure layer use the domain, the application layer and any third-party library.
+`.go-arch-lint.yml` has one component for each layer of each context, for example `order-domain` for `internal/order/domain`. The component `shared-domain` covers `internal/shared/domain`, where the integration event interfaces live. Each layer may use it, and it uses nothing.
+The `deps` key lets a domain use only the shared domain.
+It lets the application layer use its domain, the shared domain and any third-party library.
+It lets the infrastructure layer use its domain, its application layer, the shared domain and any third-party library.
 The key `depOnAnyVendor: false` makes a third-party library a violation for each component without `anyVendorDeps: true`, so only the domain cannot use one. The standard library is always allowed. Test files are not checked.
-The `in` globs end with `/**`, so a component also covers the use case folders below its layer folder. A component never lists a component of another context, so each context stays apart.
+The `in` globs end with `/**`, so a component also covers the use case folders below its layer folder. A component never lists a component of another context, so each context stays apart. The shared domain is not a context.
 A `.go` file under `internal/` that no component covers is a `ddd/src-roots` finding, for example a third context or a file directly in `internal/order/`.
 Edit the components and the `deps` to match your project. Then run the `lint-setup` skill again to prove the rules.
 
@@ -220,11 +223,13 @@ components:
   catalog-application: {in: catalog/application/**}
   catalog-infrastructure: {in: catalog/infrastructure/**}
 deps:
+  catalog-domain:
+    mayDependOn: [shared-domain]
   catalog-application:
-    mayDependOn: [catalog-domain]
+    mayDependOn: [catalog-domain, shared-domain]
     anyVendorDeps: true
   catalog-infrastructure:
-    mayDependOn: [catalog-domain, catalog-application]
+    mayDependOn: [catalog-domain, catalog-application, shared-domain]
     anyVendorDeps: true
 ```
 

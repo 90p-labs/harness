@@ -3,6 +3,7 @@ workdir: internal
 allow:
   depOnAnyVendor: false
 components:
+  shared-domain: {in: shared/domain/**}
   order-domain: {in: order/domain/**}
   order-application: {in: order/application/**}
   order-infrastructure: {in: order/infrastructure/**}
@@ -12,15 +13,19 @@ components:
 excludeFiles:
   - ^.*_test\.go$
 deps:
+  order-domain:
+    mayDependOn: [shared-domain]
   order-application:
-    mayDependOn: [order-domain]
+    mayDependOn: [order-domain, shared-domain]
     anyVendorDeps: true
   order-infrastructure:
-    mayDependOn: [order-domain, order-application]
+    mayDependOn: [order-domain, order-application, shared-domain]
     anyVendorDeps: true
+  billing-domain:
+    mayDependOn: [shared-domain]
   billing-application:
-    mayDependOn: [billing-domain]
+    mayDependOn: [billing-domain, shared-domain]
     anyVendorDeps: true
   billing-infrastructure:
-    mayDependOn: [billing-domain, billing-application]
+    mayDependOn: [billing-domain, billing-application, shared-domain]
     anyVendorDeps: true

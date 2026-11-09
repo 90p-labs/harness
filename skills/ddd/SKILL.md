@@ -1,10 +1,12 @@
 ---
 name: ddd
-description: "The DDD layout that the harness packs ddd and ddd-es check: contexts, layers, dependency direction, CQRS folders, naming and the kernel, each rule with its id. Use when you create, move or review a file in a bounded context, or set up the lint rules of a DDD project."
+description: "The DDD layout that the harness packs ddd and ddd-es check, with the id of each rule. Also the conventions to write a context: use cases, aggregates, repositories, events, wiring, the edge, API contracts, tests, porting and style. Use when you create, move, write or review a file in a bounded context, or set up the lint rules of a DDD project."
 argument-hint: "[language]"
 ---
 
 # DDD layout
+
+Be specific about the structure and agnostic about the tools. Keep the model rich, not anemic. Use immutable values. Let handlers orchestrate. Let errors propagate. Place mappers beside the store adapters. Write architecture tests.
 
 The harness checks a domain driven design project with the rules of the packs ddd and ddd-es. This page gives the layout that those rules expect, with the rule id beside each rule. It names no language: the folder names, the file names and the tool of each language are in `references/`.
 
@@ -20,12 +22,21 @@ What do you need?
 │   ├── Python → references/python.md
 │   └── Go → references/go.md
 ├── the name of a context, an aggregate or an event → "Language"
-├── a new context, or a call between two contexts → "Contexts", then "Dependencies"
+├── a new context, or a call between two contexts → "Contexts", then "Dependencies", then references/contexts.md
+├── events or calls across contexts → references/contexts.md
 ├── the layer of a new file → "Layers", then "Naming"
 ├── whether an import is allowed → "Dependencies"
-├── a command, a query or an event handler → "Application"
-├── an aggregate, a value object, an event or a repository → "Domain model"
-├── an event sourced aggregate or a projection → "Event sourcing"
+├── a command, a query, a handler or a bus → "Application", then references/use-cases.md
+├── an aggregate, a value object or a domain error → "Domain model", then references/aggregates.md
+├── a repository, a mapper or a store → references/repositories-and-mappers.md
+├── an event or an event handler → references/events.md
+├── an event sourced aggregate or a projection → "Event sourcing", then references/events.md
+├── the wiring of a module, the kernel or a shared module → references/composition-root.md
+├── a controller, a consumer, a CLI command or a job → references/delivery-edge.md
+├── a wire shape, a version or an error body → references/api-contracts.md
+├── a test, a mother or an architecture test → references/tests.md
+├── code to port from a legacy project → references/porting-legacy.md
+├── names, comments or the shape of a class → references/style.md
 └── which rules the harness checks in this language → "Coverage"
 ```
 
@@ -52,7 +63,7 @@ Read `CONTEXT.md`, the glossary or `docs/adr/` of the project first, when one ex
 | `infrastructure` | the repository adapters, the mappers, the controllers, the schemas and the other adapters |
 
 - A `shared` folder holds only the three layers (`ddd/shared-layers`).
-- The root `shared` domain holds only the base types: aggregate root, entity, value object, domain event and error (`ddd/shared-base-only`).
+- The root `shared` domain holds only the base types and the integration event interfaces (`ddd/shared-base-only`). The base types are aggregate root, entity, value object, domain event and error.
 
 ## Dependencies
 
@@ -62,7 +73,8 @@ infrastructure ──> application ──> domain ──> shared domain, allowed
 
 - The domain uses only itself, the shared domain and the libraries that the project allows. It never uses the application layer, the infrastructure layer, a framework, an ORM or the event bus (`ddd/domain-purity`).
 - The application layer uses the domain, never the infrastructure layer (`ddd/layer-direction`).
-- A context uses another context only through its public entry point: the module of a context uses the module of another, and an event handler uses the events of another (`ddd/cross-context`).
+- A context imports another context only in two ways (`ddd/cross-context`). A module imports the module of another context, and an event handler imports an event of another context.
+- By convention, an event handler imports only the integration event interfaces of the shared domain. A reviewer checks for a foreign domain event by reading the code.
 
 ## Application
 
@@ -88,13 +100,14 @@ A file in a layer tells its role in its name (`ddd/file-suffix`). The roles are 
 
 The pack ddd-es adds three rules on top of ddd:
 
-- Each event that an aggregate raises has an apply method on that aggregate (`ddd-es/apply-handler`).
+- Each event that an aggregate records has an apply method on that aggregate (`ddd-es/apply-handler`).
 - Each event has a version field (`ddd-es/event-version`).
 - A projection only reads: it uses no repository port, no aggregate and no command (`ddd-es/projection-read-only`).
 
 ## Coverage
 
 - TypeScript: the harness engines check every rule of the packs ddd and ddd-es.
-- Another language: the native tool of the project checks the catalogue ids `ddd/src-roots`, `ddd/domain-purity`, `ddd/layer-direction`, `ddd/cross-context` and `ddd/file-suffix`. `harness lint catalogue` prints them. A tool that checks only imports waives `ddd/file-suffix`, so a reviewer checks the file names by reading the code.
+- Another language: the native tool of the project checks the catalogue ids `ddd/src-roots`, `ddd/domain-purity`, `ddd/layer-direction`, `ddd/cross-context` and `ddd/file-suffix`.
+- `harness lint catalogue` prints them. A tool that checks only imports waives `ddd/file-suffix`, so a reviewer checks the file names by reading the code.
 - The other rules of this page are the convention in every language. A reviewer checks them by reading the code.
-- A reference file states each rule that its language maps in another way, such as a composition root in place of a module for each context.
+- A reference file states each rule that its language maps in another way. An example is a composition root in place of a module for each context.
