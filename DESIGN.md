@@ -270,6 +270,12 @@ An exec plugin writes a verdict on stdout, so the gate line is a JSON string ins
 
 Only one plugin renders a chart. An exec plugin on `chart.render` while `helm` is on is a config error. With no renderer, the chart rules stop with `no plugin rendered the chart`. A document with no `# Source:` comment also stops them, so a render in another format cannot pass as clean.
 
+A plugin on `run.transition.before` or `run.transition.after` can filter by `transition`, `from` and `to`. The transitions are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phases are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`. Values in one key are an OR, and the keys together are an AND. No filter matches all transitions.
+
+The payload is `{"event","from","to","reason"}`. In the `run.transition.before` payload `to` is the phase that the transition would reach. On `run.transition.after`, the envelope `run.phase` is the source phase, so a plugin reads `payload.to`. The transition `start` has an empty `from`.
+
+A plugin may implement the optional `Matcher` interface. The bus calls `Matches` before `Handle` and skips a plugin that does not match. A skipped plugin gets no span and no process. The exec plugin builds its `Matcher` from the filter keys.
+
 The envelope goes to the plugin on stdin. Its version is 1.
 
 ```json

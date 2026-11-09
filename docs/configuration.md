@@ -98,7 +98,7 @@ Your own commands on the event bus. The harness writes the event envelope as JSO
 | `timeout` | duration | `5s` | none | The longest run of one call. `0` gives `5s`. A negative value is an error |
 | `transition` | list of strings | none | none | Optional. Only for the events `run.transition.before` and `run.transition.after`; any other event with it is an error. The plugin runs only for these transitions: `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume`, `abandon`. A value in one key is an OR. The three keys together are an AND |
 | `from` | list of strings | none | none | Optional. Same rules as `transition`. The plugin runs only when the run leaves one of these phases: `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done`, `abandoned`. The transition `start` has no phase before it, so `from` never matches it |
-| `to` | list of strings | none | none | Optional. Same rules as `transition`. The plugin runs only when the run enters one of the phases that `from` lists |
+| `to` | list of strings | none | none | Optional. Same rules as `transition`. The plugin runs only when the run enters one of the phases that the `from` row lists: `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done`, `abandoned` |
 
 The events:
 
@@ -130,6 +130,39 @@ plugins:
     command: [scripts/signals.sh]
     events: [signals.check]
     timeout: 30s
+```
+
+### Filter a transition
+
+The keys `transition`, `from` and `to` pick the run transitions that a plugin sees. The transition names are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phase names are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`.
+
+- Values in one key are an OR. The keys together are an AND.
+- A plugin with no filter sees all transitions.
+- The bus matches the filter before it starts the process. A skipped plugin never runs.
+- The transition `start` has an empty `from`, so a `from` filter never matches it.
+
+The payload of `run.transition.before` is `{"event","from","to","reason"}`. In the `run.transition.before` payload `to` is the phase that the transition would reach. When the save fails, the run did not reach it.
+
+The kind of `run.transition.before` is veto: a deny stops the transition. The kind of `run.transition.after` is observe: the bus drops the verdict and ignores a plugin error without a message. On `run.transition.after`, the envelope `run.phase` is the source phase. Read `payload.to` for the new phase.
+
+A pre-hook that checks each deploy:
+
+```yaml
+plugins:
+  - name: predeploy-check
+    command: [scripts/predeploy.sh]
+    events: [run.transition.before]
+    transition: [deploy]
+```
+
+A post-hook that tells the team when a plan waits for approval:
+
+```yaml
+plugins:
+  - name: notify-approval
+    command: [scripts/notify.sh]
+    events: [run.transition.after]
+    to: [awaiting_approval]
 ```
 
 ## `roles`
