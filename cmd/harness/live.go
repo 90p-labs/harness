@@ -134,6 +134,10 @@ func (d runDispatcher) Dispatch(ctx context.Context, envelope shareddomain.Envel
 	return d.next.Dispatch(ctx, envelope)
 }
 
+func resolvedRunRef(ctx context.Context) (shareddomain.RunRef, error) {
+	return runRefFrom(ctx), nil
+}
+
 func activeRunRef(env environment) func(ctx context.Context) (shareddomain.RunRef, error) {
 	return func(ctx context.Context) (shareddomain.RunRef, error) {
 		handlers, db, err := openRun(ctx, env)

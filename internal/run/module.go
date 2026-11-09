@@ -39,6 +39,10 @@ func NewApprovalRecorder(db *dbal.DB, gate domain.PlanGate, now func() time.Time
 	return recordapproval.NewHandler(persistence.NewSQLRunRepository(db, now), gate, persistence.NewSQLApprovalRepository(db), now)
 }
 
+func NewStatus(db *dbal.DB, now func() time.Time) status.Handler {
+	return status.NewHandler(persistence.NewSQLRunRepository(db, now))
+}
+
 func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, gate domain.PlanGate, cfg config.Run, key domain.RunKey, now func() time.Time) cli.Handlers {
 	repo := persistence.NewSQLRunRepository(db, now)
 	policy := policyOf(cfg)

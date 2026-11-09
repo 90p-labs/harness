@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,6 +22,7 @@ import (
 	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
 	runmodule "github.com/jorge07/harness/internal/run"
 	"github.com/jorge07/harness/internal/run/application/command/recordapproval"
+	"github.com/jorge07/harness/internal/run/application/query/status"
 	"github.com/jorge07/harness/internal/run/domain"
 	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
 	"github.com/jorge07/harness/internal/run/ui/cli"
@@ -29,6 +32,7 @@ import (
 	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
 	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
 	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 func newRunCommand(flags *pflag.FlagSet) *cobra.Command {
@@ -37,6 +41,62 @@ func newRunCommand(flags *pflag.FlagSet) *cobra.Command {
 	})
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
 	return cmd
+}
+
+type runRefKey struct{}
+
+func runRefFrom(ctx context.Context) shareddomain.RunRef {
+	ref, _ := ctx.Value(runRefKey{}).(shareddomain.RunRef)
+	return ref
+}
+
+// resolveRun never fails: a hook must not fail on telemetry, so a step that fails keeps what is known.
+func resolveRun(cmd *cobra.Command) {
+	ctx := cmd.Context()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	repo, worktree, err := git.RepoKey(ctx, cwd)
+	if err != nil {
+		return
+	}
+	ctx = telemetry.WithRun(ctx, worktree, "")
+	ref := resolveActiveRun(ctx, cmd.Root().PersistentFlags(), cwd, domain.RunKey{Repo: repo, Worktree: worktree})
+	cmd.SetContext(context.WithValue(telemetry.WithRun(ctx, "", ref.ID), runRefKey{}, ref))
+}
+
+func resolveActiveRun(ctx context.Context, flags *pflag.FlagSet, cwd string, key domain.RunKey) shareddomain.RunRef {
+	commonDir, err := git.CommonDir(ctx, cwd)
+	if err != nil {
+		return shareddomain.RunRef{}
+	}
+	cfg, err := config.Load(flags, key.Worktree)
+	if err != nil || !stateFileExists(cfg.State.DSN, commonDir) {
+		return shareddomain.RunRef{}
+	}
+	db, err := openState(ctx, cfg, commonDir)
+	if err != nil {
+		return shareddomain.RunRef{}
+	}
+	defer func() { _ = db.Close() }()
+	current, err := runmodule.NewStatus(db, time.Now).Handle(ctx, status.Query{Key: key})
+	if err != nil {
+		return shareddomain.RunRef{}
+	}
+	return shareddomain.RunRef{ID: current.ID, Phase: string(current.Phase)}
+}
+
+func stateFileExists(dsn, commonDir string) bool {
+	path, found := strings.CutPrefix(dsn, string(dbal.EngineSQLite)+":")
+	if !found {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(commonDir, path)
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 type environment struct {

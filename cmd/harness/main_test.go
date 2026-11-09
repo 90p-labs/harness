@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/protobuf/proto"
 
 	plandomain "github.com/jorge07/harness/internal/plan/domain"
@@ -40,6 +41,7 @@ func clearOTLPEnv(t *testing.T) {
 		t.Setenv(telemetry.EnvAliasPrefix+name, "")
 	}
 	t.Setenv(telemetry.EnvTraceparent, "")
+	t.Setenv(telemetry.EnvRunID, "")
 }
 
 const (
@@ -428,10 +430,8 @@ type receivedSpan struct {
 
 func TestVerifyTrace(t *testing.T) {
 	const (
-		rootSpan   = "gate.verify"
-		gateSpan   = "gate.run"
-		attrRunID  = "harness.run.id"
-		tracesPath = "/v1/traces"
+		rootSpan = "gate.verify"
+		gateSpan = "gate.run"
 	)
 	clearHarnessEnv(t)
 	dir, plan := tracedRepo(t)
@@ -440,38 +440,11 @@ func TestVerifyTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	runID := startWithPlan(t, dir, plan)
-	var mu sync.Mutex
-	var spans []receivedSpan
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		request := &collectortrace.ExportTraceServiceRequest{}
-		if r.URL.Path != tracesPath || proto.Unmarshal(body, request) != nil {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		for _, resource := range request.GetResourceSpans() {
-			for _, scope := range resource.GetScopeSpans() {
-				for _, span := range scope.GetSpans() {
-					got := receivedSpan{
-						name: span.GetName(), traceID: fmt.Sprintf("%x", span.GetTraceId()),
-						parentID: fmt.Sprintf("%x", span.GetParentSpanId()), attrs: map[string]string{},
-					}
-					for _, kv := range span.GetAttributes() {
-						got.attrs[kv.GetKey()] = kv.GetValue().GetStringValue()
-					}
-					spans = append(spans, got)
-				}
-			}
-		}
-	}))
-	t.Cleanup(server.Close)
-	t.Setenv(telemetry.EnvEndpoint, server.URL)
+	collected := collectSpans(t)
 
 	code, _, stderr := execute(t, commandVerify)
 
-	mu.Lock()
-	defer mu.Unlock()
+	spans := collected()
 	if code != exitOK {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
@@ -493,9 +466,130 @@ func TestVerifyTrace(t *testing.T) {
 	if len(roots) != 1 || roots[0].name != rootSpan {
 		t.Fatalf("root spans = %+v, want one %s", roots, rootSpan)
 	}
-	if got := roots[0].attrs[attrRunID]; got != runID {
-		t.Errorf("%s = %q, want %q", attrRunID, got, runID)
+	assertSpansCarryRun(t, spans, runID, dir)
+}
+
+const (
+	tracesPath      = "/v1/traces"
+	hookHandleSpan  = "hook.handle"
+	sessionIDAttr   = "harness.session.id"
+	hookSessionJSON = `{"cwd":".","session_id":"s1","tool_name":"Bash","tool_input":{"command":"ls"}}`
+)
+
+func collectSpans(t *testing.T) (spans func() []receivedSpan) {
+	t.Helper()
+	var mu sync.Mutex
+	var received []receivedSpan
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		request := &collectortrace.ExportTraceServiceRequest{}
+		if r.URL.Path != tracesPath || proto.Unmarshal(body, request) != nil {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, resource := range request.GetResourceSpans() {
+			for _, scope := range resource.GetScopeSpans() {
+				for _, span := range scope.GetSpans() {
+					got := receivedSpan{
+						name: span.GetName(), traceID: fmt.Sprintf("%x", span.GetTraceId()),
+						parentID: fmt.Sprintf("%x", span.GetParentSpanId()), attrs: map[string]string{},
+					}
+					for _, kv := range span.GetAttributes() {
+						got.attrs[kv.GetKey()] = attrString(kv.GetValue())
+					}
+					received = append(received, got)
+				}
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(telemetry.EnvEndpoint, server.URL)
+	return func() []receivedSpan {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]receivedSpan{}, received...)
 	}
+}
+
+func attrString(value *commonpb.AnyValue) string {
+	if _, isBool := value.GetValue().(*commonpb.AnyValue_BoolValue); isBool {
+		return strconv.FormatBool(value.GetBoolValue())
+	}
+	return value.GetStringValue()
+}
+
+func assertSpansCarryRun(t *testing.T, spans []receivedSpan, runID, worktree string) {
+	t.Helper()
+	if len(spans) == 0 {
+		t.Fatal("the collector got no span")
+	}
+	for _, span := range spans {
+		if got := span.attrs[telemetry.AttrRunID]; got != runID {
+			t.Errorf("span %s: %s = %q, want %q", span.name, telemetry.AttrRunID, got, runID)
+		}
+		if got := span.attrs[telemetry.AttrWorktree]; worktree != "" && got != worktree {
+			t.Errorf("span %s: %s = %q, want %q", span.name, telemetry.AttrWorktree, got, worktree)
+		}
+	}
+}
+
+func TestHookSpansCarryTheRun(t *testing.T) {
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	runID := startWithPlan(t, dir, plan)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), runID, dir)
+}
+
+func TestHookSpansMarkNoRun(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	got := spans()
+	var handled bool
+	for _, span := range got {
+		if id, has := span.attrs[telemetry.AttrRunID]; has {
+			t.Errorf("span %s: %s = %q, want none", span.name, telemetry.AttrRunID, id)
+		}
+		if span.attrs[telemetry.AttrRunActive] != "false" {
+			t.Errorf("span %s: %s = %q, want false", span.name, telemetry.AttrRunActive, span.attrs[telemetry.AttrRunActive])
+		}
+		if span.name == hookHandleSpan {
+			handled = true
+			if span.attrs[sessionIDAttr] != "s1" {
+				t.Errorf("%s = %q, want s1", sessionIDAttr, span.attrs[sessionIDAttr])
+			}
+		}
+	}
+	if !handled {
+		t.Errorf("no %s span in %+v", hookHandleSpan, got)
+	}
+}
+
+func TestRunStartSpansCarryTheRun(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	spans := collectSpans(t)
+
+	code, stdout, stderr := execute(t, commandRun, "start", "Add the login page")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), startedRunID(t, stdout), dir)
 }
 
 func TestReviewNeedsProofEvidence(t *testing.T) {
