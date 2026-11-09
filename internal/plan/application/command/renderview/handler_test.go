@@ -13,9 +13,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/plan/application/command/renderview"
-	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
-	"github.com/jorge07/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/plan/application/command/renderview"
+	"github.com/90p-labs/harness/internal/plan/application/query/checkplan"
+	"github.com/90p-labs/harness/internal/plan/domain"
 )
 
 const (

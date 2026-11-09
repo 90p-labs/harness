@@ -9,8 +9,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 const (

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jorge07/harness/internal/gate/domain"
+	"github.com/90p-labs/harness/internal/gate/domain"
 )
 
 const (

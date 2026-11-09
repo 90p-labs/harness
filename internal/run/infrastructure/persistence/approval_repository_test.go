@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
+	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
 )
 
 const (

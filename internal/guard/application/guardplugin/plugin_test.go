@@ -16,11 +16,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/jorge07/harness/internal/guard"
-	"github.com/jorge07/harness/internal/guard/application/guardplugin"
-	"github.com/jorge07/harness/internal/guard/domain"
-	"github.com/jorge07/harness/internal/shared/application/eventbus"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/guard"
+	"github.com/90p-labs/harness/internal/guard/application/guardplugin"
+	"github.com/90p-labs/harness/internal/guard/domain"
+	"github.com/90p-labs/harness/internal/shared/application/eventbus"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

@@ -9,12 +9,12 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/gate/application/query/evidencestatus"
-	"github.com/jorge07/harness/internal/gate/domain"
+	"github.com/90p-labs/harness/internal/gate/application/query/evidencestatus"
+	"github.com/90p-labs/harness/internal/gate/domain"
 )
 
 const (
-	repo     = "github.com/jorge07/harness"
+	repo     = "github.com/90p-labs/harness"
 	workDir  = "/work/harness"
 	spanName = "gate.evidence_status"
 	testGate = "go-test"

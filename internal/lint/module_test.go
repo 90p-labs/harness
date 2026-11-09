@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/deploy/infrastructure/toolplugin"
-	lintmodule "github.com/jorge07/harness/internal/lint"
-	"github.com/jorge07/harness/internal/lint/application/command/initlint"
-	lintcommand "github.com/jorge07/harness/internal/lint/application/command/lint"
-	"github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/fixture"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/deploy/infrastructure/toolplugin"
+	lintmodule "github.com/90p-labs/harness/internal/lint"
+	"github.com/90p-labs/harness/internal/lint/application/command/initlint"
+	lintcommand "github.com/90p-labs/harness/internal/lint/application/command/lint"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/fixture"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 )
 
 const (

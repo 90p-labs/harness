@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jorge07/harness/internal/plan/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 const (

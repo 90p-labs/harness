@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 type configView struct {

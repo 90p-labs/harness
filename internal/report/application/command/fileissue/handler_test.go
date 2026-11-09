@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/report/application/command/fileissue"
-	"github.com/jorge07/harness/internal/report/domain"
+	"github.com/90p-labs/harness/internal/report/application/command/fileissue"
+	"github.com/90p-labs/harness/internal/report/domain"
 )
 
 const (
-	issueURL = "https://github.com/jorge07/harness/issues/12"
+	issueURL = "https://github.com/90p-labs/harness/issues/12"
 	body     = `## Summary
 
 The verify gate fails for jorge@example.com.

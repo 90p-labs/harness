@@ -1,4 +1,4 @@
-module github.com/jorge07/harness
+module github.com/90p-labs/harness
 
 go 1.27
 

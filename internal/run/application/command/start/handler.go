@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jorge07/harness/internal/run/application/command/transition"
-	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/domain"
 )
 
 const (

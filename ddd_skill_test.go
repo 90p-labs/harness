@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	lintdomain "github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
-	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
+	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/rulecatalogue"
 )
 
 const (

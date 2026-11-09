@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/gate/domain"
-	"github.com/jorge07/harness/internal/gate/infrastructure/gittree"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/gittree"
 )
 
 const (

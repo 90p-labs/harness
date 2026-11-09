@@ -8,16 +8,16 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	livedomain "github.com/jorge07/harness/internal/live/domain"
-	runmodule "github.com/jorge07/harness/internal/run"
-	"github.com/jorge07/harness/internal/run/application/query/status"
-	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
-	runcli "github.com/jorge07/harness/internal/run/ui/cli"
-	"github.com/jorge07/harness/internal/shared/application/eventbus"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
+	livedomain "github.com/90p-labs/harness/internal/live/domain"
+	runmodule "github.com/90p-labs/harness/internal/run"
+	"github.com/90p-labs/harness/internal/run/application/query/status"
+	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
+	runcli "github.com/90p-labs/harness/internal/run/ui/cli"
+	"github.com/90p-labs/harness/internal/shared/application/eventbus"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (

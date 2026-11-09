@@ -1,6 +1,6 @@
 package domain
 
-import shareddomain "github.com/jorge07/harness/internal/shared/domain"
+import shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 
 func NewFindings(found, baseline []shareddomain.Finding) []shareddomain.Finding {
 	known := make(map[shareddomain.FindingKey]struct{}, len(baseline))

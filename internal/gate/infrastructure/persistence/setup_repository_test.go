@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jorge07/harness/internal/gate/infrastructure/persistence"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/persistence"
 )
 
 const stepID = "deps"

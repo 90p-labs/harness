@@ -8,9 +8,9 @@ import (
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/jorge07/harness/internal/gate/domain"
-	"github.com/jorge07/harness/internal/gate/infrastructure/runner"
-	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/runner"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 )
 
 var _ domain.Runner = runner.Shell{}

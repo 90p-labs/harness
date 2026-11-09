@@ -8,9 +8,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/jorge07/harness/internal/plan/application/command/renderview"
-	"github.com/jorge07/harness/internal/plan/ui/viewplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/plan/application/command/renderview"
+	"github.com/90p-labs/harness/internal/plan/ui/viewplugin"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

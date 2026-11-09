@@ -12,9 +12,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/run/application/command/transition"
-	"github.com/jorge07/harness/internal/run/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (
@@ -43,7 +43,7 @@ const (
 
 var (
 	now = time.Date(2026, 11, 8, 1, 18, 5, 0, time.UTC)
-	key = domain.RunKey{Repo: "github.com/jorge07/harness", Worktree: "/work/harness"}
+	key = domain.RunKey{Repo: "github.com/90p-labs/harness", Worktree: "/work/harness"}
 )
 
 type journal struct{ calls []string }

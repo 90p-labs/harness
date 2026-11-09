@@ -9,10 +9,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/jorge07/harness/internal/report"
-	"github.com/jorge07/harness/internal/report/application/command/fileissue"
-	reportdomain "github.com/jorge07/harness/internal/report/domain"
-	reportcli "github.com/jorge07/harness/internal/report/ui/cli"
+	"github.com/90p-labs/harness/internal/report"
+	"github.com/90p-labs/harness/internal/report/application/command/fileissue"
+	reportdomain "github.com/90p-labs/harness/internal/report/domain"
+	reportcli "github.com/90p-labs/harness/internal/report/ui/cli"
 )
 
 const reportHint = "fill each section of the issue template, then run harness report again"

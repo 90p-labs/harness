@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jorge07/harness/internal/lint/application/command/baseline"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/lint/application/command/baseline"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const baselinePath = ".harness-lint/baseline.json"

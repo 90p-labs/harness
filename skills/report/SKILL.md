@@ -1,12 +1,12 @@
 ---
 name: report
-description: "File a bug about the harness itself (the loop, the hooks, the guard rules, the gates, the CLI) as an issue in jorge07/harness, with reproduction steps, redacted traces, a fix suggestion and a workaround, after the user confirms the draft. Use when the user types /report (Codex: $harness:report), or asks to report a harness bug, a wrong guard deny or a wrong hook result."
+description: "File a bug about the harness itself (the loop, the hooks, the guard rules, the gates, the CLI) as an issue in 90p-labs/harness, with reproduction steps, redacted traces, a fix suggestion and a workaround, after the user confirms the draft. Use when the user types /report (Codex: $harness:report), or asks to report a harness bug, a wrong guard deny or a wrong hook result."
 argument-hint: "[what went wrong]"
 ---
 
 # Report a harness bug
 
-The issue goes to `jorge07/harness`. A fixed format lets a maintainer reproduce the bug without a question. An issue is public: file it only after the user says yes to the draft.
+The issue goes to `90p-labs/harness`. A fixed format lets a maintainer reproduce the bug without a question. An issue is public: file it only after the user says yes to the draft.
 
 ## Decision tree
 
@@ -35,7 +35,7 @@ Do not read `.env` files, keys or credentials.
 
 ## 3. Look for a duplicate
 
-Run `gh issue list -R jorge07/harness --state all --search "<two or three keywords>"`. On a match, show it to the user. Offer a comment on it (`gh issue comment <n> -R jorge07/harness --body-file <file>`) instead of a new issue. A comment is public too: show its text and wait for a yes before you post it.
+Run `gh issue list -R 90p-labs/harness --state all --search "<two or three keywords>"`. On a match, show it to the user. Offer a comment on it (`gh issue comment <n> -R 90p-labs/harness --body-file <file>`) instead of a new issue. A comment is public too: show its text and wait for a yes before you post it.
 
 ## 4. Write the draft
 

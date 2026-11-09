@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorge07/harness/internal/run/application/command/recordapproval"
-	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/application/command/recordapproval"
+	"github.com/90p-labs/harness/internal/run/domain"
 )
 
 const (

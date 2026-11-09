@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/infrastructure/pluginhooks"
-	plugindomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/infrastructure/pluginhooks"
+	plugindomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

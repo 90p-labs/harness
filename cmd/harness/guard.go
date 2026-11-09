@@ -4,15 +4,15 @@ import (
 	"context"
 	"time"
 
-	gatepersistence "github.com/jorge07/harness/internal/gate/infrastructure/persistence"
-	livepersistence "github.com/jorge07/harness/internal/live/infrastructure/persistence"
-	runmodule "github.com/jorge07/harness/internal/run"
-	"github.com/jorge07/harness/internal/run/application/command/decidestop"
-	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	gatepersistence "github.com/90p-labs/harness/internal/gate/infrastructure/persistence"
+	livepersistence "github.com/90p-labs/harness/internal/live/infrastructure/persistence"
+	runmodule "github.com/90p-labs/harness/internal/run"
+	"github.com/90p-labs/harness/internal/run/application/command/decidestop"
+	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
 
 type stopAdapter struct {

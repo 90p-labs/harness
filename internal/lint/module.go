@@ -6,27 +6,27 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	"github.com/jorge07/harness/internal/lint/application/command/baseline"
-	"github.com/jorge07/harness/internal/lint/application/command/canaries"
-	"github.com/jorge07/harness/internal/lint/application/command/initlint"
-	lintcommand "github.com/jorge07/harness/internal/lint/application/command/lint"
-	"github.com/jorge07/harness/internal/lint/application/lintplugin"
-	"github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/biome"
-	lintconfig "github.com/jorge07/harness/internal/lint/infrastructure/config"
-	"github.com/jorge07/harness/internal/lint/infrastructure/harnessengine"
-	"github.com/jorge07/harness/internal/lint/infrastructure/manifest"
-	"github.com/jorge07/harness/internal/lint/infrastructure/oxlint"
-	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
-	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/90p-labs/harness/internal/lint/application/command/baseline"
+	"github.com/90p-labs/harness/internal/lint/application/command/canaries"
+	"github.com/90p-labs/harness/internal/lint/application/command/initlint"
+	lintcommand "github.com/90p-labs/harness/internal/lint/application/command/lint"
+	"github.com/90p-labs/harness/internal/lint/application/lintplugin"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/biome"
+	lintconfig "github.com/90p-labs/harness/internal/lint/infrastructure/config"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/harnessengine"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/manifest"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/oxlint"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/rulecatalogue"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/execplugin"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 const (
-	instrumentationName = "github.com/jorge07/harness/internal/lint"
+	instrumentationName = "github.com/90p-labs/harness/internal/lint"
 )
 
 type Handlers struct {

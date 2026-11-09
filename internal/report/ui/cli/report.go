@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jorge07/harness/internal/report/application/command/fileissue"
-	"github.com/jorge07/harness/internal/report/domain"
+	"github.com/90p-labs/harness/internal/report/application/command/fileissue"
+	"github.com/90p-labs/harness/internal/report/domain"
 )
 
 const (
@@ -24,7 +24,7 @@ type File func(ctx context.Context, draft domain.Draft, dryRun bool) (fileissue.
 func NewCommand(file File) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandReport,
-		Short: "File a harness bug in jorge07/harness; with --dry-run, print the checked and redacted issue",
+		Short: "File a harness bug in 90p-labs/harness; with --dry-run, print the checked and redacted issue",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.NoArgs(cmd, args); err != nil {
 				return err

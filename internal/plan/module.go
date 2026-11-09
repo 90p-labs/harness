@@ -5,22 +5,22 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	"github.com/jorge07/harness/internal/plan/application/command/renderview"
-	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
-	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
-	"github.com/jorge07/harness/internal/plan/application/query/markdiagram"
-	"github.com/jorge07/harness/internal/plan/domain"
-	"github.com/jorge07/harness/internal/plan/infrastructure/excalidraw"
-	"github.com/jorge07/harness/internal/plan/infrastructure/gitdiff"
-	"github.com/jorge07/harness/internal/plan/infrastructure/mermaid"
-	"github.com/jorge07/harness/internal/plan/infrastructure/reviewplugin"
-	"github.com/jorge07/harness/internal/plan/infrastructure/view"
-	"github.com/jorge07/harness/internal/plan/ui/cli"
-	"github.com/jorge07/harness/internal/plan/ui/viewplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/plan/application/command/renderview"
+	"github.com/90p-labs/harness/internal/plan/application/command/submitplan"
+	"github.com/90p-labs/harness/internal/plan/application/query/checkplan"
+	"github.com/90p-labs/harness/internal/plan/application/query/markdiagram"
+	"github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/excalidraw"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/gitdiff"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/mermaid"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/reviewplugin"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/view"
+	"github.com/90p-labs/harness/internal/plan/ui/cli"
+	"github.com/90p-labs/harness/internal/plan/ui/viewplugin"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
-const tracerName = "github.com/jorge07/harness/internal/plan"
+const tracerName = "github.com/90p-labs/harness/internal/plan"
 
 type DefaultBranch func(ctx context.Context) (string, error)
 

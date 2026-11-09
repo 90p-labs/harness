@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
 
 var (
 	clock = time.Date(2026, 11, 8, 12, 30, 0, 0, time.FixedZone("CET", 3600))
-	key   = domain.RunKey{Repo: "github.com/jorge07/harness", Worktree: "/repo"}
+	key   = domain.RunKey{Repo: "github.com/90p-labs/harness", Worktree: "/repo"}
 )
 
 type dialectCase struct {

@@ -9,22 +9,22 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	"github.com/jorge07/harness/internal/gate/application/command/initgates"
-	"github.com/jorge07/harness/internal/gate/application/command/verify"
-	"github.com/jorge07/harness/internal/gate/application/command/verifycommits"
-	"github.com/jorge07/harness/internal/gate/application/query/evidencestatus"
-	"github.com/jorge07/harness/internal/gate/domain"
-	gateconfig "github.com/jorge07/harness/internal/gate/infrastructure/config"
-	"github.com/jorge07/harness/internal/gate/infrastructure/gittree"
-	"github.com/jorge07/harness/internal/gate/infrastructure/persistence"
-	"github.com/jorge07/harness/internal/gate/infrastructure/runner"
-	"github.com/jorge07/harness/internal/gate/infrastructure/toolchain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/90p-labs/harness/internal/gate/application/command/initgates"
+	"github.com/90p-labs/harness/internal/gate/application/command/verify"
+	"github.com/90p-labs/harness/internal/gate/application/command/verifycommits"
+	"github.com/90p-labs/harness/internal/gate/application/query/evidencestatus"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	gateconfig "github.com/90p-labs/harness/internal/gate/infrastructure/config"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/gittree"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/persistence"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/runner"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/toolchain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
-const instrumentationName = "github.com/jorge07/harness/internal/gate"
+const instrumentationName = "github.com/90p-labs/harness/internal/gate"
 
 var (
 	DecodeGates = gateconfig.Decode

@@ -10,9 +10,9 @@ import (
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/jorge07/harness/internal/lint/application/lintplugin"
-	"github.com/jorge07/harness/internal/lint/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/lint/application/lintplugin"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

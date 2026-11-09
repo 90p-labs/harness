@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorge07/harness/internal/gate/application/command/initgates"
-	"github.com/jorge07/harness/internal/gate/domain"
-	"github.com/jorge07/harness/internal/gate/ui/cli"
+	"github.com/90p-labs/harness/internal/gate/application/command/initgates"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	"github.com/90p-labs/harness/internal/gate/ui/cli"
 )
 
 func TestGatesInitCommand(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jorge07/harness/internal/guard/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/guard/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const samplePatch = `*** Begin Patch

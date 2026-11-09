@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/lint/application/command/initlint"
-	"github.com/jorge07/harness/internal/lint/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/lint/application/command/initlint"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const binaryVersion = "v1.2.0"

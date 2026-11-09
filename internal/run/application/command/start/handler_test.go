@@ -9,13 +9,13 @@ import (
 
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/jorge07/harness/internal/run/application/command/transition"
-	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/domain"
 )
 
 var (
 	now = time.Date(2026, 11, 8, 1, 18, 5, 0, time.UTC)
-	key = domain.RunKey{Repo: "github.com/jorge07/harness", Worktree: "/work/harness"}
+	key = domain.RunKey{Repo: "github.com/90p-labs/harness", Worktree: "/work/harness"}
 )
 
 const prompt = "Add the login page"

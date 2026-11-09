@@ -33,23 +33,23 @@ The plugin starts the binary through `bin/harness`, which runs `dist/harness-OS-
 - A hook never builds, because it must not block the session. It starts the `gh` download in the background and skips itself. A skipped hook prints `{}`, so the guard is off until the binary is there. When the download fails, the next hooks print its error, and a hook tries again after 10 minutes.
 - On a machine with Go and no `gh`, start `/harness:harness status` once (Codex: `$harness:harness status`). The skill runs `bin/harness version`, which builds the binary.
 
-The plugin puts no `harness` command on the `PATH`. The setup commands below and a gate such as `harness lint --json` need one: build it from source, or download the asset `harness-OS-ARCH` of release `v<plugin version>` (`gh release download v<plugin version> -R jorge07/harness -p harness-OS-ARCH`), make it executable and put it on the `PATH` as `harness`.
+The plugin puts no `harness` command on the `PATH`. The setup commands below and a gate such as `harness lint --json` need one: build it from source, or download the asset `harness-OS-ARCH` of release `v<plugin version>` (`gh release download v<plugin version> -R 90p-labs/harness -p harness-OS-ARCH`), make it executable and put it on the `PATH` as `harness`.
 
 Do not also run `harness host install` in a repository where you use the plugin: each hook then runs twice.
 
 ### Claude Code
 
 ```text
-/plugin marketplace add jorge07/harness
+/plugin marketplace add 90p-labs/harness
 /plugin install harness@harness
 ```
 
-From a shell, the same steps are `claude plugin marketplace add jorge07/harness` and `claude plugin install harness@harness`. Then run `/reload-plugins` or start a new session. Start a run with `/harness:harness <prompt>`.
+From a shell, the same steps are `claude plugin marketplace add 90p-labs/harness` and `claude plugin install harness@harness`. Then run `/reload-plugins` or start a new session. Start a run with `/harness:harness <prompt>`.
 
 ### Codex
 
 ```sh
-codex plugin marketplace add jorge07/harness
+codex plugin marketplace add 90p-labs/harness
 codex plugin add harness@harness
 ```
 
@@ -60,7 +60,7 @@ Open `/hooks` in Codex once and trust the harness hooks. Codex does not run a pl
 Use this path for a repository without the plugin, or to put `harness` on the `PATH`. The harness needs Go 1.27 (see `go.mod`):
 
 ```sh
-git clone https://github.com/jorge07/harness.git
+git clone https://github.com/90p-labs/harness.git
 cd harness
 go install ./cmd/harness   # into $(go env GOPATH)/bin
 make build                 # or: go build -o dist/harness ./cmd/harness
@@ -480,7 +480,7 @@ An agent files a bug about the harness with the `report` skill (`/report` on Cla
 ```console
 $ harness report --dry-run --title "hook: a bad Stop payload exits 2" --body-file draft.md
 $ harness report --title "hook: a bad Stop payload exits 2" --body-file draft.md
-https://github.com/jorge07/harness/issues/31
+https://github.com/90p-labs/harness/issues/31
 ```
 
 The command refuses a draft with a missing section, adds the harness version, the OS and the active run, and redacts emails, home paths, tokens and keys.

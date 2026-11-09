@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-release_repo=jorge07/harness
+release_repo=90p-labs/harness
 config_file=.harness.yaml
 retry_minutes=10
 

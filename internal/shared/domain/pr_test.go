@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/domain"
 )
 
 func TestParsePRURL(t *testing.T) {
@@ -14,14 +14,14 @@ func TestParsePRURL(t *testing.T) {
 		want    domain.PR
 		wantErr bool
 	}{
-		{"valid", "https://github.com/jorge07/harness/pull/9", domain.PR{Owner: "jorge07", Repo: "harness", Number: 9}, false},
+		{"valid", "https://github.com/90p-labs/harness/pull/9", domain.PR{Owner: "90p-labs", Repo: "harness", Number: 9}, false},
 		{"dotted repo", "https://github.com/acme/my.repo/pull/1234", domain.PR{Owner: "acme", Repo: "my.repo", Number: 1234}, false},
-		{"issue url", "https://github.com/jorge07/harness/issues/9", domain.PR{}, true},
-		{"trailing path", "https://github.com/jorge07/harness/pull/9/files", domain.PR{}, true},
-		{"http", "http://github.com/jorge07/harness/pull/9", domain.PR{}, true},
-		{"other host", "https://gitlab.com/jorge07/harness/pull/9", domain.PR{}, true},
-		{"no number", "https://github.com/jorge07/harness/pull/", domain.PR{}, true},
-		{"number too large", "https://github.com/jorge07/harness/pull/99999999999999999999", domain.PR{}, true},
+		{"issue url", "https://github.com/90p-labs/harness/issues/9", domain.PR{}, true},
+		{"trailing path", "https://github.com/90p-labs/harness/pull/9/files", domain.PR{}, true},
+		{"http", "http://github.com/90p-labs/harness/pull/9", domain.PR{}, true},
+		{"other host", "https://gitlab.com/90p-labs/harness/pull/9", domain.PR{}, true},
+		{"no number", "https://github.com/90p-labs/harness/pull/", domain.PR{}, true},
+		{"number too large", "https://github.com/90p-labs/harness/pull/99999999999999999999", domain.PR{}, true},
 		{"empty", "", domain.PR{}, true},
 	}
 	for _, tc := range tests {

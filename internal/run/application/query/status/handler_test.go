@@ -6,11 +6,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/jorge07/harness/internal/run/application/query/status"
-	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/application/query/status"
+	"github.com/90p-labs/harness/internal/run/domain"
 )
 
-var key = domain.RunKey{Repo: "github.com/jorge07/harness", Worktree: "/work/harness"}
+var key = domain.RunKey{Repo: "github.com/90p-labs/harness", Worktree: "/work/harness"}
 
 type fakeRepository struct {
 	open   *domain.Run

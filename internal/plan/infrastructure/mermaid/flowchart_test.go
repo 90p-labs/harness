@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/plan/infrastructure/mermaid"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/mermaid"
 )
 
 const (

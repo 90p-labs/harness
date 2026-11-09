@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/jorge07/harness/internal/deploy/domain"
+	"github.com/90p-labs/harness/internal/deploy/domain"
 )
 
 const (

@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorge07/harness/internal/live/domain"
-	"github.com/jorge07/harness/internal/live/infrastructure/persistence"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/live/domain"
+	"github.com/90p-labs/harness/internal/live/infrastructure/persistence"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
 
 const (
 	runID       = "20261108-072825-pr-9"
 	otherRunID  = "20261108-090000-pr-10"
-	prURL       = "https://github.com/jorge07/harness/pull/9"
+	prURL       = "https://github.com/90p-labs/harness/pull/9"
 	mergeSHA    = "a1b2c3d"
 	environment = "production"
 )
@@ -117,7 +117,7 @@ func TestReleaseRepositoryContract(t *testing.T) {
 	t.Run("two runs are kept apart", func(t *testing.T) {
 		repo := persistence.NewSQLReleaseRepository(openDB(t))
 		other := release(otherRunID)
-		other.PRURL = "https://github.com/jorge07/harness/pull/10"
+		other.PRURL = "https://github.com/90p-labs/harness/pull/10"
 		if err := repo.Save(ctx, release(runID)); err != nil {
 			t.Fatal(err)
 		}

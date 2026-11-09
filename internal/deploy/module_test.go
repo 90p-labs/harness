@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/deploy"
-	"github.com/jorge07/harness/internal/deploy/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
+	"github.com/90p-labs/harness/internal/deploy"
+	"github.com/90p-labs/harness/internal/deploy/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/execplugin"
 )
 
 func names(plugins []shareddomain.Plugin) []string {
