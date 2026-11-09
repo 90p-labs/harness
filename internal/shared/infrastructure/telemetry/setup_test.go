@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -271,18 +272,44 @@ func TestSetupHarnessSignalEndpoint(t *testing.T) {
 }
 
 func TestSetupHarnessEndpoint(t *testing.T) {
-	for name, prefix := range map[string]string{"bare": "", "prefix": "/prefix"} {
-		t.Run(name, func(t *testing.T) {
+	cases := []struct{ name, prefix string }{
+		{"bare", ""},
+		{"prefix", "/prefix"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
 			clearEndpointEnv(t)
 			c := newCollector(t, okResponse)
-			t.Setenv(EnvAliasPrefix+EnvEndpoint, c.server.URL+prefix)
+			t.Setenv(EnvAliasPrefix+EnvEndpoint, c.server.URL+tc.prefix)
 
 			exportOnce(t)
 
-			for _, path := range []string{prefix + tracesPath, prefix + metricsPath} {
+			for _, path := range []string{tc.prefix + tracesPath, tc.prefix + metricsPath} {
 				if got := c.hitCount(path); got != 1 {
 					t.Errorf("%s requests = %d, want 1", path, got)
 				}
+			}
+		})
+	}
+}
+
+func TestLookupEndpointOrder(t *testing.T) {
+	for _, signalEnv := range []string{EnvTracesEndpoint, EnvMetricsEndpoint} {
+		t.Run(signalEnv, func(t *testing.T) {
+			clearEndpointEnv(t)
+			order := []string{EnvAliasPrefix + signalEnv, signalEnv, EnvAliasPrefix + EnvEndpoint, EnvEndpoint}
+			for i, name := range order {
+				t.Setenv(name, "http://host"+strconv.Itoa(i))
+			}
+			for i, want := range order {
+				gotName, gotRaw := lookupEndpoint(signalEnv)
+				if gotName != want || gotRaw != "http://host"+strconv.Itoa(i) {
+					t.Errorf("slot %d = %q, %q, want %q", i, gotName, gotRaw, want)
+				}
+				t.Setenv(want, "")
+			}
+			if gotName, gotRaw := lookupEndpoint(signalEnv); gotName != "" || gotRaw != "" {
+				t.Errorf("all clear = %q, %q, want empty", gotName, gotRaw)
 			}
 		})
 	}

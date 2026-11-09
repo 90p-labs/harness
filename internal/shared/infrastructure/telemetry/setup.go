@@ -127,7 +127,7 @@ func resolveEndpoint(signalEnv, signalPath string) (string, error) {
 	return joined, nil
 }
 
-func lookupEndpoint(signalEnv string) (name, raw string) {
+func lookupEndpoint(signalEnv string) (string, string) {
 	for _, name := range []string{EnvAliasPrefix + signalEnv, signalEnv, EnvAliasPrefix + EnvEndpoint, EnvEndpoint} {
 		if raw := os.Getenv(name); raw != "" {
 			return name, raw
