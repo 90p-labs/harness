@@ -16,9 +16,11 @@ Kodify builds one tracer provider for each span, has no metrics and gives the mo
 - The exporters have retry off. The shutdown flushes both providers under one limit of 2 seconds.
 - The histogram sets its bucket bounds through the API, with no view.
 - A telemetry error prints one `telemetry:` line on stderr and does not change the exit code.
+- A gate child process gets `TRACEPARENT`. A command reads it at start as the parent of its spans.
 
 ## Consequences
 
 - Application code uses the telemetry API and imports no SDK. A test checks it.
+- The verify run is one trace tree. The `lint.run` span sits under `gate.run`, and each `lint.engine` span under `lint.run`.
 - A user sees no network traffic from telemetry unless the user sets an endpoint.
 - A dead collector delays the exit by at most 2 seconds.
