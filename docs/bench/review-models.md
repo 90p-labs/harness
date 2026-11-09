@@ -125,4 +125,4 @@ Each side B run has all 3 reviewers, because the PR 38 body names a race. The ma
 - Over the 4 PRs, side B cost 52% less and took 56% less wall time. It found 8 of 15 distinct defects and 2 of 3 majors. Side A found 11 of 15 and 3 of 3.
 - The opus reviewer carries the majors. Sonnet and haiku alone found the PR 38 major in 1 of 6 runs. Haiku gave the most findings that the blind check did not confirm: 11 of its 13 batch findings.
 - So two cheap models do not replace one strong reviewer on a risky change. The rule for the third reviewer (diff over 400 lines, or a named state, concurrency or security risk) decides the quality. This change keeps that rule.
-- Follow-up for the user: decide whether the third reviewer joins on every change. On this sample that removes most of the cost gain.
+- Follow-up for the user: decide whether the third reviewer joins on every change. On this sample that removes most of the cost gain. ADR 0017 answers it: the pre-ship panel.

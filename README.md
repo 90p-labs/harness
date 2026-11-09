@@ -468,7 +468,7 @@ With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes 
 | Plan check | `submit-plan`, `amend` and `approve-plan`: the plan rules, then the `plan.submitted` plugins |
 | Gates | `harness verify` in `working`; the review needs a passing proof of each criterion |
 | Trace check | `submit-for-review`: the trees, the commits and the owned files against the branch |
-| Reviewers | `reviewing`: the agents of the `reviewer` role, on 2 models with 2 lenses (Spec and Standards), then `ship` or `rework`. `ship` needs 2 models on `HEAD` |
+| Reviewers | `reviewing`: the agents of the `reviewer` role review the work. Each round runs lens Spec on the first model and lens Standards on the second. With no finding, the pre-ship panel runs every other reviewer model. Then the phase goes to `ship` or `rework`. `ship` needs every listed model of the host on `HEAD` |
 | Guard | each tool call (`tool.before` and `tool.after`), each stop (`turn.stopping`) of the agent and each run transition (`run.transition.before`), in every phase |
 | Plugins | every transition (`run.transition.before`, `run.transition.after`), each gate, each plan, each host hook, gate detection, lint and live signals |
 | Live check | `releasing` and `observing`: `harness live check` reads the deploy and the signals |

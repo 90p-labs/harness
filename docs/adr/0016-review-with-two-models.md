@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09.
+Accepted, 2026-11-09. ADR 0017 replaces its third-reviewer rule. Ship now needs every listed reviewer model of the host, and the floor of 2 models stays.
 
 ## Context
 
