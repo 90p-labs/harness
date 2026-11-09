@@ -96,6 +96,14 @@ A run has five steps:
 4. Review: two or more reviewer models check the change.
 5. Ship: the agent opens the pull request.
 
+`harness plan view` shows the plan as one page, with the proof state of each criterion, the diagrams and the tasks:
+
+![The plan summary with the acceptance criteria and their proof state](docs/images/plan-view-summary.png)
+
+![The tech specs: a marked flowchart, a stateDiagram-v2 and a classDiagram](docs/images/plan-view-specs.png)
+
+![The files, the tasks, the commits and the traceability matrix](docs/images/plan-view-tasks.png)
+
 The agent asks the `Plan` question with the options `Approve` and `Change the plan`. A model that you name approves with `harness run approve --by <model> --reason "<one line>"`.
 
 ```console
