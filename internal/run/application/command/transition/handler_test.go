@@ -82,13 +82,14 @@ type fakeHooks struct {
 	journal   *journal
 	veto      error
 	beforeCmd domain.Command
+	beforeTo  domain.Phase
 	afterFrom domain.Run
 	afterTo   domain.Run
 }
 
-func (f *fakeHooks) Before(_ context.Context, _ domain.Run, cmd domain.Command) error {
+func (f *fakeHooks) Before(_ context.Context, _ domain.Run, cmd domain.Command, to domain.Phase) error {
 	f.journal.calls = append(f.journal.calls, callBefore)
-	f.beforeCmd = cmd
+	f.beforeCmd, f.beforeTo = cmd, to
 	return f.veto
 }
 
@@ -394,6 +395,19 @@ func TestWaiverSubmitPlan(t *testing.T) {
 				t.Fatalf("phase = %s, want %s", got, tc.wantPhase)
 			}
 		})
+	}
+}
+
+func TestBeforeSeesWaivedTarget(t *testing.T) {
+	f := newFixtureWith(planningRun(), domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3})
+	f.gate.submission.ApprovalWaived = true
+
+	if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: domain.EventSubmitPlan}); err != nil {
+		t.Fatal(err)
+	}
+
+	if f.hooks.beforeTo != domain.PhaseWorking {
+		t.Fatalf("before to = %s, want %s", f.hooks.beforeTo, domain.PhaseWorking)
 	}
 }
 

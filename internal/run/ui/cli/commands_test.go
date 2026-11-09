@@ -56,8 +56,10 @@ func (passingGate) Hash(domain.Run) (string, error) { return "", nil }
 
 type silentHooks struct{}
 
-func (silentHooks) Before(context.Context, domain.Run, domain.Command) error { return nil }
-func (silentHooks) After(context.Context, domain.Run, domain.Run)            {}
+func (silentHooks) Before(context.Context, domain.Run, domain.Command, domain.Phase) error {
+	return nil
+}
+func (silentHooks) After(context.Context, domain.Run, domain.Run) {}
 
 func TestTransitionCommand(t *testing.T) {
 	cases := []struct {

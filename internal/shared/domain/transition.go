@@ -3,8 +3,20 @@ package domain
 import "path"
 
 const (
+	TransitionStart           = "start"
+	TransitionSubmitPlan      = "submit-plan"
+	TransitionApprovePlan     = "approve-plan"
+	TransitionAmend           = "amend"
+	TransitionRequestRework   = "request-rework"
 	TransitionSubmitForReview = "submit-for-review"
 	TransitionApproveReview   = "approve-review"
+	TransitionComplete        = "complete"
+	TransitionDeploy          = "deploy"
+	TransitionClose           = "close"
+	TransitionRegress         = "regress"
+	TransitionBlock           = "block"
+	TransitionResume          = "resume"
+	TransitionAbandon         = "abandon"
 
 	PhasePlanning         = "planning"
 	PhaseAwaitingApproval = "awaiting_approval"
@@ -20,6 +32,18 @@ const (
 	runsFolder   = ".harness/runs"
 	planFileName = "plan.md"
 )
+
+var Phases = []string{
+	PhasePlanning, PhaseAwaitingApproval, PhaseWorking, PhaseReviewing, PhaseShipping,
+	PhaseReleasing, PhaseObserving, PhaseBlocked, PhaseDone, PhaseAbandoned,
+}
+
+var Transitions = []string{
+	TransitionStart, TransitionSubmitPlan, TransitionApprovePlan, TransitionAmend,
+	TransitionRequestRework, TransitionSubmitForReview, TransitionApproveReview,
+	TransitionComplete, TransitionDeploy, TransitionClose, TransitionRegress,
+	TransitionBlock, TransitionResume, TransitionAbandon,
+}
 
 type TransitionPayload struct {
 	Event  string `json:"event"`
