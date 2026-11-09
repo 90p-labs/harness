@@ -12,15 +12,15 @@ import (
 )
 
 const (
-	codexSessionStartInput = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"SessionStart","model":"gpt-5","permission_mode":"default","source":"resume"}`
-	codexUserPromptInput   = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"UserPromptSubmit","model":"gpt-5","turn_id":"t1","prompt":"fix the build"}`
-	codexPreShellInput     = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"PreToolUse","model":"gpt-5","turn_id":"t1","tool_name":"Bash","tool_use_id":"u1","tool_input":{"command":"go test ./..."}}`
-	codexPrePatchInput     = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"PreToolUse","model":"gpt-5","turn_id":"t1","tool_name":"apply_patch","tool_use_id":"u2","tool_input":{"command":"*** Begin Patch\n*** End Patch"}}`
-	codexPostToolInput     = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"PostToolUse","model":"gpt-5","turn_id":"t1","tool_name":"Bash","tool_use_id":"u1","tool_input":{"command":"ls"},"tool_response":{"output":"a.go"}}`
-	codexStopInput         = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"Stop","model":"gpt-5","turn_id":"t1","stop_hook_active":true,"last_assistant_message":"done"}`
-	codexStopTasksInput    = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"Stop","model":"gpt-5","turn_id":"t1","stop_hook_active":false,"background_tasks":[{"id":"task-001","type":"shell","status":"running"},{"id":"task-002","type":"subagent","status":"running"}]}`
-	codexSubagentStartIn   = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"SubagentStart","model":"gpt-5","agent_id":"a1","agent_type":"explorer"}`
-	codexSubagentStopIn    = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"SubagentStop","model":"gpt-5","agent_id":"a1","agent_type":"explorer","agent_transcript_path":"/tmp/a.jsonl","stop_hook_active":false,"last_assistant_message":"ok"}`
+	codexSessionStartInput = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"SessionStart","model":"gpt-6-astra","permission_mode":"default","source":"resume"}`
+	codexUserPromptInput   = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"UserPromptSubmit","model":"gpt-6-astra","turn_id":"t1","prompt":"fix the build"}`
+	codexPreShellInput     = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"PreToolUse","model":"gpt-6-astra","turn_id":"t1","tool_name":"Bash","tool_use_id":"u1","tool_input":{"command":"go test ./..."}}`
+	codexPrePatchInput     = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"PreToolUse","model":"gpt-6-astra","turn_id":"t1","tool_name":"apply_patch","tool_use_id":"u2","tool_input":{"command":"*** Begin Patch\n*** End Patch"}}`
+	codexPostToolInput     = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"PostToolUse","model":"gpt-6-astra","turn_id":"t1","tool_name":"Bash","tool_use_id":"u1","tool_input":{"command":"ls"},"tool_response":{"output":"a.go"}}`
+	codexStopInput         = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"Stop","model":"gpt-6-astra","turn_id":"t1","stop_hook_active":true,"last_assistant_message":"done"}`
+	codexStopTasksInput    = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"Stop","model":"gpt-6-astra","turn_id":"t1","stop_hook_active":false,"background_tasks":[{"id":"task-001","type":"shell","status":"running"},{"id":"task-002","type":"subagent","status":"running"}]}`
+	codexSubagentStartIn   = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"SubagentStart","model":"gpt-6-astra","agent_id":"a1","agent_type":"explorer"}`
+	codexSubagentStopIn    = `{"session_id":"s1","transcript_path":"/tmp/t.jsonl","cwd":"/work/app","hook_event_name":"SubagentStop","model":"gpt-6-astra","agent_id":"a1","agent_type":"explorer","agent_transcript_path":"/tmp/a.jsonl","stop_hook_active":false,"last_assistant_message":"ok"}`
 )
 
 func TestCodexDecode(t *testing.T) {
@@ -86,7 +86,7 @@ func TestCodexDecode(t *testing.T) {
 
 const (
 	codexQuestionInput  = `{"questions":[{"id":"plan_approval","header":"Plan","question":"Is the plan ready?","options":[{"label":"Approve (Recommended)","description":"start the work"},{"label":"Change the plan","description":"edit plan.md"}]}]}`
-	codexQuestionPrefix = `{"cwd":"/work/app","hook_event_name":"PostToolUse","model":"gpt-5","turn_id":"t1","tool_name":"request_user_input","tool_use_id":"u3","tool_input":` + codexQuestionInput + `,"tool_response":`
+	codexQuestionPrefix = `{"cwd":"/work/app","hook_event_name":"PostToolUse","model":"gpt-6-astra","turn_id":"t1","tool_name":"request_user_input","tool_use_id":"u3","tool_input":` + codexQuestionInput + `,"tool_response":`
 )
 
 func TestQuestionDecodeCodex(t *testing.T) {

@@ -34,7 +34,7 @@ const (
 	branchDevelop        = "develop"
 	emDashText           = "fix — it\n"
 	modelSonnet          = "sonnet"
-	modelGPT             = "gpt-5"
+	modelGPT             = "gpt-6-astra"
 	roleWorker           = "worker"
 	pushToDevelop        = "git push origin HEAD:develop"
 	pushToMain           = "git push origin HEAD:main"
@@ -234,7 +234,7 @@ func TestAgentModelRouting(t *testing.T) {
 		t.Errorf("codex with sonnet = %+v, want a deny naming %s", v, modelGPT)
 	}
 	if v := call(shareddomain.HostCodex, modelGPT); v.Kind != shareddomain.VerdictAllow {
-		t.Errorf("codex with gpt-5 = %+v, want allow", v)
+		t.Errorf("codex with gpt-6-astra = %+v, want allow", v)
 	}
 }
 
