@@ -63,6 +63,7 @@ type RuleContext struct {
 	Worktree      string
 	DefaultBranch func() (string, error)
 	AgentModels   map[string][]string
+	ModelOptional bool
 	TextErr       error
 	CommitChecked func() (bool, error)
 }
