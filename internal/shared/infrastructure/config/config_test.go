@@ -496,3 +496,55 @@ func TestGuardConfig(t *testing.T) {
 		t.Errorf("git.default_branch = %q", got.Git.DefaultBranch)
 	}
 }
+
+func TestLoadPluginFilter(t *testing.T) {
+	got, err := load(t, `plugins:
+  - name: notify
+    command: [notify]
+    events: [run.transition.after]
+    transition: [approve-plan, complete]
+    from: [awaiting_approval]
+    to: [working]
+`)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	plugin := got.Plugins[0]
+	if len(plugin.Transition) != 2 || plugin.From[0] != "awaiting_approval" || plugin.To[0] != "working" {
+		t.Fatalf("plugin = %+v", plugin)
+	}
+}
+
+func TestLoadRejectsBadFilterName(t *testing.T) {
+	cases := map[string]struct{ key, value string }{
+		"from":       {"from", "start"},
+		"to":         {"to", "nowhere"},
+		"transition": {"transition", "jump"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := load(t, "plugins:\n  - {name: bad, command: [a], events: [run.transition.after], "+tc.key+": ["+tc.value+"]}\n")
+			if err == nil {
+				t.Fatal("want an error")
+			}
+			for _, want := range []string{"bad", tc.key, tc.value, "working"} {
+				if name == "transition" && want == "working" {
+					want = "approve-plan"
+				}
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q lacks %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadRejectsFilterOnOtherEvent(t *testing.T) {
+	_, err := load(t, `plugins:
+  - {name: mixed, command: [a], events: [run.transition.after, tool.before], to: [working]}
+`)
+
+	if err == nil || !strings.Contains(err.Error(), "mixed") {
+		t.Fatalf("err = %v, want one that names the plugin", err)
+	}
+}

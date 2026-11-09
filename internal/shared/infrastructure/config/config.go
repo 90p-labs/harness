@@ -155,6 +155,39 @@ type Plugin struct {
 	Command []string      `mapstructure:"command"`
 	Events  []string      `mapstructure:"events"`
 	Timeout time.Duration `mapstructure:"timeout"`
+
+	Transition []string `mapstructure:"transition"`
+	From       []string `mapstructure:"from"`
+	To         []string `mapstructure:"to"`
+}
+
+func (p Plugin) validateFilter() error {
+	if len(p.Transition)+len(p.From)+len(p.To) == 0 {
+		return nil
+	}
+	for _, name := range p.Events {
+		event := shareddomain.EventName(name)
+		if event != shareddomain.EventRunTransitionBefore && event != shareddomain.EventRunTransitionAfter {
+			return fmt.Errorf("plugin %q sets a transition filter but subscribes to %q", p.Name, name)
+		}
+	}
+	keys := []struct {
+		key    string
+		values []string
+		valid  []string
+	}{
+		{"transition", p.Transition, shareddomain.Transitions},
+		{"from", p.From, shareddomain.Phases},
+		{"to", p.To, shareddomain.Phases},
+	}
+	for _, k := range keys {
+		for _, value := range k.values {
+			if !slices.Contains(k.valid, value) {
+				return fmt.Errorf("plugin %q %s %q is unknown, want one of %s", p.Name, k.key, value, strings.Join(k.valid, ", "))
+			}
+		}
+	}
+	return nil
 }
 
 type RoleHost map[string][]string
@@ -271,6 +304,9 @@ func (c *Config) validate() error {
 			return fmt.Errorf("plugin %q has no event", plugin.Name)
 		case plugin.Timeout < 0:
 			return fmt.Errorf("plugin %q has a negative timeout %s", plugin.Name, plugin.Timeout)
+		}
+		if err := plugin.validateFilter(); err != nil {
+			return err
 		}
 		seen[plugin.Name] = true
 		if plugin.Timeout == 0 {

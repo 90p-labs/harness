@@ -31,11 +31,23 @@ type ExecPlugin struct {
 	Events     []domain.EventName
 	Command    []string
 	Timeout    time.Duration
+	Filter     domain.TransitionFilter
 }
 
 func (p ExecPlugin) Name() string { return p.PluginName }
 
 func (p ExecPlugin) Subscribes() []domain.EventName { return p.Events }
+
+func (p ExecPlugin) Matches(envelope domain.Envelope) bool {
+	if p.Filter.Empty() {
+		return true
+	}
+	var payload domain.TransitionPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return false
+	}
+	return p.Filter.Matches(payload)
+}
 
 func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domain.Verdict, error) {
 	if len(p.Command) == 0 {
