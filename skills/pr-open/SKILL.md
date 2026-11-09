@@ -1,6 +1,6 @@
 ---
 name: pr-open
-description: "Opens the pull request of a branch as a draft, or edits the body of the open one. The body starts with a bottom line, then answers Why, What and How, in this order. How holds the plan diagrams and the visuals of the done tasks. Use in the ship step of the harness loop, or when the user types /harness:pr-open (Codex: $harness:pr-open)."
+description: "Opens the pull request of a branch as a draft, or edits the body of the open one. The body starts with a bottom line, then answers Why, What and How, in this order. How holds the plan diagrams and the visuals of the done tasks. Use in the ship step of the harness loop, or when the user types /90p:pr-open (Codex: $90p:pr-open)."
 argument-hint: "[base branch]"
 ---
 

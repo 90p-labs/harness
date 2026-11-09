@@ -13,10 +13,10 @@ Status: pre-alpha.
 ## Quick start
 
 1. Log in to GitHub, because the repository is private: run `gh auth login`, then `gh auth setup-git`.
-2. Install the plugin in Claude Code: run `/plugin marketplace add 90p-labs/harness`, then `/plugin install harness@harness`. Then run `/reload-plugins` or start a new session.
+2. Install the plugin in Claude Code: run `/plugin marketplace add 90p-labs/harness`, then `/plugin install 90p@harness`. Then run `/reload-plugins` or start a new session.
 3. Build `harness` from source with Go 1.27, as in [Build from source](#build-from-source). Put `$(go env GOPATH)/bin` on the `PATH`.
 4. In your repository, run `harness gates init`. Add `.harness/` to `.gitignore`. Commit `.harness.yaml` and `.gitignore`.
-5. Start a run with `/harness:harness <prompt>`.
+5. Start a run with `/90p:harness <prompt>`.
 
 ```console
 $ harness gates init
@@ -45,19 +45,19 @@ The plugin puts no `harness` command on the `PATH`. See [the plugin binary](docs
 
 ```text
 /plugin marketplace add 90p-labs/harness
-/plugin install harness@harness
+/plugin install 90p@harness
 ```
 
-From a shell, the same steps are `claude plugin marketplace add 90p-labs/harness` and `claude plugin install harness@harness`. Then run `/reload-plugins` or start a new session. Start a run with `/harness:harness <prompt>`.
+From a shell, the same steps are `claude plugin marketplace add 90p-labs/harness` and `claude plugin install 90p@harness`. Then run `/reload-plugins` or start a new session. Start a run with `/90p:harness <prompt>`. To move from the old plugin name, see [the move](docs/setup.md#move-from-the-old-plugin-name).
 
 ### Codex
 
 ```sh
 codex plugin marketplace add 90p-labs/harness
-codex plugin add harness@harness
+codex plugin add 90p@harness
 ```
 
-Open `/hooks` in Codex once and trust the harness hooks. Codex does not run a plugin hook that you did not trust. Start a run with `$harness:harness <prompt>`.
+Open `/hooks` in Codex once and trust the harness hooks. Codex does not run a plugin hook that you did not trust. Start a run with `$90p:harness <prompt>`.
 
 ### Build from source
 
@@ -121,17 +121,17 @@ The agent normally runs these commands, and the hooks enforce the order. The blo
 
 | Command | What it does |
 |---|---|
-| `/harness:harness <prompt>` | Start a run |
-| `/harness:harness status` | Show the run |
-| `/harness:harness approve` | Approve the plan |
-| `/harness:harness abandon` | Abandon the run |
+| `/90p:harness <prompt>` | Start a run |
+| `/90p:harness status` | Show the run |
+| `/90p:harness approve` | Approve the plan |
+| `/90p:harness abandon` | Abandon the run |
 | `harness run status` | Print the phase of the run |
 | `harness plan view` | Write the plan as an HTML page |
 | `harness verify` | Run the gates and the acceptance criteria |
 | `harness verify --commits main` | Check each commit of the branch |
 | `harness lint` | Run the lint packs |
 | `harness config` | Print the effective config |
-| `/report` | File a bug about the harness |
+| `/90p:report` | File a bug about the harness |
 
 ## Examples
 

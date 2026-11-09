@@ -258,7 +258,7 @@ func ruleCases() map[string][]ruleCase {
 		RuleApprovalNoForge: approvalNoForgeCases(),
 		RuleAgentModelRouting: {
 			{name: "explorer without model", call: agentOf("Explore", ""), deny: true, step: "haiku"},
-			{name: "harness explorer with another model", call: agentOf("harness:explorer", "sonnet"), deny: true, step: "haiku"},
+			{name: "90p explorer with another model", call: agentOf("90p:explorer", "sonnet"), deny: true, step: "haiku"},
 			{name: "worker with an unlisted model", call: agentOf("kodify:worker", "opus"), deny: true, step: "one of sonnet, haiku"},
 			{name: "worker without model", call: agentOf("worker", ""), deny: true, step: "one of sonnet, haiku"},
 			{name: "worker with the second listed model", call: agentOf("worker", "haiku")},
