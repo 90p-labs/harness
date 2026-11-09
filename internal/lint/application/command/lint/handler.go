@@ -23,6 +23,8 @@ import (
 
 const (
 	spanLintRun       = "lint.run"
+	spanLintEngine    = "lint.engine"
+	eventFindings     = "lint.findings"
 	metricFindings    = "harness.lint.findings"
 	staleFormat       = "%w (have %q, want %q)"
 	engineErrorFormat = "lint engine %s: %w"
@@ -31,7 +33,20 @@ const (
 const (
 	attrRule     = attribute.Key("harness.lint.rule")
 	attrSeverity = attribute.Key("harness.lint.severity")
+	attrEngine   = attribute.Key("harness.lint.engine")
+	attrRules    = attribute.Key("harness.lint.rules")
+	attrFindings = attribute.Key("harness.lint.findings")
+	attrCount    = attribute.Key("harness.lint.count")
 )
+
+type ruleSeverity struct {
+	rule     string
+	severity shareddomain.Severity
+}
+
+func compareRuleSeverity(a, b ruleSeverity) int {
+	return cmp.Or(cmp.Compare(a.rule, b.rule), cmp.Compare(a.severity, b.severity))
+}
 
 type Command struct {
 	Dir string
@@ -75,13 +90,32 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (report shareddomain.R
 		return shareddomain.Report{}, err
 	}
 	for _, engine := range slices.Sorted(maps.Keys(rules)) {
-		found, err := h.engines.Check(ctx, cmd.Dir, engine, rules[engine])
+		engineCtx, engineSpan := h.tracer.Start(ctx, spanLintEngine)
+		found, err := h.engines.Check(engineCtx, cmd.Dir, engine, rules[engine])
+		engineSpan.SetAttributes(
+			attrEngine.String(string(engine)),
+			attrRules.Int(len(rules[engine])),
+			attrFindings.Int(len(found)),
+		)
 		if err != nil {
+			engineSpan.RecordError(err)
+			engineSpan.SetStatus(codes.Error, err.Error())
+			engineSpan.End()
 			return shareddomain.Report{}, fmt.Errorf(engineErrorFormat, engine, err)
 		}
+		counts := map[ruleSeverity]int{}
 		for _, f := range found {
+			counts[ruleSeverity{f.Rule, f.Severity}]++
 			h.findings.Add(ctx, 1, metric.WithAttributes(attrRule.String(f.Rule), attrSeverity.String(string(f.Severity))))
 		}
+		for _, key := range slices.SortedFunc(maps.Keys(counts), compareRuleSeverity) {
+			engineSpan.AddEvent(eventFindings, trace.WithAttributes(
+				attrRule.String(key.rule),
+				attrSeverity.String(string(key.severity)),
+				attrCount.Int(counts[key]),
+			))
+		}
+		engineSpan.End()
 		report.Findings = append(report.Findings, found...)
 	}
 	slices.SortFunc(report.Findings, func(a, b shareddomain.Finding) int {

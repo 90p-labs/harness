@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -21,13 +22,20 @@ import (
 )
 
 const (
-	binaryVersion = "v1.2.0"
-	spanRun       = "lint.run"
-	metricName    = "harness.lint.findings"
-	attrRule      = "harness.lint.rule"
-	attrSeverity  = "harness.lint.severity"
-	lintDir       = ".harness-lint"
-	versionFile   = "VERSION"
+	binaryVersion  = "v1.2.0"
+	spanRun        = "lint.run"
+	spanEngine     = "lint.engine"
+	eventFindings  = "lint.findings"
+	attrEngine     = "harness.lint.engine"
+	attrRules      = "harness.lint.rules"
+	attrFindings   = "harness.lint.findings"
+	attrCount      = "harness.lint.count"
+	eventException = "exception"
+	metricName     = "harness.lint.findings"
+	attrRule       = "harness.lint.rule"
+	attrSeverity   = "harness.lint.severity"
+	lintDir        = ".harness-lint"
+	versionFile    = "VERSION"
 )
 
 var errEngine = errors.New("engine failed")
@@ -137,8 +145,18 @@ func TestLintTelemetry(t *testing.T) {
 		t.Fatal("an engine with no rule must not run")
 	}
 
-	if ended := f.spans.Ended(); len(ended) != 1 || ended[0].Name() != spanRun {
-		t.Fatalf("spans = %v, want one %s span", ended, spanRun)
+	ended := f.spans.Ended()
+	if len(ended) != 3 {
+		t.Fatalf("spans = %v, want one %s and two %s", ended, spanRun, spanEngine)
+	}
+	root := ended[2]
+	if root.Name() != spanRun {
+		t.Fatalf("last span = %s, want %s", root.Name(), spanRun)
+	}
+	for _, s := range ended[:2] {
+		if s.Name() != spanEngine || s.Parent().SpanID() != root.SpanContext().SpanID() {
+			t.Fatalf("span %s must be a %s child of %s", s.Name(), spanEngine, spanRun)
+		}
 	}
 
 	var collected metricdata.ResourceMetrics
@@ -216,4 +234,99 @@ func TestLintPacks(t *testing.T) {
 			t.Fatalf("err = %v, want the engine error", err)
 		}
 	})
+}
+
+func engineSpans(f fixture) map[string]sdktrace.ReadOnlySpan {
+	out := map[string]sdktrace.ReadOnlySpan{}
+	for _, s := range f.spans.Ended() {
+		if s.Name() != spanEngine {
+			continue
+		}
+		for _, a := range s.Attributes() {
+			if string(a.Key) == attrEngine {
+				out[a.Value.AsString()] = s
+			}
+		}
+	}
+	return out
+}
+
+func attrMap(attrs []attribute.KeyValue) map[string]attribute.Value {
+	out := map[string]attribute.Value{}
+	for _, a := range attrs {
+		out[string(a.Key)] = a.Value
+	}
+	return out
+}
+
+func TestEngineSpanAttributes(t *testing.T) {
+	harness := &fakeEngine{name: domain.EngineHarness, findings: []shareddomain.Finding{
+		finding("ddd/layout", "a.ts", 1, shareddomain.SeverityError),
+		finding("ddd/layout", "b.ts", 2, shareddomain.SeverityError),
+	}}
+	grit := &fakeEngine{name: domain.EngineBiomeGrit}
+	f := newFixture([]domain.PackName{domain.PackDDD}, harness, grit)
+
+	if _, err := f.handler.Handle(context.Background(), lint.Command{Dir: repoWithVersion(t, binaryVersion)}); err != nil {
+		t.Fatal(err)
+	}
+
+	spans := engineSpans(f)
+	if len(spans) != 2 {
+		t.Fatalf("engine spans = %v", spans)
+	}
+	got := attrMap(spans[string(domain.EngineHarness)].Attributes())
+	if got[attrRules].AsInt64() != 1 || got[attrFindings].AsInt64() != 2 {
+		t.Fatalf("harness attributes = %v", got)
+	}
+	got = attrMap(spans[string(domain.EngineBiomeGrit)].Attributes())
+	if got[attrRules].AsInt64() != 2 || got[attrFindings].AsInt64() != 0 {
+		t.Fatalf("grit attributes = %v", got)
+	}
+}
+
+func TestEngineSpanError(t *testing.T) {
+	f := newFixture([]domain.PackName{domain.PackDDD}, &fakeEngine{name: domain.EngineHarness, err: errEngine})
+
+	_, err := f.handler.Handle(context.Background(), lint.Command{Dir: repoWithVersion(t, binaryVersion)})
+
+	if !errors.Is(err, errEngine) {
+		t.Fatalf("err = %v, want the engine error", err)
+	}
+	span := engineSpans(f)[string(domain.EngineHarness)]
+	if span == nil {
+		t.Fatal("the failed engine span must end")
+	}
+	if span.Status().Code != codes.Error {
+		t.Fatalf("status = %v, want Error", span.Status())
+	}
+	if len(span.Events()) != 1 || span.Events()[0].Name != eventException {
+		t.Fatalf("events = %v, want one recorded error", span.Events())
+	}
+}
+
+func TestEngineSpanEvents(t *testing.T) {
+	harness := &fakeEngine{name: domain.EngineHarness, findings: []shareddomain.Finding{
+		finding("ddd/layout", "b.ts", 4, shareddomain.SeverityError),
+		finding("ddd/layout", "a.ts", 9, shareddomain.SeverityError),
+		finding("ddd/layout", "c.ts", 1, shareddomain.SeverityWarn),
+	}}
+	f := newFixture([]domain.PackName{domain.PackDDD}, harness)
+
+	if _, err := f.handler.Handle(context.Background(), lint.Command{Dir: repoWithVersion(t, binaryVersion)}); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	for _, e := range engineSpans(f)[string(domain.EngineHarness)].Events() {
+		if e.Name != eventFindings {
+			t.Fatalf("event = %s, want %s", e.Name, eventFindings)
+		}
+		a := attrMap(e.Attributes)
+		got = append(got, fmt.Sprintf("%s/%s=%d", a[attrRule].AsString(), a[attrSeverity].AsString(), a[attrCount].AsInt64()))
+	}
+	want := []string{"ddd/layout/error=2", "ddd/layout/warn=1"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("events = %v, want %v", got, want)
+	}
 }
