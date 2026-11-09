@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/otel/metric/noop"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/jorge07/harness/internal/gate/application/command/verify"
 	"github.com/jorge07/harness/internal/gate/application/command/verifycommits"
@@ -24,6 +25,14 @@ const (
 	baseRef  = "main"
 	headSHA  = "c3c3c3"
 	testGate = "go-test"
+	runID    = "20261109-140744-trace"
+
+	spanVerifyCommits = "gate.verify_commits"
+	spanVerifyCommit  = "gate.verify_commit"
+	spanVerify        = "gate.verify"
+	attrRunID         = "harness.run.id"
+	attrWorktree      = "harness.worktree"
+	attrCommit        = "harness.commit"
 )
 
 var fixedNow = time.Date(2026, 11, 8, 5, 0, 0, 0, time.UTC)
@@ -127,6 +136,7 @@ type fixture struct {
 	commits *fakeCommits
 	runner  *fakeRunner
 	checks  *fakeChecks
+	spans   *tracetest.SpanRecorder
 	handler verifycommits.Handler
 }
 
@@ -143,14 +153,15 @@ func newFixture(source domain.GateSource, passDirs ...string) *fixture {
 	for _, dir := range passDirs {
 		f.runner.passDirs[dir] = true
 	}
-	tracer := sdktrace.NewTracerProvider().Tracer("test")
+	f.spans = tracetest.NewSpanRecorder()
+	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(f.spans)).Tracer("test")
 	readFile := func(string) ([]byte, error) { return nil, fs.ErrNotExist }
 	exists := func(string) (bool, error) { return false, nil }
 	inner := verify.NewHandler(
 		fakeHasher{}, f.runner, fakeEvidence{}, noSetups{}, allowAll{}, source,
 		readFile, exists, tracer, noop.NewMeterProvider().Meter("test"), func() time.Time { return fixedNow },
 	)
-	f.handler = verifycommits.NewHandler(f.commits, inner, f.checks, func() time.Time { return fixedNow })
+	f.handler = verifycommits.NewHandler(f.commits, inner, f.checks, func() time.Time { return fixedNow }, tracer)
 	return f
 }
 
@@ -326,5 +337,65 @@ func TestVerifyCommitsSkipsCriteria(t *testing.T) {
 	}
 	if len(f.runner.ranDirs) != 3 {
 		t.Fatalf("ran = %v, want one YAML gate for each commit", f.runner.ranDirs)
+	}
+}
+
+func spanAttrs(span sdktrace.ReadOnlySpan) map[string]string {
+	attrs := map[string]string{}
+	for _, a := range span.Attributes() {
+		attrs[string(a.Key)] = a.Value.Emit()
+	}
+	return attrs
+}
+
+func TestVerifyCommitsTrace(t *testing.T) {
+	f := newFixture(nil, "/tmp/wt-b2b2b2", "/tmp/wt-"+headSHA)
+	cmd := command()
+	cmd.RunID = runID
+
+	if _, err := f.handler.Handle(context.Background(), cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	var roots, commits, verifies []sdktrace.ReadOnlySpan
+	ended := f.spans.Ended()
+	for _, span := range ended {
+		if span.SpanContext().TraceID() != ended[0].SpanContext().TraceID() {
+			t.Errorf("span %s has a different trace id", span.Name())
+		}
+		if !span.Parent().IsValid() {
+			roots = append(roots, span)
+		}
+		switch span.Name() {
+		case spanVerifyCommit:
+			commits = append(commits, span)
+		case spanVerify:
+			verifies = append(verifies, span)
+		}
+	}
+	if len(roots) != 1 || roots[0].Name() != spanVerifyCommits {
+		t.Fatalf("roots = %d, want one %s", len(roots), spanVerifyCommits)
+	}
+	root := roots[0]
+	attrs := spanAttrs(root)
+	if attrs[attrRunID] != runID || attrs[attrWorktree] != workDir {
+		t.Errorf("root attributes = %v, want run id %s and worktree %s", attrs, runID, workDir)
+	}
+	if len(commits) != 3 || len(verifies) != 3 {
+		t.Fatalf("commit spans = %d, verify spans = %d, want 3 each", len(commits), len(verifies))
+	}
+	for i, sha := range []string{"a1a1a1", "b2b2b2", headSHA} {
+		if commits[i].Parent().SpanID() != root.SpanContext().SpanID() || spanAttrs(commits[i])[attrCommit] != sha {
+			t.Errorf("commit span %d: parent or %s wrong, want child of root with %s", i, attrCommit, sha)
+		}
+	}
+	for _, span := range verifies {
+		parent := span.Parent().SpanID()
+		if !slices.ContainsFunc(commits, func(c sdktrace.ReadOnlySpan) bool { return c.SpanContext().SpanID() == parent }) {
+			t.Errorf("verify span is not the child of a %s span", spanVerifyCommit)
+		}
+		if _, has := spanAttrs(span)[attrRunID]; has {
+			t.Errorf("verify span has %s, want none", attrRunID)
+		}
 	}
 }

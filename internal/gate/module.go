@@ -47,7 +47,7 @@ func exists(path string) (bool, error) {
 }
 
 func NewVerifyCommits(db *dbal.DB, bus shareddomain.Dispatcher, now func() time.Time) verifycommits.Handler {
-	return verifycommits.NewHandler(gittree.Tree{}, NewVerify(db, bus, nil, now), persistence.NewSQLCommitCheckRepository(db), now)
+	return verifycommits.NewHandler(gittree.Tree{}, NewVerify(db, bus, nil, now), persistence.NewSQLCommitCheckRepository(db), now, otel.Tracer(instrumentationName))
 }
 
 func NewEvidenceStatus(db *dbal.DB) evidencestatus.Handler {
