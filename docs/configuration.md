@@ -52,6 +52,20 @@ The env variable has limits:
 
 A duration, such as a gate or plugin `timeout`, is a string with a unit: `30s`, `750ms` or `2m`. The number `30` is an error.
 
+## Telemetry env
+
+Telemetry is not a key of `.harness.yaml`. Set the endpoint in the env. Under Claude Code, use the `HARNESS_` names, because Claude Code removes every `OTEL_*` variable.
+
+- `HARNESS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: the traces endpoint.
+- `HARNESS_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`: the metrics endpoint.
+- `HARNESS_OTEL_EXPORTER_OTLP_ENDPOINT`: one endpoint for both signals.
+
+The `HARNESS_` name wins over the standard `OTEL_` name. For example:
+
+```sh
+HARNESS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
+```
+
 ## `state`
 
 The run state database. It holds the runs, the plan approvals, the gate results and the commit checks.

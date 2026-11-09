@@ -12,7 +12,8 @@ Kodify builds one tracer provider for each span, has no metrics and gives the mo
 
 - The harness ships `opentelemetry-go` by default. Traces and metrics are always on.
 - `Setup` installs one tracer provider and one meter provider as the global providers.
-- The harness exports with OTLP when the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env is set. Without it, no data leaves the machine.
+- The harness exports with OTLP when the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env or its `HARNESS_` alias, `HARNESS_OTEL_EXPORTER_OTLP_ENDPOINT`, is set. Without one, no data leaves the machine.
+- Claude Code removes every `OTEL_*` variable from the env of its hooks and tools. The `HARNESS_` alias wins over the standard name, because Claude Code reads the `OTEL_` names for its own telemetry.
 - The exporters have retry off. The shutdown flushes both providers under one limit of 2 seconds.
 - The histogram sets its bucket bounds through the API, with no view.
 - A telemetry error prints one `telemetry:` line on stderr and does not change the exit code.
