@@ -58,6 +58,10 @@ func NewCommitChecks(db *dbal.DB) domain.CommitCheckRepository {
 	return persistence.NewSQLCommitCheckRepository(db)
 }
 
+func NewReviewRecords(db *dbal.DB) domain.ReviewRecordRepository {
+	return persistence.NewSQLReviewRecordRepository(db)
+}
+
 func NewInit(lint toolchain.Lint, bus shareddomain.Dispatcher) initgates.Handler {
 	writer := gateconfig.Writer{}
 	detect := func(dir string) ([]domain.Gate, error) { return toolchain.Detect(dir, lint) }
