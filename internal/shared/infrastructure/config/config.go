@@ -228,11 +228,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyLintRules, defaultLintRules)
 	v.SetDefault(keyLintDashboards, defaultLintDashboard)
 	v.SetDefault(keyRoles, map[string]any{
-		string(shareddomain.RoleLead):     map[string]any{string(shareddomain.HostClaude): []string{"opus"}},
-		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): []string{"haiku"}},
-		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku"}},
-		string(shareddomain.RoleReviewer): map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku", "opus"}},
-		string(shareddomain.RoleAdvisor):  map[string]any{string(shareddomain.HostClaude): []string{"fable"}},
+		string(shareddomain.RoleLead):     map[string]any{string(shareddomain.HostClaude): []string{"opus"}, string(shareddomain.HostCodex): []string{"gpt-6-astra"}},
+		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): []string{"haiku"}, string(shareddomain.HostCodex): []string{"gpt-5.5"}},
+		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku"}, string(shareddomain.HostCodex): []string{"gpt-5.6-luna", "gpt-5.5"}},
+		string(shareddomain.RoleReviewer): map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku", "opus"}, string(shareddomain.HostCodex): []string{"gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}},
+		string(shareddomain.RoleAdvisor):  map[string]any{string(shareddomain.HostClaude): []string{"fable"}, string(shareddomain.HostCodex): []string{"gpt-6-astra"}},
 	})
 }
 
