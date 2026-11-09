@@ -335,7 +335,7 @@ func TestProgramKind(t *testing.T) {
 		t.Errorf("out = %q, want %q", out, want)
 	}
 	in := f.renderer.input
-	if in.Program == nil || len(in.Program.Runs) != 8 || len(in.Problems) != 0 || in.Run.ID != "run-1" {
+	if in.Program == nil || len(in.Program.Runs) != 8 || len(in.Problems) != 0 {
 		t.Errorf("input = %+v, want the program with 8 runs and no problem", in)
 	}
 	if f.branches.base != "" || f.proofs.called || in.Branch != nil || in.Proofs != nil {

@@ -683,7 +683,7 @@ A plan with a `## Runs` line outside a code fence is a multi-run plan. `IsProgra
 - The rule `run-depends` refuses a dependency that names no run of an earlier wave.
 - The rule `run-overlap` refuses two runs of one wave that own a common path.
 - The rule `plan-kind` makes `harness run plan` refuse a multi-run plan.
-- The view handler has no branch and reads no proof. The page shows the wave lanes, the dependency flowchart, the measurement, the decisions and the problems.
+- For a multi-run plan, the view handler reads no git branch and no proof, so the page shows only the plan file. The page shows the wave lanes, the dependency flowchart, the measurement, the decisions and the problems.
 - Decision: the page shows no live state of the runs. The run state command of R5 adds it later.
 - Decision: `plan view` still needs a git repository as the working folder. The plan file can be anywhere.
 

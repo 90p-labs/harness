@@ -41,7 +41,7 @@ func TestParseProgram(t *testing.T) {
 	if p.Title != "Harness improvement plan" {
 		t.Errorf("title = %q", p.Title)
 	}
-	if len(p.Goal) != 2 || !strings.HasPrefix(p.Goal[0], "Seven harness runs") {
+	if len(p.Goal) != 2 || !strings.HasPrefix(p.Goal[0], "Eight harness runs") {
 		t.Errorf("goal = %q", p.Goal)
 	}
 	wantRuns := []struct {
@@ -89,7 +89,7 @@ func TestParseProgram(t *testing.T) {
 	if !slices.Equal(p.MeasurementHeader, []string{"Metric", "Baseline", "Target"}) {
 		t.Errorf("measurement header = %v", p.MeasurementHeader)
 	}
-	if len(p.MeasurementRows) != 4 || !slices.Equal(p.MeasurementRows[1], []string{"Round-limit blocks", "10", "0"}) {
+	if len(p.MeasurementRows) != 4 || !slices.Equal(p.MeasurementRows[1], []string{"Round-limit blocks", "9", "0"}) {
 		t.Errorf("measurement rows = %v", p.MeasurementRows)
 	}
 	if len(p.Decisions) != 3 || !strings.HasPrefix(p.Decisions[2], "The coordinator runs") {
@@ -133,7 +133,7 @@ func TestCheckProgram(t *testing.T) {
 		{"overlap on a file", valid, []edit{{"`internal/run/domain/approval.go`", "`internal/run/domain/stop.go`"}}, domain.RuleRunOverlap, func(s string) int { return lineOf(t, s, "query/report/`") }},
 		{"overlap on a folder", valid, []edit{{"`internal/run/domain/approval.go`", "`internal/run/application/query/report/list.go`"}}, domain.RuleRunOverlap, func(s string) int { return lineOf(t, s, "query/report/`") }},
 		{"long sentence", valid, []edit{{"2. Each deny names the resolved file and the line number.", "2. " + longSentence}}, domain.RuleSentenceLength, func(s string) int { return lineOf(t, s, "2. word word") }},
-		{"em dash", valid, []edit{{"Each deny names", "Each deny — names"}}, domain.RuleEmDash, func(s string) int { return lineOf(t, s, "—") }},
+		{"em dash", valid, []edit{{"Each deny names", "Each deny \u2014 names"}}, domain.RuleEmDash, func(s string) int { return lineOf(t, s, "\u2014") }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

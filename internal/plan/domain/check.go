@@ -83,7 +83,7 @@ func Check(doc Document, in CheckInput) []Problem {
 	checkSentences(doc, add)
 	checkTrace(doc, add)
 	checkOpenQuestions(doc, add)
-	sortProblems(problems)
+	SortProblems(problems)
 	return problems
 }
 
@@ -93,7 +93,7 @@ func reporter(problems *[]Problem) report {
 	}
 }
 
-func sortProblems(problems []Problem) {
+func SortProblems(problems []Problem) {
 	slices.SortStableFunc(problems, func(a, b Problem) int {
 		if a.Line != b.Line {
 			return a.Line - b.Line

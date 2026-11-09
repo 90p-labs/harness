@@ -74,7 +74,7 @@ func (h Handler) Handle(ctx context.Context, c Command) (out string, err error) 
 	}
 	var in domain.ViewInput
 	if report.Program != nil {
-		in = domain.ViewInput{Program: report.Program, Problems: report.Problems, Run: domain.ViewRun{ID: c.RunID, Phase: c.Phase}}
+		in = domain.ViewInput{Program: report.Program, Problems: report.Problems}
 	} else {
 		in = domain.ViewInput{
 			Doc:      report.Doc,

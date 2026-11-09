@@ -236,7 +236,7 @@ func TestProgramKind(t *testing.T) {
 	})
 
 	t.Run("a broken program gives its rule", func(t *testing.T) {
-		broken := slices.Concat(program, []byte("\nA broken — line.\n"))
+		broken := slices.Concat(program, []byte("\nA broken \u2014 line.\n"))
 
 		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), broken)})
 

@@ -203,7 +203,7 @@ func CheckProgram(p Program) []Problem {
 	checkProgramRuns(p, add)
 	checkProgramOverlap(p, add)
 	checkSentences(Document{Lines: p.Lines}, add)
-	sortProblems(problems)
+	SortProblems(problems)
 	return problems
 }
 
@@ -249,7 +249,10 @@ func checkRunFields(r ProgramRun, add report) {
 			add(r.Line, RuleRunField, "run %s has no %s: line", r.ID, f)
 		}
 	}
-	has := func(f string) bool { _, ok := r.FieldLines[f]; return ok }
+	has := func(f string) bool {
+		_, ok := r.FieldLines[f]
+		return ok
+	}
 	if has(FieldWave) && r.Wave < 1 {
 		add(r.FieldLines[FieldWave], RuleRunField, "%s must be %s", FieldWave, FormWave)
 	}

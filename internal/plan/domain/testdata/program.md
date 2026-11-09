@@ -2,7 +2,7 @@
 
 ## Goal
 
-Seven harness runs in 3 waves move each check to the step that makes the defect. The steps are the plan, the worker, a gate and the reviewer.
+Eight harness runs in 3 waves move each check to the step that makes the defect. The steps are the plan, the worker, a gate and the reviewer.
 The targets: rework rounds from 1.6 to under 1.0 for each run, and denies from 10.8 to under 4 for each run.
 
 ## Runs
@@ -105,7 +105,7 @@ The targets: rework rounds from 1.6 to under 1.0 for each run, and denies from 1
 | Metric | Baseline | Target |
 |---|---|---|
 | Rework rounds for each run | 1.6 | under 1.0 |
-| Round-limit blocks | 10 | 0 |
+| Round-limit blocks | 9 | 0 |
 | Denies for each run | 10.8 | under 4 |
 | Unseen user waits over 15 minutes | 6 or more | 0 |
 
