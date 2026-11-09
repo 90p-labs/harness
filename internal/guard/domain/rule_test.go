@@ -52,6 +52,29 @@ func baseContext() RuleContext {
 	}
 }
 
+func TestAgentModelEmpty(t *testing.T) {
+	cases := []struct {
+		name     string
+		model    string
+		optional bool
+		deny     bool
+	}{
+		{"empty and optional", "", true, false},
+		{"empty and required", "", false, true},
+		{"wrong and optional", "opus", true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rc := baseContext()
+			rc.ModelOptional = tc.optional
+			_, denied := denyAgentModel(agentOf("worker", tc.model), rc)
+			if denied != tc.deny {
+				t.Errorf("denied = %v, want %v", denied, tc.deny)
+			}
+		})
+	}
+}
+
 func commitCheck(checked bool, err error) *RuleContext {
 	rc := baseContext()
 	rc.CommitChecked = func() (bool, error) { return checked, err }

@@ -238,6 +238,25 @@ func TestAgentModelRouting(t *testing.T) {
 	}
 }
 
+func TestEmptyModelByHost(t *testing.T) {
+	d := deps(&fakeStop{})
+	d.Models = map[shareddomain.Host]map[string][]string{
+		shareddomain.HostClaude: {roleWorker: {modelSonnet}},
+		shareddomain.HostCodex:  {roleWorker: {modelGPT}},
+	}
+	bus := newBus(build(t, nil, d))
+	call := func(host shareddomain.Host) shareddomain.Verdict {
+		return dispatch(t, bus, toolEnvelope(t, host, t.TempDir(), toolAgent, map[string]string{"subagent_type": roleWorker}))
+	}
+
+	if v := call(shareddomain.HostCodex); v.Kind != shareddomain.VerdictAllow {
+		t.Errorf("codex with no model = %+v, want allow", v)
+	}
+	if v := call(shareddomain.HostClaude); v.Kind != shareddomain.VerdictDeny {
+		t.Errorf("claude with no model = %+v, want deny", v)
+	}
+}
+
 func TestGuardReadsTextFiles(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {

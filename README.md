@@ -123,6 +123,8 @@ run:
   approval: true          # wait for a human approval of each plan
   max_review_rounds: 3    # the last allowed rework blocks the run
 roles:
+  lead:
+    claude: [opus]  # guidance for the session model, not a guard
   explorer:
     claude: [haiku]
   worker:

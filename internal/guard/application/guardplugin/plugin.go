@@ -96,10 +96,11 @@ func (p toolPlugin) Handle(ctx context.Context, envelope shareddomain.Envelope) 
 	call.Texts, textErr = p.readTexts(envelope.Cwd, call.Command)
 
 	reason, denied := p.rule.Denies(call, domain.RuleContext{
-		Cwd:         envelope.Cwd,
-		Worktree:    p.deps.Worktree,
-		AgentModels: p.deps.Models[envelope.Host],
-		TextErr:     textErr,
+		Cwd:           envelope.Cwd,
+		Worktree:      p.deps.Worktree,
+		AgentModels:   p.deps.Models[envelope.Host],
+		ModelOptional: envelope.Host == shareddomain.HostCodex,
+		TextErr:       textErr,
 		DefaultBranch: func() (string, error) {
 			return p.deps.DefaultBranch(ctx, envelope.Cwd)
 		},

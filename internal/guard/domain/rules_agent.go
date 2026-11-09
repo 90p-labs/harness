@@ -37,7 +37,7 @@ func agentRole(agentType string) shareddomain.Role {
 func denyAgentModel(call ToolCall, rc RuleContext) (string, bool) {
 	role := agentRole(call.AgentType)
 	models := rc.AgentModels[string(role)]
-	if role == "" || len(models) == 0 || slices.Contains(models, call.Model) {
+	if role == "" || len(models) == 0 || slices.Contains(models, call.Model) || (rc.ModelOptional && call.Model == "") {
 		return "", false
 	}
 	got := call.Model

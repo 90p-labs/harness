@@ -71,10 +71,11 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("plugins = %+v, want none", got.Plugins)
 	}
 	wantRoles := map[string]config.RoleHost{
-		"explorer": {"claude": {"haiku"}},
-		"worker":   {"claude": {"sonnet", "haiku"}},
-		"reviewer": {"claude": {"sonnet", "haiku", "opus"}},
-		"advisor":  {"claude": {"fable"}},
+		"explorer": {"claude": {"haiku"}, "codex": {"gpt-5.5"}},
+		"worker":   {"claude": {"sonnet", "haiku"}, "codex": {"gpt-5.6-luna", "gpt-5.5"}},
+		"reviewer": {"claude": {"sonnet", "haiku", "opus"}, "codex": {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}},
+		"advisor":  {"claude": {"fable"}, "codex": {"gpt-6-astra"}},
+		"lead":     {"claude": {"opus"}, "codex": {"gpt-6-astra"}},
 	}
 	if !reflect.DeepEqual(got.Roles, wantRoles) {
 		t.Errorf("roles = %+v, want %+v", got.Roles, wantRoles)
@@ -377,20 +378,55 @@ func TestLoadInvalidTimeout(t *testing.T) {
 }
 
 func TestLoadRoles(t *testing.T) {
-	got, err := load(t, "roles:\n  lead:\n    codex: gpt-5\n  reviewer:\n    claude: opus\n  worker:\n    claude: [opus, sonnet]\n")
+	got, err := load(t, "roles:\n  lead:\n    claude: sonnet\n  reviewer:\n    claude: opus\n  worker:\n    claude: [opus, sonnet]\n")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
 	want := map[string]config.RoleHost{
-		"lead":     {"codex": {"gpt-5"}},
-		"reviewer": {"claude": {"opus"}},
-		"worker":   {"claude": {"opus", "sonnet"}},
-		"explorer": {"claude": {"haiku"}},
-		"advisor":  {"claude": {"fable"}},
+		"lead":     {"claude": {"sonnet"}, "codex": {"gpt-6-astra"}},
+		"reviewer": {"claude": {"opus"}, "codex": {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}},
+		"worker":   {"claude": {"opus", "sonnet"}, "codex": {"gpt-5.6-luna", "gpt-5.5"}},
+		"explorer": {"claude": {"haiku"}, "codex": {"gpt-5.5"}},
+		"advisor":  {"claude": {"fable"}, "codex": {"gpt-6-astra"}},
 	}
 	if !reflect.DeepEqual(got.Roles, want) {
 		t.Errorf("roles = %+v, want %+v", got.Roles, want)
+	}
+}
+
+func TestLoadLeadEnv(t *testing.T) {
+	t.Setenv("HARNESS_ROLES_LEAD_CLAUDE", "sonnet")
+	got, err := load(t, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if want := []string{"sonnet"}; !reflect.DeepEqual(got.Roles["lead"]["claude"], want) {
+		t.Errorf("lead.claude = %+v, want %+v", got.Roles["lead"]["claude"], want)
+	}
+}
+
+func TestLoadCodexOverride(t *testing.T) {
+	got, err := load(t, "roles:\n  reviewer:\n    codex: [gpt-5.5, gpt-5.6-luna]\n")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if want := []string{"gpt-5.5", "gpt-5.6-luna"}; !reflect.DeepEqual(got.Roles["reviewer"]["codex"], want) {
+		t.Errorf("reviewer.codex = %+v, want %+v", got.Roles["reviewer"]["codex"], want)
+	}
+	if want := []string{"sonnet", "haiku", "opus"}; !reflect.DeepEqual(got.Roles["reviewer"]["claude"], want) {
+		t.Errorf("reviewer.claude = %+v, want %+v", got.Roles["reviewer"]["claude"], want)
+	}
+}
+
+func TestLoadCodexEnv(t *testing.T) {
+	t.Setenv("HARNESS_ROLES_WORKER_CODEX", "gpt-5.5")
+	got, err := load(t, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if want := []string{"gpt-5.5"}; !reflect.DeepEqual(got.Roles["worker"]["codex"], want) {
+		t.Errorf("worker.codex = %+v, want %+v", got.Roles["worker"]["codex"], want)
 	}
 }
 
