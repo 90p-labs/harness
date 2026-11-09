@@ -17,7 +17,7 @@ const instrumentationName = "github.com/jorge07/harness/internal/guard"
 func NewPlugins(
 	disabled []string,
 	defaultBranch string,
-	models map[shareddomain.Host]map[string]string,
+	models map[shareddomain.Host]map[string][]string,
 	worktree string,
 	stop domain.StopDecider,
 	commitChecked func(ctx context.Context, dir string) (bool, error),

@@ -12,12 +12,12 @@ import (
 )
 
 type configView struct {
-	State   stateView                    `yaml:"state"`
-	Run     runView                      `yaml:"run"`
-	Plugins []pluginView                 `yaml:"plugins"`
-	Roles   map[string]map[string]string `yaml:"roles"`
-	Guard   guardView                    `yaml:"guard"`
-	Git     gitView                      `yaml:"git"`
+	State   stateView                      `yaml:"state"`
+	Run     runView                        `yaml:"run"`
+	Plugins []pluginView                   `yaml:"plugins"`
+	Roles   map[string]map[string][]string `yaml:"roles"`
+	Guard   guardView                      `yaml:"guard"`
+	Git     gitView                        `yaml:"git"`
 }
 
 type guardView struct {
@@ -85,7 +85,7 @@ func viewOf(cfg config.Config) configView {
 			MaxStopBlocks:   cfg.Run.MaxStopBlocks,
 		},
 		Plugins: []pluginView{},
-		Roles:   map[string]map[string]string{},
+		Roles:   map[string]map[string][]string{},
 		Guard:   guardView{Disabled: append([]string{}, cfg.Guard.Disabled...)},
 		Git:     gitView{DefaultBranch: cfg.Git.DefaultBranch},
 	}

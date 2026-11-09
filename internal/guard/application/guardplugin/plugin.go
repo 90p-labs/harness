@@ -25,7 +25,7 @@ type Deps struct {
 	DefaultBranch func(ctx context.Context, dir string) (string, error)
 	Stop          domain.StopDecider
 	CommitChecked func(ctx context.Context, dir string) (bool, error)
-	Models        map[shareddomain.Host]map[string]string
+	Models        map[shareddomain.Host]map[string][]string
 	Worktree      string
 	Meter         metric.Meter
 }

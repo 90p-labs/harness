@@ -157,7 +157,7 @@ type Plugin struct {
 	Timeout time.Duration `mapstructure:"timeout"`
 }
 
-type RoleHost map[string]string
+type RoleHost map[string][]string
 
 var (
 	knownRoles = []shareddomain.Role{
@@ -165,6 +165,7 @@ var (
 		shareddomain.RoleWorker,
 		shareddomain.RoleReviewer,
 		shareddomain.RoleExplorer,
+		shareddomain.RoleAdvisor,
 	}
 	knownHosts = []shareddomain.Host{shareddomain.HostClaude, shareddomain.HostCodex}
 )
@@ -227,8 +228,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyLintRules, defaultLintRules)
 	v.SetDefault(keyLintDashboards, defaultLintDashboard)
 	v.SetDefault(keyRoles, map[string]any{
-		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): "haiku"},
-		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): "sonnet"},
+		string(shareddomain.RoleExplorer): map[string]any{string(shareddomain.HostClaude): []string{"haiku"}},
+		string(shareddomain.RoleWorker):   map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku"}},
+		string(shareddomain.RoleReviewer): map[string]any{string(shareddomain.HostClaude): []string{"sonnet", "haiku", "opus"}},
+		string(shareddomain.RoleAdvisor):  map[string]any{string(shareddomain.HostClaude): []string{"fable"}},
 	})
 }
 

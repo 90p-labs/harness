@@ -62,7 +62,7 @@ func deps(stop domain.StopDecider) guardplugin.Deps {
 		DefaultBranch: func(context.Context, string) (string, error) { return "main", nil },
 		Stop:          stop,
 		CommitChecked: func(context.Context, string) (bool, error) { return true, nil },
-		Models:        map[shareddomain.Host]map[string]string{},
+		Models:        map[shareddomain.Host]map[string][]string{},
 		Meter:         metricnoop.NewMeterProvider().Meter("test"),
 	}
 }
@@ -211,9 +211,9 @@ func TestCommitsCheckedRule(t *testing.T) {
 
 func TestAgentModelRouting(t *testing.T) {
 	d := deps(&fakeStop{})
-	d.Models = map[shareddomain.Host]map[string]string{
-		shareddomain.HostClaude: {roleWorker: modelSonnet},
-		shareddomain.HostCodex:  {roleWorker: modelGPT},
+	d.Models = map[shareddomain.Host]map[string][]string{
+		shareddomain.HostClaude: {roleWorker: {modelSonnet}},
+		shareddomain.HostCodex:  {roleWorker: {modelGPT}},
 	}
 	bus := newBus(build(t, nil, d))
 	call := func(host shareddomain.Host, model string) shareddomain.Verdict {

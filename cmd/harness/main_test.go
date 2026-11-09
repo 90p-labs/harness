@@ -205,7 +205,7 @@ func TestConfigCommand(t *testing.T) {
 	if code != exitOK || stderr != "" {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
-	for _, want := range []string{"dsn: sqlite:.harness/state.db", "max_review_rounds: 3", "name: guard", "timeout: 5s", "timeout: 750ms", "worker:", "claude: sonnet", "- writing-style", "default_branch: develop"} {
+	for _, want := range []string{"dsn: sqlite:.harness/state.db", "max_review_rounds: 3", "name: guard", "timeout: 5s", "timeout: 750ms", "worker:", "claude:\n            - sonnet\n            - haiku\n", "- writing-style", "default_branch: develop"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, want)
 		}
