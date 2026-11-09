@@ -45,6 +45,63 @@ func TestReadmeInstallOrder(t *testing.T) {
 	}
 }
 
+const (
+	readmeMaxLines = 160
+	headingLine    = "## "
+
+	setupPage          = "docs/setup.md"
+	setupPinned        = "make install-claude"
+	pluginsPage        = "docs/plugins.md"
+	pluginsPinned      = `{"verdict":"allow|deny|context"`
+	runsPage           = "docs/runs.md"
+	runsPinned         = "stateDiagram-v2"
+	contributingPage   = "docs/contributing.md"
+	contributingPinned = "harness report --dry-run"
+)
+
+type movedPage struct {
+	path     string
+	headings []string
+	pinned   string
+}
+
+var movedPages = []movedPage{
+	{setupPage, []string{"The plugin binary", "Build from source", "Lint tools", "With harness init (no plugin)", "Step by step", "Example config"}, setupPinned},
+	{pluginsPage, []string{"Deploy tool plugin", "Custom lint pack and lint engine plugin", "Architecture rules in any language", "Signals plugin", "Hook plugin"}, pluginsPinned},
+	{runsPage, []string{"A full run", "Plan view", "Run phases"}, runsPinned},
+	{contributingPage, []string{"Repository layout and tests", "Report a harness bug"}, contributingPinned},
+}
+
+func TestReadmeIsShort(t *testing.T) {
+	lines := strings.Count(repository.Read(t, readmeFile), "\n")
+	if lines > readmeMaxLines {
+		t.Errorf("%s has %d lines, want at most %d", readmeFile, lines, readmeMaxLines)
+	}
+}
+
+func TestMovedSections(t *testing.T) {
+	for _, page := range movedPages {
+		raw, err := os.ReadFile(repository.Path(t, page.path))
+		if err != nil {
+			t.Errorf("%s is missing: %v", page.path, err)
+			continue
+		}
+		text := string(raw)
+		lines := strings.Split(text, "\n")
+		for _, heading := range page.headings {
+			if !slices.Contains(lines, headingLine+heading) {
+				t.Errorf("%s has no line %q", page.path, headingLine+heading)
+			}
+		}
+		if !strings.Contains(text, page.pinned) {
+			t.Errorf("%s does not hold %q", page.path, page.pinned)
+		}
+		if strings.Contains(text, repository.EmDash) || strings.ContainsFunc(text, repository.IsEmoji) {
+			t.Errorf("%s has an em dash or an emoji", page.path)
+		}
+	}
+}
+
 func pluginNames(t *testing.T, pattern string) []string {
 	t.Helper()
 	paths, err := filepath.Glob(repository.Path(t, pattern))
