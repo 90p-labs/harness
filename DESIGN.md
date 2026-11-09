@@ -402,7 +402,21 @@ Signals of lint:
 | `harness.lint.findings` | counter | `harness.lint.rule`, `harness.lint.severity` |
 
 - On an engine error, `lint.engine` records the error and has the error status.
-- A gate child process gets `TRACEPARENT` from the gate runner. A command reads it at start and makes it the parent of its spans. The lint spans of a verify run then form one tree under `gate.run`. A missing or bad value starts a new root.
+- A gate child process gets `TRACEPARENT` from the gate runner. A command reads it at start and makes it the parent of its spans. The whole verify call forms one tree under `gate.verify`, with the lint spans under `gate.run`. A missing or bad value starts a new root.
+
+Signals of verify:
+
+| Signal | Kind | Attributes |
+|---|---|---|
+| `gate.verify` | span, root of one verify call | `harness.gate.count`, `harness.worktree`, `harness.run.id` |
+| `gate.setup` | span, child of `gate.verify`, one for each setup step that runs | `harness.setup.step` |
+| `gate.run` | span, child of `gate.verify`, one for each gate | `harness.gate`, `harness.gate.cached`, `harness.gate.result` |
+| `gate.verify_commits` | span, root of one `verify --commits` call | `harness.worktree`, `harness.run.id` |
+| `gate.verify_commit` | span, child of `gate.verify_commits`, one for each commit | `harness.commit` |
+
+- `harness.run.id` is set only when a run is active. Only the root span of a call has it.
+- Under `gate.verify_commit`, the `gate.verify` span has the path of the temporary worktree of that commit and no run id.
+- On an error, each span records the error and has the error status. `gate.verify` also has the error status when a gate fails, and `gate.verify_commits` when the commit check fails.
 
 Later modules add a span for each run transition, hook and live check.
 
