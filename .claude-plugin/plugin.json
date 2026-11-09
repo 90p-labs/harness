@@ -5,8 +5,8 @@
   "author": {
     "name": "Jorge Arco"
   },
-  "homepage": "https://github.com/jorge07/harness",
-  "repository": "https://github.com/jorge07/harness",
+  "homepage": "https://github.com/90p-labs/harness",
+  "repository": "https://github.com/90p-labs/harness",
   "license": "MIT",
   "keywords": ["harness", "workflow", "guard", "hooks", "ddd", "tdd"]
 }

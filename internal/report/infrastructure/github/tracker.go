@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	harnessRepo = "jorge07/harness"
+	harnessRepo = "90p-labs/harness"
 	bugLabel    = "bug"
 	stdinFile   = "-"
 )

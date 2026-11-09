@@ -195,7 +195,7 @@ func TestReportCommand(t *testing.T) {
 		if code != exitOK || stdout != issueURL+"\n" {
 			t.Fatalf("code = %d, stdout = %q, stderr = %q, want 0 and the issue URL", code, stdout, stderr)
 		}
-		if args := readGHLog(t, gh, "args.log"); !strings.HasPrefix(args, "issue\ncreate\n-R\njorge07/harness\n--title\n") {
+		if args := readGHLog(t, gh, "args.log"); !strings.HasPrefix(args, "issue\ncreate\n-R\n90p-labs/harness\n--title\n") {
 			t.Fatalf("gh args = %q", args)
 		}
 		body := readGHLog(t, gh, "stdin.log")

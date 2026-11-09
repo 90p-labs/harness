@@ -50,7 +50,7 @@ func TestTrackerCreate(t *testing.T) {
 		if url != "https://github.com/90p-labs/harness/issues/7" {
 			t.Fatalf("url = %q", url)
 		}
-		wantArgs := "issue\ncreate\n-R\njorge07/harness\n--title\nhook exits 2\n--label\nbug\n--body-file\n-\n"
+		wantArgs := "issue\ncreate\n-R\n90p-labs/harness\n--title\nhook exits 2\n--label\nbug\n--body-file\n-\n"
 		if got := readLog(t, bin, "args.log"); got != wantArgs {
 			t.Fatalf("args = %q, want %q", got, wantArgs)
 		}
