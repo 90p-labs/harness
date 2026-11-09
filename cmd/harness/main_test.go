@@ -426,8 +426,8 @@ func TestReviewVerifiesTrace(t *testing.T) {
 }
 
 type receivedSpan struct {
-	name, traceID, parentID string
-	attrs                   map[string]string
+	name, traceID, spanID, parentID string
+	attrs                           map[string]string
 }
 
 func TestVerifyTrace(t *testing.T) {
@@ -453,12 +453,16 @@ func TestVerifyTrace(t *testing.T) {
 	if len(spans) == 0 {
 		t.Fatal("the collector got no span")
 	}
+	ids := map[string]bool{}
+	for _, span := range spans {
+		ids[span.spanID] = true
+	}
 	var roots []receivedSpan
 	for _, span := range spans {
 		if span.traceID != spans[0].traceID {
 			t.Errorf("span %s trace id = %s, want %s", span.name, span.traceID, spans[0].traceID)
 		}
-		if span.parentID == "" {
+		if !ids[span.parentID] {
 			roots = append(roots, span)
 		}
 		if span.name == gateSpan && span.parentID == "" {
@@ -466,7 +470,7 @@ func TestVerifyTrace(t *testing.T) {
 		}
 	}
 	if len(roots) != 1 || roots[0].name != rootSpan {
-		t.Fatalf("root spans = %+v, want one %s", roots, rootSpan)
+		t.Fatalf("spans without a collected parent = %+v, want one %s", roots, rootSpan)
 	}
 	assertSpansCarryRun(t, spans, runID, dir)
 }
@@ -494,7 +498,7 @@ func collectSpans(t *testing.T) (spans func() []receivedSpan) {
 			for _, scope := range resource.GetScopeSpans() {
 				for _, span := range scope.GetSpans() {
 					got := receivedSpan{
-						name: span.GetName(), traceID: fmt.Sprintf("%x", span.GetTraceId()),
+						name: span.GetName(), traceID: fmt.Sprintf("%x", span.GetTraceId()), spanID: fmt.Sprintf("%x", span.GetSpanId()),
 						parentID: fmt.Sprintf("%x", span.GetParentSpanId()), attrs: map[string]string{},
 					}
 					for _, kv := range span.GetAttributes() {
@@ -620,6 +624,64 @@ func TestHookSpansTakeTheParentRun(t *testing.T) {
 		}
 		if active, has := span.attrs[telemetry.AttrRunActive]; has {
 			t.Errorf("span %s: %s = %q, want none", span.name, telemetry.AttrRunActive, active)
+		}
+	}
+}
+
+func TestRunIsOneTrace(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	spans := collectSpans(t)
+	startCode, startOut, startErr := execute(t, commandRun, "start", "Add the login page")
+	if startCode != exitOK {
+		t.Fatalf("start code = %d, stderr = %q", startCode, startErr)
+	}
+	runID := startedRunID(t, startOut)
+	executeWithStdin(t, hookSessionJSON, "hook", "--host", "claude", "pre-tool-use")
+
+	code, _, stderr := execute(t, commandRun, "abandon")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	got := spans()
+	ids := map[string]bool{}
+	roots := 0
+	hooks := 0
+	for _, span := range got {
+		ids[span.spanID] = true
+		if span.traceID != got[0].traceID {
+			t.Errorf("span %s: trace %s, want %s", span.name, span.traceID, got[0].traceID)
+		}
+		if span.name == hookHandleSpan {
+			hooks++
+		}
+		if span.name == telemetry.SpanRun {
+			roots++
+			if span.parentID != "" {
+				t.Errorf("run span has parent %s", span.parentID)
+			}
+			want := map[string]string{
+				telemetry.AttrRunID:    runID,
+				telemetry.AttrWorktree: dir,
+				telemetry.AttrRunPhase: string(domain.PhaseAbandoned),
+			}
+			for key, value := range want {
+				if span.attrs[key] != value {
+					t.Errorf("run span %s = %q, want %q", key, span.attrs[key], value)
+				}
+			}
+		}
+	}
+	if roots != 1 {
+		t.Errorf("%d run spans, want 1", roots)
+	}
+	if hooks == 0 {
+		t.Errorf("no %s span in %+v", hookHandleSpan, got)
+	}
+	for _, span := range got {
+		if span.name != telemetry.SpanRun && !ids[span.parentID] {
+			t.Errorf("span %s: parent %q is not a collected span", span.name, span.parentID)
 		}
 	}
 }

@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -15,6 +16,7 @@ const (
 	otherRunID   = "run-2"
 	testWorktree = "/work/a"
 	otherTree    = "/work/b"
+	testPhase    = "done"
 )
 
 func stampedTracer() (trace.Tracer, *tracetest.SpanRecorder) {
@@ -200,6 +202,118 @@ func TestRunEnvParentFromEnvSpansCarryRun(t *testing.T) {
 
 	if got := endedAttrs(t, recorder); got[AttrRunID].AsString() != testRunID {
 		t.Errorf("run id = %v, want %q", got[AttrRunID], testRunID)
+	}
+}
+
+func runTracer() (trace.Tracer, *tracetest.SpanRecorder) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithIDGenerator(runIDGenerator{}),
+		sdktrace.WithSpanProcessor(runStamp{}),
+		sdktrace.WithSpanProcessor(recorder),
+	)
+	return provider.Tracer("test"), recorder
+}
+
+func startEnded(ctx context.Context, tracer trace.Tracer) sdktrace.ReadOnlySpan {
+	_, span := tracer.Start(ctx, "s")
+	span.End()
+	return span.(sdktrace.ReadOnlySpan)
+}
+
+func TestUnderRunParentsUnderTheRunRoot(t *testing.T) {
+	tracer, _ := runTracer()
+	root := runSpanContext(testRunID)
+
+	first := startEnded(UnderRun(context.Background(), testRunID), tracer)
+	second := startEnded(UnderRun(context.Background(), testRunID), tracer)
+
+	for _, span := range []sdktrace.ReadOnlySpan{first, second} {
+		if span.SpanContext().TraceID() != root.TraceID() || span.Parent().SpanID() != root.SpanID() {
+			t.Errorf("span trace %s parent %s, want trace %s parent %s",
+				span.SpanContext().TraceID(), span.Parent().SpanID(), root.TraceID(), root.SpanID())
+		}
+	}
+}
+
+func TestUnderRunKeepsAParentInTheRunTrace(t *testing.T) {
+	tracer, _ := runTracer()
+	root := runSpanContext(testRunID)
+	remote := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: root.TraceID(), SpanID: trace.SpanID{9}, TraceFlags: trace.FlagsSampled, Remote: true,
+	})
+	ctx := trace.ContextWithRemoteSpanContext(context.Background(), remote)
+
+	span := startEnded(UnderRun(ctx, testRunID), tracer)
+
+	if span.Parent().SpanID() != remote.SpanID() {
+		t.Errorf("parent = %s, want %s", span.Parent().SpanID(), remote.SpanID())
+	}
+}
+
+func TestUnderRunMovesAParentOfAnotherTrace(t *testing.T) {
+	tracer, _ := runTracer()
+	root := runSpanContext(testRunID)
+	foreign := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{7}, SpanID: trace.SpanID{9}, TraceFlags: trace.FlagsSampled, Remote: true,
+	})
+	ctx := trace.ContextWithRemoteSpanContext(context.Background(), foreign)
+
+	span := startEnded(UnderRun(ctx, testRunID), tracer)
+
+	if span.Parent().SpanID() != root.SpanID() || span.SpanContext().TraceID() != root.TraceID() {
+		t.Errorf("parent = %s trace = %s, want %s in %s",
+			span.Parent().SpanID(), span.SpanContext().TraceID(), root.SpanID(), root.TraceID())
+	}
+}
+
+func TestUnderRunWithNoRunStartsANewTrace(t *testing.T) {
+	tracer, _ := runTracer()
+
+	first := startEnded(UnderRun(context.Background(), ""), tracer)
+	second := startEnded(UnderRun(context.Background(), ""), tracer)
+
+	if first.Parent().IsValid() || second.Parent().IsValid() {
+		t.Errorf("parents = %v, %v, want none", first.Parent(), second.Parent())
+	}
+	if first.SpanContext().TraceID() == second.SpanContext().TraceID() {
+		t.Errorf("both spans have trace %s, want different traces", first.SpanContext().TraceID())
+	}
+}
+
+func TestEndRunExportsTheRootSpan(t *testing.T) {
+	tracer, recorder := runTracer()
+	root := runSpanContext(testRunID)
+	startedAt := time.Now().Add(-time.Minute)
+
+	otherTrace := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{1},
+		SpanID:     trace.SpanID{1},
+		TraceFlags: trace.FlagsSampled,
+		Remote:     true,
+	})
+	caller := trace.ContextWithRemoteSpanContext(WithRun(context.Background(), "/work/other", "run-other"), otherTrace)
+
+	EndRun(caller, tracer, testRunID, testWorktree, testPhase, startedAt)
+
+	ended := recorder.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(ended))
+	}
+	span := ended[0]
+	if span.Name() != SpanRun || span.SpanContext().TraceID() != root.TraceID() || span.SpanContext().SpanID() != root.SpanID() {
+		t.Errorf("span %q %s/%s, want %q %s/%s", span.Name(),
+			span.SpanContext().TraceID(), span.SpanContext().SpanID(), SpanRun, root.TraceID(), root.SpanID())
+	}
+	if span.Parent().IsValid() {
+		t.Errorf("parent = %v, want none", span.Parent())
+	}
+	if !span.StartTime().Equal(startedAt) || !span.EndTime().After(startedAt) {
+		t.Errorf("times %v to %v, want start %v", span.StartTime(), span.EndTime(), startedAt)
+	}
+	got := attrsOf(span)
+	if got[AttrRunID].AsString() != testRunID || got[AttrWorktree].AsString() != testWorktree || got[AttrRunPhase].AsString() != testPhase {
+		t.Errorf("attrs = %v, want run %q worktree %q phase %q", got, testRunID, testWorktree, testPhase)
 	}
 }
 

@@ -60,7 +60,7 @@ func resolveRun(cmd *cobra.Command) {
 		return
 	}
 	ref := resolveActiveRun(ctx, cmd.Root().PersistentFlags(), cwd, domain.RunKey{Repo: repo, Worktree: worktree})
-	cmd.SetContext(context.WithValue(telemetry.WithRun(ctx, worktree, ref.ID), runRefKey{}, ref))
+	cmd.SetContext(context.WithValue(telemetry.UnderRun(telemetry.WithRun(ctx, worktree, ref.ID), ref.ID), runRefKey{}, ref))
 }
 
 func resolveActiveRun(ctx context.Context, flags *pflag.FlagSet, cwd string, key domain.RunKey) shareddomain.RunRef {

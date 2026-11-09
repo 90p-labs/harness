@@ -73,6 +73,18 @@ Metrics use the same order with `METRICS`. The harness joins `/v1/traces` or `/v
 HARNESS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
 ```
 
+### The trace of a run
+
+Each run has one trace. The harness derives the trace ID and the ID of the root span from the run ID.
+
+- Each harness process of an active run is a child of the root span `run`. This includes hook calls, verify, plan check and run transitions.
+- A `TRACEPARENT` in the same trace stays the parent. A gate child process stays under its gate span.
+- A `TRACEPARENT` in another trace is replaced by the root span of the run.
+- A process with no active run starts its own trace. The exception is `harness run start`. Its `run.transition` span joins the trace of the new run.
+- The harness exports the root span `run` when the run reaches the phase done or abandoned. For example, `harness run done`, `harness run abandon` or the live check does it. The span starts at the start time of the run and ends now. It has `harness.run.id`, `harness.worktree` and `harness.run.phase`.
+
+The root span appears only after the run reaches done or abandoned. Until then, the trace in the backend has no root span. If that export fails, the trace has no root span.
+
 ## `state`
 
 The run state database. It holds the runs, the plan approvals, the gate results and the commit checks.

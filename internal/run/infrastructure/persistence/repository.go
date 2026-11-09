@@ -21,7 +21,7 @@ const (
 	emptyPRs      = "[]"
 
 	runColumns       = "id, repo, worktree, prompt, track, phase, review_round, live_round, stop_blocks, blocked_from, reason, pr_url, prs, version"
-	selectRun        = "SELECT " + runColumns + " FROM runs"
+	selectRun        = "SELECT " + runColumns + ", created_at FROM runs"
 	selectRunByID    = selectRun + " WHERE id = ?"
 	selectActiveRun  = selectRun + " WHERE repo = ? AND worktree = ? AND phase NOT IN (?, ?)"
 	selectByPhase    = selectRun + " WHERE repo = ? AND phase IN (%s) ORDER BY id"
@@ -110,7 +110,7 @@ func (r SQLRunRepository) writeRun(ctx context.Context, tx *sql.Tx, run domain.R
 	}
 	if run.Version == 0 {
 		_, err = tx.ExecContext(ctx, insertRun, run.ID, run.Key.Repo, run.Key.Worktree, run.Prompt, run.Track, run.Phase,
-			run.ReviewRound, run.LiveRound, run.StopBlocks, run.BlockedFrom, run.Reason, run.PRURL, prs, next, now, now)
+			run.ReviewRound, run.LiveRound, run.StopBlocks, run.BlockedFrom, run.Reason, run.PRURL, prs, next, run.StartedAt.UTC(), now)
 		if r.db.Dialect().IsUniqueViolation(err) {
 			return fmt.Errorf("%w: %s", domain.ErrActiveRunExists, run.ID)
 		}
@@ -143,7 +143,7 @@ func scanRun(row interface{ Scan(...any) error }) (domain.Run, error) {
 	var run domain.Run
 	var prs string
 	err := row.Scan(&run.ID, &run.Key.Repo, &run.Key.Worktree, &run.Prompt, &run.Track, &run.Phase,
-		&run.ReviewRound, &run.LiveRound, &run.StopBlocks, &run.BlockedFrom, &run.Reason, &run.PRURL, &prs, &run.Version)
+		&run.ReviewRound, &run.LiveRound, &run.StopBlocks, &run.BlockedFrom, &run.Reason, &run.PRURL, &prs, &run.Version, &run.StartedAt)
 	if err != nil {
 		return domain.Run{}, err
 	}
@@ -153,6 +153,7 @@ func scanRun(row interface{ Scan(...any) error }) (domain.Run, error) {
 	if len(run.PRs) == 0 {
 		run.PRs = nil
 	}
+	run.StartedAt = run.StartedAt.UTC()
 	return run, nil
 }
 

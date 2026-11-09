@@ -42,7 +42,8 @@ func (h Handler) Handle(ctx context.Context, cmd Command) error {
 	if !errors.Is(err, domain.ErrRunNotFound) {
 		return err
 	}
-	run := domain.Run{ID: newRunID(h.clock(), cmd.Prompt), Key: cmd.Key, Prompt: cmd.Prompt}
+	at := h.clock()
+	run := domain.Run{ID: newRunID(at, cmd.Prompt), Key: cmd.Key, Prompt: cmd.Prompt, StartedAt: at.UTC()}
 	return h.flow.Move(ctx, run, domain.Command{Event: domain.EventStart})
 }
 
