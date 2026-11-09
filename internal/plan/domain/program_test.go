@@ -24,12 +24,7 @@ func readProgram(t *testing.T) string {
 func checkProgramText(text string) []domain.Problem {
 	p, problems := domain.ParseProgram(text)
 	problems = append(problems, domain.CheckProgram(p)...)
-	slices.SortStableFunc(problems, func(a, b domain.Problem) int {
-		if a.Line != b.Line {
-			return a.Line - b.Line
-		}
-		return strings.Compare(string(a.Rule), string(b.Rule))
-	})
+	domain.SortProblems(problems)
 	return problems
 }
 

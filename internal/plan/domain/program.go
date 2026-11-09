@@ -177,9 +177,7 @@ func (p *programParser) runLine(line string, n int) {
 	case FieldBranch:
 		r.Branch = value
 	case FieldOwned:
-		for _, m := range ownedPath.FindAllStringSubmatch(value, -1) {
-			r.Owned = append(r.Owned, strings.TrimPrefix(m[1], currentDir))
-		}
+		r.Owned = append(r.Owned, ownedPaths(value)...)
 	case FieldDoneWhen:
 		r.DoneWhen = value
 	default:

@@ -48,10 +48,6 @@ type programWave struct {
 	Runs   []runCard
 }
 
-type programData struct {
-	Diagrams []string `json:"diagrams"`
-}
-
 type programModel struct {
 	Title     string
 	Goal      []template.HTML
@@ -65,7 +61,7 @@ type programModel struct {
 	Decisions []template.HTML
 	Problems  []problemRow
 	Source    []sourceLine
-	Data      programData
+	Data      planData
 }
 
 func renderProgram(in domain.ViewInput, a assets) ([]byte, error) {
@@ -85,7 +81,7 @@ func newProgramModel(in domain.ViewInput) programModel {
 		Waves:     programWaves(prog),
 		Problems:  problemRows(in.Problems, len(prog.Lines)),
 		Source:    sourceLines(prog.Lines, in.Problems),
-		Data:      programData{Diagrams: []string{dependencyChart(prog.Runs)}},
+		Data:      planData{Diagrams: []string{dependencyChart(prog.Runs)}},
 	}
 	for _, line := range prog.Goal {
 		m.Goal = append(m.Goal, inline(line))

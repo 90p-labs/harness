@@ -677,7 +677,7 @@ An agent writes each diagram through `harness diagram`. It reads plain mermaid o
 
 ### Multi-run plan
 
-A plan with a `## Runs` line outside a code fence is a multi-run plan. `IsProgram` makes this switch. The check and view handlers call `ParseProgram` and `CheckProgram` for it, and the single-run path stays the same.
+A plan with a `## Runs` line outside a code fence is a multi-run plan. `IsProgram` makes this switch. The check handler calls `ParseProgram` and `CheckProgram` for it, and the view handler renders the program from the check report. The single-run path stays the same.
 
 - The rule `run-field` refuses a missing or wrong run field.
 - The rule `run-depends` refuses a dependency that names no run of an earlier wave.
