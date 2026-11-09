@@ -1006,6 +1006,7 @@ const (
 	reviewerDoneFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"subagent_type":"harness:reviewer","model":%q,"prompt":"review"}}`
 	modelSonnet        = "sonnet"
 	modelHaiku         = "haiku"
+	modelOpus          = "opus"
 )
 
 func TestRunLifecycle(t *testing.T) {
@@ -1028,7 +1029,7 @@ func TestRunLifecycle(t *testing.T) {
 			verifyPasses(t)
 		}
 		if step.args[0] == "ship" {
-			for _, model := range []string{modelSonnet, modelHaiku} {
+			for _, model := range []string{modelSonnet, modelHaiku, modelOpus} {
 				answer(t, hostClaude, fmt.Sprintf(reviewerDoneFormat, model))
 			}
 		}

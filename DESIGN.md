@@ -212,12 +212,12 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `shell-write-source` | `tool.before` | A shell write to a source file |
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
 | `agent-model-routing` | `tool.before` | An agent call whose model is not in the list of its role for the host, or that has no model |
-| `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 distinct models reviewed `HEAD` |
+| `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 models have a record on `HEAD`. Also when a reviewer model of the host list has no record |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD`. A push that only deletes remote refs is allowed |
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
 
-After each Agent call of the `reviewer` role, a hook writes a review record: the repo, `HEAD` and the model, in the gate state beside the commit checks. The rule `review-models` reads the distinct models of `HEAD`. A background agent sends `tool.after` at dispatch, so a record proves a dispatch, not a finished review. `subagent.stopped` carries no model, so this limit stays. A repository on Codex sets `guard.disabled: [review-models]`, because Codex sends no Agent call with a model.
+After each Agent call of the `reviewer` role, a hook writes a review record: the repo, `HEAD` and the model, in the gate state beside the commit checks. The rule `review-models` reads the models of `HEAD` and needs every reviewer model of one host list, and at least 2 models. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host list of one model still gets the deny, with the `roles.reviewer` next step. A background agent sends `tool.after` at dispatch, so a record proves a dispatch, not a finished review. `subagent.stopped` carries no model, so this limit stays. A repository on Codex sets `guard.disabled: [review-models]`, because Codex sends no Agent call with a model.
 
 Event kinds:
 
