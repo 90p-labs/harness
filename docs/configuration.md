@@ -1,6 +1,6 @@
 # Configuration
 
-This page explains each key of `.harness.yaml` and how to configure it. Each key gives its type, its default, its env variable and its effect.
+This page explains each key of `.harness.yaml` and how to configure it. Each key gives its type, its default, its env variable and its effect. The [full configuration](configuration-full.md) page shows every key and one example for each case.
 
 ## Decision tree
 
@@ -22,7 +22,8 @@ What do you need?
 ├── the deploy plugins (helm, promtool) → `deploy`
 ├── your own command on an event → `plugins`
 ├── the push target of the guard → `git`
-└── the state database → `state`
+├── the state database → `state`
+└── see every key and one example for each case → docs/configuration-full.md
 ```
 
 ## Where the file lives
