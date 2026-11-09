@@ -67,6 +67,9 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 		if !slices.Contains(plugin.Subscribes(), envelope.Event) {
 			continue
 		}
+		if matcher, ok := plugin.(domain.Matcher); ok && !matcher.Matches(envelope) {
+			continue
+		}
 		verdict, err := b.call(ctx, plugin, envelope)
 		if err != nil {
 			if kind == domain.KindVeto || kind == domain.KindCollect {

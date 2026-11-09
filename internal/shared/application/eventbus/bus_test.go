@@ -395,3 +395,38 @@ func TestDispatchMetrics(t *testing.T) {
 		t.Fatalf("attributes = %v, want %v", got, want)
 	}
 }
+
+type filteredPlugin struct {
+	fakePlugin
+	match bool
+}
+
+func (p filteredPlugin) Matches(domain.Envelope) bool { return p.match }
+
+func TestBusSkipsFilteredPlugin(t *testing.T) {
+	f := newFixture()
+	skipped := filteredPlugin{fakePlugin: f.plugin("skipped", events(domain.EventRunTransitionAfter), allow(), nil), match: false}
+	bus := f.newBus(skipped)
+
+	if _, err := f.dispatch(bus, domain.EventRunTransitionAfter); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	if len(f.calls) != 0 || len(f.spans.Ended()) != 0 {
+		t.Fatalf("calls = %v, spans = %d", f.calls, len(f.spans.Ended()))
+	}
+}
+
+func TestBusPlainSubscriptionReceivesAll(t *testing.T) {
+	f := newFixture()
+	matched := filteredPlugin{fakePlugin: f.plugin("matched", events(domain.EventRunTransitionAfter), allow(), nil), match: true}
+	bus := f.newBus(f.plugin("plain", events(domain.EventRunTransitionAfter), allow(), nil), matched)
+
+	if _, err := f.dispatch(bus, domain.EventRunTransitionAfter); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	if !slices.Equal(f.calls, []string{"matched", "plain"}) {
+		t.Fatalf("calls = %v, want [matched plain]", f.calls)
+	}
+}
