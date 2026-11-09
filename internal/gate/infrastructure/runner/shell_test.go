@@ -97,8 +97,20 @@ const (
 	inheritedParent  = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
 )
 
+func TestRunIDEnv(t *testing.T) {
+	t.Setenv(telemetry.EnvRunID, "inherited")
+	ctx := telemetry.WithRun(context.Background(), "", "run-7")
+
+	out, err := runner.Shell{}.Run(ctx, t.TempDir(), newGate(t, "printenv "+telemetry.EnvRunID, time.Minute))
+
+	if err != nil || strings.TrimSpace(out.Stdout) != "run-7" {
+		t.Fatalf("HARNESS_RUN_ID = %q, %v, want run-7", out.Stdout, err)
+	}
+}
+
 func TestTraceparent(t *testing.T) {
 	t.Setenv(telemetry.EnvTraceparent, inheritedParent)
+	t.Setenv(telemetry.EnvRunID, "")
 
 	t.Run("span in context", func(t *testing.T) {
 		ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "gate")

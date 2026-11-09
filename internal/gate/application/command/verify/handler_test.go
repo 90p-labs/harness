@@ -38,7 +38,6 @@ const (
 	attrCount     = "harness.gate.count"
 	attrWorktree  = "harness.worktree"
 	attrRunID     = "harness.run.id"
-	runID         = "20261109-140744-trace"
 	metricName    = "harness.gate.duration"
 	attrGate      = "harness.gate"
 	attrResult    = "harness.gate.result"
@@ -1022,19 +1021,17 @@ func TestVerifyTrace(t *testing.T) {
 func TestVerifyRootAttributes(t *testing.T) {
 	cases := []struct {
 		name       string
-		runID      string
 		outcome    domain.Outcome
 		wantStatus codes.Code
 	}{
-		{"a passing call with a run id", runID, passOutcome(), codes.Unset},
-		{"a failing gate with no run id", "", failOutcome(), codes.Error},
+		{"a passing call", passOutcome(), codes.Unset},
+		{"a failing gate", failOutcome(), codes.Error},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(nil)
 			f.runner.outcomes[testGate] = tc.outcome
 			cmd := command(gate(testGate), gate(lintGate))
-			cmd.RunID = tc.runID
 			f.runner.outcomes[lintGate] = tc.outcome
 
 			if _, err := f.handler.Handle(context.Background(), cmd); err != nil {
@@ -1051,9 +1048,8 @@ func TestVerifyRootAttributes(t *testing.T) {
 				t.Fatalf("no %s span", spanVerify)
 			}
 			attrs := spanAttrs(root)
-			id, hasID := attrs[attrRunID]
-			if hasID != (tc.runID != "") || id != tc.runID {
-				t.Errorf("%s = %q (present %v), want %q", attrRunID, id, hasID, tc.runID)
+			if id, has := attrs[attrRunID]; has {
+				t.Errorf("%s = %q, want none: the span processor sets it", attrRunID, id)
 			}
 			if attrs[attrCount] != "2" || attrs[attrWorktree] != workDir {
 				t.Errorf("attributes = %v, want count 2 and worktree %s", attrs, workDir)

@@ -18,9 +18,7 @@ const (
 	spanVerifyCommits = "gate.verify_commits"
 	spanVerifyCommit  = "gate.verify_commit"
 
-	attrRunID    = attribute.Key("harness.run.id")
-	attrWorktree = attribute.Key("harness.worktree")
-	attrCommit   = attribute.Key("harness.commit")
+	attrCommit = attribute.Key("harness.commit")
 )
 
 type Command struct {
@@ -30,7 +28,6 @@ type Command struct {
 	Setup    []domain.Setup
 	Gates    []domain.Gate
 	Parallel int
-	RunID    string
 }
 
 type Result struct {
@@ -50,11 +47,7 @@ func NewHandler(commits domain.Commits, verifier verify.Handler, checks domain.C
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) (result Result, err error) {
-	attrs := []attribute.KeyValue{attrWorktree.String(cmd.Dir)}
-	if cmd.RunID != "" {
-		attrs = append(attrs, attrRunID.String(cmd.RunID))
-	}
-	ctx, span := h.tracer.Start(ctx, spanVerifyCommits, trace.WithAttributes(attrs...))
+	ctx, span := h.tracer.Start(ctx, spanVerifyCommits)
 	defer span.End()
 	defer func() {
 		if err != nil {

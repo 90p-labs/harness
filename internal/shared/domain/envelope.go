@@ -12,10 +12,11 @@ type RunRef struct {
 }
 
 type Envelope struct {
-	Version int             `json:"version"`
-	Event   EventName       `json:"event"`
-	Host    Host            `json:"host"`
-	Cwd     string          `json:"cwd"`
-	Run     RunRef          `json:"run"`
-	Payload json.RawMessage `json:"payload"`
+	Version   int             `json:"version"`
+	Event     EventName       `json:"event"`
+	Host      Host            `json:"host"`
+	Cwd       string          `json:"cwd"`
+	Run       RunRef          `json:"run"`
+	Payload   json.RawMessage `json:"payload"`
+	SessionID string          `json:"session_id,omitempty"`
 }

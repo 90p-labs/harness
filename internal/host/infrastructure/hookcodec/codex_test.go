@@ -89,6 +89,18 @@ const (
 	codexQuestionPrefix = `{"cwd":"/work/app","hook_event_name":"PostToolUse","model":"gpt-6-astra","turn_id":"t1","tool_name":"request_user_input","tool_use_id":"u3","tool_input":` + codexQuestionInput + `,"tool_response":`
 )
 
+func TestCodexDecodeSessionID(t *testing.T) {
+	codec := hookcodec.NewCodex()
+	with, err := codec.Decode(hostdomain.HookSessionStart, []byte(codexSessionStartInput))
+	if err != nil || with.SessionID != "s1" {
+		t.Fatalf("SessionID = %q, err = %v, want s1", with.SessionID, err)
+	}
+	without, err := codec.Decode(hostdomain.HookSessionStart, []byte(`{"cwd":"/work/app"}`))
+	if err != nil || without.SessionID != "" {
+		t.Fatalf("SessionID = %q, err = %v, want empty", without.SessionID, err)
+	}
+}
+
 func TestQuestionDecodeCodex(t *testing.T) {
 	approve := []shareddomain.Answer{{Header: shareddomain.ApprovalHeader, Label: shareddomain.ApproveLabel}}
 	cases := []struct {

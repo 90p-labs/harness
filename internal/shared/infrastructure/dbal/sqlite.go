@@ -29,10 +29,15 @@ func (sqliteDialect) Engine() Engine { return EngineSQLite }
 
 func (sqliteDialect) DriverName() string { return sqliteDriverName }
 
-func (d sqliteDialect) DriverDSN(path string) string {
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(d.baseDir, path)
+func (d sqliteDialect) filePath(path string) string {
+	if filepath.IsAbs(path) {
+		return path
 	}
+	return filepath.Join(d.baseDir, path)
+}
+
+func (d sqliteDialect) DriverDSN(path string) string {
+	path = d.filePath(path)
 	// A failure here surfaces as an open error from the driver.
 	_ = os.MkdirAll(filepath.Dir(path), sqliteDirMode)
 	return sqliteFilePrefix + (&url.URL{Path: path}).EscapedPath() + sqlitePragmaQuery

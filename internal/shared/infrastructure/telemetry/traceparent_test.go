@@ -66,15 +66,16 @@ func TestParentFromEnvFlags(t *testing.T) {
 	}
 }
 
-func TestTraceparentEntry(t *testing.T) {
-	if _, ok := TraceparentEntry(context.Background()); ok {
-		t.Fatal("ok = true for a context with no span")
+func TestChildEnvTraceparent(t *testing.T) {
+	t.Setenv(EnvRunID, "")
+	if got := ChildEnv(context.Background()); len(got) != 0 {
+		t.Fatalf("ChildEnv = %v for a context with no span", got)
 	}
 	t.Setenv(EnvTraceparent, traceparentValid)
 
-	got, ok := TraceparentEntry(ParentFromEnv(context.Background()))
+	got := ChildEnv(ParentFromEnv(context.Background()))
 
-	if want := EnvTraceparent + "=" + traceparentValid; !ok || got != want {
-		t.Fatalf("got %q, %v, want %q", got, ok, want)
+	if want := EnvTraceparent + "=" + traceparentValid; len(got) != 1 || got[0] != want {
+		t.Fatalf("ChildEnv = %v, want [%q]", got, want)
 	}
 }

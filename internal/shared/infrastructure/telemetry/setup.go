@@ -50,7 +50,7 @@ func Setup(ctx context.Context, version string) (func(context.Context) error, er
 		attribute.String(attrServiceVersion, version),
 	)
 
-	traceOptions := []sdktrace.TracerProviderOption{sdktrace.WithResource(res)}
+	traceOptions := []sdktrace.TracerProviderOption{sdktrace.WithResource(res), sdktrace.WithSpanProcessor(runStamp{})}
 	if spanExporter != nil {
 		traceOptions = append(traceOptions, sdktrace.WithBatcher(spanExporter))
 	}

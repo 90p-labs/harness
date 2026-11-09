@@ -25,9 +25,10 @@ const (
 )
 
 const (
-	attrRun     = attribute.Key("harness.run")
-	attrPhase   = attribute.Key("harness.phase")
-	attrOutcome = attribute.Key("harness.live.outcome")
+	attrRunID    = attribute.Key("harness.run.id")
+	attrWorktree = attribute.Key("harness.worktree")
+	attrPhase    = attribute.Key("harness.phase")
+	attrOutcome  = attribute.Key("harness.live.outcome")
 )
 
 type Command struct {
@@ -90,7 +91,7 @@ func (h Handler) Handle(ctx context.Context, cmd Command) ([]Result, error) {
 
 func (h Handler) checkRun(ctx context.Context, run domain.LiveRun, now time.Time) Result {
 	ctx, span := h.tracer.Start(ctx, spanLiveCheck, trace.WithAttributes(
-		attrRun.String(run.ID), attrPhase.String(string(run.Phase)),
+		attrRunID.String(run.ID), attrWorktree.String(run.Worktree), attrPhase.String(string(run.Phase)),
 	))
 	defer span.End()
 

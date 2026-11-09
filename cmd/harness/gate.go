@@ -24,9 +24,7 @@ import (
 	lintdomain "github.com/jorge07/harness/internal/lint/domain"
 	plandomain "github.com/jorge07/harness/internal/plan/domain"
 	plancli "github.com/jorge07/harness/internal/plan/ui/cli"
-	"github.com/jorge07/harness/internal/run/application/query/status"
 	"github.com/jorge07/harness/internal/run/domain"
-	runcli "github.com/jorge07/harness/internal/run/ui/cli"
 	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/git"
 )
@@ -62,7 +60,7 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	if err != nil {
 		return gatecli.Handlers{}, nil, err
 	}
-	handlers, db, err := openRun(ctx, env)
+	db, err := openState(ctx, env.cfg, env.commonDir)
 	if err != nil {
 		return gatecli.Handlers{}, nil, err
 	}
@@ -71,35 +69,19 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	initializer := gatemodule.NewInit(toolchain.Lint{Packs: env.cfg.Lint.Packs, Baseline: lintdomain.BaselinePath}, env.bus)
 	return gatecli.Handlers{
 		Verify: func(ctx context.Context) (verify.Result, error) {
-			runID, err := activeRunID(ctx, handlers, env.key)
-			if err != nil {
-				return verify.Result{}, err
-			}
 			return verifier.Handle(ctx, verify.Command{
-				RunID: runID, Repo: env.key.Repo, Dir: env.key.Worktree, Setup: setup, Gates: gates, Parallel: env.cfg.Verify.Parallel,
+				Repo: env.key.Repo, Dir: env.key.Worktree, Setup: setup, Gates: gates, Parallel: env.cfg.Verify.Parallel,
 			})
 		},
 		VerifyCommits: func(ctx context.Context, base string) (verifycommits.Result, error) {
-			runID, err := activeRunID(ctx, handlers, env.key)
-			if err != nil {
-				return verifycommits.Result{}, err
-			}
 			return commits.Handle(ctx, verifycommits.Command{
-				RunID: runID, Repo: env.key.Repo, Dir: env.key.Worktree, Base: base, Setup: setup, Gates: gates, Parallel: env.cfg.Verify.Parallel,
+				Repo: env.key.Repo, Dir: env.key.Worktree, Base: base, Setup: setup, Gates: gates, Parallel: env.cfg.Verify.Parallel,
 			})
 		},
 		Init: func(ctx context.Context) (initgates.Result, error) {
 			return initializer.Handle(ctx, initgates.Command{Dir: env.key.Worktree})
 		},
 	}, db.Close, nil
-}
-
-func activeRunID(ctx context.Context, handlers runcli.Handlers, key domain.RunKey) (string, error) {
-	current, err := handlers.Status.Handle(ctx, status.Query{Key: key})
-	if errors.Is(err, domain.ErrRunNotFound) {
-		return "", nil
-	}
-	return current.ID, err
 }
 
 type criterionGate struct {

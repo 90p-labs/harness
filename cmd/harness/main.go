@@ -98,6 +98,10 @@ func newRootCommand() *cobra.Command {
 		Use:           commandName,
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			resolveRun(cmd)
+			return nil
+		},
 		RunE: func(*cobra.Command, []string) error {
 			return usageError{errNoCommand}
 		},

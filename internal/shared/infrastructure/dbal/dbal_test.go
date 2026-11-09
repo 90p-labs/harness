@@ -17,6 +17,34 @@ import (
 
 const testModule = "demo"
 
+func TestFileExists(t *testing.T) {
+	baseDir := t.TempDir()
+	absolute := filepath.Join(t.TempDir(), "abs.db")
+	for _, file := range []string{filepath.Join(baseDir, "state.db"), absolute} {
+		if err := os.WriteFile(file, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cases := []struct {
+		name string
+		dsn  string
+		want bool
+	}{
+		{name: "relative path under the base dir", dsn: "sqlite:state.db", want: true},
+		{name: "relative path missing", dsn: "sqlite:missing.db"},
+		{name: "absolute path", dsn: "sqlite:" + absolute, want: true},
+		{name: "absolute path missing", dsn: "sqlite:" + absolute + ".missing"},
+		{name: "unknown scheme", dsn: "postgres:state.db"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := FileExists(tc.dsn, baseDir); got != tc.want {
+				t.Fatalf("FileExists(%q) = %v, want %v", tc.dsn, got, tc.want)
+			}
+		})
+	}
+}
+
 func openTemp(t *testing.T) *DB {
 	t.Helper()
 	db, err := Open(context.Background(), "sqlite:state.db", t.TempDir())

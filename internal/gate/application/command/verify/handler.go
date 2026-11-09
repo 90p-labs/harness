@@ -38,7 +38,6 @@ const (
 
 	attrGateCount = attribute.Key("harness.gate.count")
 	attrWorktree  = attribute.Key("harness.worktree")
-	attrRunID     = attribute.Key("harness.run.id")
 	attrSetupStep = attribute.Key("harness.setup.step")
 )
 
@@ -65,7 +64,6 @@ type Command struct {
 	Setup    []domain.Setup
 	Gates    []domain.Gate
 	Parallel int
-	RunID    string
 }
 
 type SetupLine struct {
@@ -141,11 +139,9 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (Result, error) {
 }
 
 func (h Handler) HandleConfigured(ctx context.Context, cmd Command) (result Result, err error) {
-	attrs := []attribute.KeyValue{attrGateCount.Int(len(cmd.Gates)), attrWorktree.String(cmd.Dir)}
-	if cmd.RunID != "" {
-		attrs = append(attrs, attrRunID.String(cmd.RunID))
-	}
-	ctx, span := h.tracer.Start(ctx, spanGateVerify, trace.WithAttributes(attrs...))
+	ctx, span := h.tracer.Start(ctx, spanGateVerify, trace.WithAttributes(
+		attrGateCount.Int(len(cmd.Gates)), attrWorktree.String(cmd.Dir),
+	))
 	defer span.End()
 	defer func() {
 		switch {

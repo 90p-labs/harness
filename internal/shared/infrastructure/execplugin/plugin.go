@@ -71,10 +71,7 @@ func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domai
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return stopGroup(cmd.Process.Pid) }
 	cmd.WaitDelay = waitDelay
-	cmd.Env = os.Environ()
-	if entry, ok := telemetry.TraceparentEntry(callCtx); ok {
-		cmd.Env = append(cmd.Env, entry)
-	}
+	cmd.Env = append(os.Environ(), telemetry.ChildEnv(callCtx)...)
 
 	if err := cmd.Run(); err != nil && !exitedCleanly(cmd, err) {
 		if callCtx.Err() != nil {

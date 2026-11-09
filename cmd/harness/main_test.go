@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,12 +18,14 @@ import (
 	"testing"
 
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/protobuf/proto"
 
 	plandomain "github.com/jorge07/harness/internal/plan/domain"
 	"github.com/jorge07/harness/internal/run/domain"
 	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
@@ -40,6 +43,7 @@ func clearOTLPEnv(t *testing.T) {
 		t.Setenv(telemetry.EnvAliasPrefix+name, "")
 	}
 	t.Setenv(telemetry.EnvTraceparent, "")
+	t.Setenv(telemetry.EnvRunID, "")
 }
 
 const (
@@ -428,10 +432,8 @@ type receivedSpan struct {
 
 func TestVerifyTrace(t *testing.T) {
 	const (
-		rootSpan   = "gate.verify"
-		gateSpan   = "gate.run"
-		attrRunID  = "harness.run.id"
-		tracesPath = "/v1/traces"
+		rootSpan = "gate.verify"
+		gateSpan = "gate.run"
 	)
 	clearHarnessEnv(t)
 	dir, plan := tracedRepo(t)
@@ -440,38 +442,11 @@ func TestVerifyTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	runID := startWithPlan(t, dir, plan)
-	var mu sync.Mutex
-	var spans []receivedSpan
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		request := &collectortrace.ExportTraceServiceRequest{}
-		if r.URL.Path != tracesPath || proto.Unmarshal(body, request) != nil {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		for _, resource := range request.GetResourceSpans() {
-			for _, scope := range resource.GetScopeSpans() {
-				for _, span := range scope.GetSpans() {
-					got := receivedSpan{
-						name: span.GetName(), traceID: fmt.Sprintf("%x", span.GetTraceId()),
-						parentID: fmt.Sprintf("%x", span.GetParentSpanId()), attrs: map[string]string{},
-					}
-					for _, kv := range span.GetAttributes() {
-						got.attrs[kv.GetKey()] = kv.GetValue().GetStringValue()
-					}
-					spans = append(spans, got)
-				}
-			}
-		}
-	}))
-	t.Cleanup(server.Close)
-	t.Setenv(telemetry.EnvEndpoint, server.URL)
+	collected := collectSpans(t)
 
 	code, _, stderr := execute(t, commandVerify)
 
-	mu.Lock()
-	defer mu.Unlock()
+	spans := collected()
 	if code != exitOK {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
@@ -493,9 +468,240 @@ func TestVerifyTrace(t *testing.T) {
 	if len(roots) != 1 || roots[0].name != rootSpan {
 		t.Fatalf("root spans = %+v, want one %s", roots, rootSpan)
 	}
-	if got := roots[0].attrs[attrRunID]; got != runID {
-		t.Errorf("%s = %q, want %q", attrRunID, got, runID)
+	assertSpansCarryRun(t, spans, runID, dir)
+}
+
+const (
+	tracesPath      = "/v1/traces"
+	hookHandleSpan  = "hook.handle"
+	sessionIDAttr   = "harness.session.id"
+	hookSessionJSON = `{"cwd":".","session_id":"s1","tool_name":"Bash","tool_input":{"command":"ls"}}`
+)
+
+func collectSpans(t *testing.T) (spans func() []receivedSpan) {
+	t.Helper()
+	var mu sync.Mutex
+	var received []receivedSpan
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		request := &collectortrace.ExportTraceServiceRequest{}
+		if r.URL.Path != tracesPath || proto.Unmarshal(body, request) != nil {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, resource := range request.GetResourceSpans() {
+			for _, scope := range resource.GetScopeSpans() {
+				for _, span := range scope.GetSpans() {
+					got := receivedSpan{
+						name: span.GetName(), traceID: fmt.Sprintf("%x", span.GetTraceId()),
+						parentID: fmt.Sprintf("%x", span.GetParentSpanId()), attrs: map[string]string{},
+					}
+					for _, kv := range span.GetAttributes() {
+						got.attrs[kv.GetKey()] = attrString(kv.GetValue())
+					}
+					received = append(received, got)
+				}
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(telemetry.EnvEndpoint, server.URL)
+	return func() []receivedSpan {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]receivedSpan{}, received...)
 	}
+}
+
+func attrString(value *commonpb.AnyValue) string {
+	if _, isBool := value.GetValue().(*commonpb.AnyValue_BoolValue); isBool {
+		return strconv.FormatBool(value.GetBoolValue())
+	}
+	return value.GetStringValue()
+}
+
+func assertSpansCarryRun(t *testing.T, spans []receivedSpan, runID, worktree string) {
+	t.Helper()
+	if len(spans) == 0 {
+		t.Fatal("the collector got no span")
+	}
+	for _, span := range spans {
+		if got := span.attrs[telemetry.AttrRunID]; got != runID {
+			t.Errorf("span %s: %s = %q, want %q", span.name, telemetry.AttrRunID, got, runID)
+		}
+		if got := span.attrs[telemetry.AttrWorktree]; worktree != "" && got != worktree {
+			t.Errorf("span %s: %s = %q, want %q", span.name, telemetry.AttrWorktree, got, worktree)
+		}
+	}
+}
+
+func TestHookSpansCarryTheRun(t *testing.T) {
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	runID := startWithPlan(t, dir, plan)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), runID, dir)
+}
+
+func TestPreRunHonoursStateDSN(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+	stateFlag := "--" + config.FlagStateDSN
+	dsn := "sqlite:" + filepath.Join(t.TempDir(), "elsewhere.db")
+	_, stdout, _ := execute(t, stateFlag, dsn, commandRun, "start", "Add the login page")
+	runID := startedRunID(t, stdout)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, stateFlag, dsn, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), runID, "")
+}
+
+func TestHookSpansMarkNoRun(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	got := spans()
+	var handled bool
+	for _, span := range got {
+		if id, has := span.attrs[telemetry.AttrRunID]; has {
+			t.Errorf("span %s: %s = %q, want none", span.name, telemetry.AttrRunID, id)
+		}
+		if span.attrs[telemetry.AttrRunActive] != strconv.FormatBool(false) {
+			t.Errorf("span %s: %s = %q, want false", span.name, telemetry.AttrRunActive, span.attrs[telemetry.AttrRunActive])
+		}
+		if span.name == hookHandleSpan {
+			handled = true
+			if span.attrs[sessionIDAttr] != "s1" {
+				t.Errorf("%s = %q, want s1", sessionIDAttr, span.attrs[sessionIDAttr])
+			}
+		}
+	}
+	if !handled {
+		t.Errorf("no %s span in %+v", hookHandleSpan, got)
+	}
+}
+
+func TestHookSpansTakeTheParentRun(t *testing.T) {
+	const parentRun = "parent-run"
+	clearHarnessEnv(t)
+	initRepo(t)
+	t.Setenv(telemetry.EnvRunID, parentRun)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	got := spans()
+	if len(got) == 0 {
+		t.Fatal("no spans")
+	}
+	for _, span := range got {
+		if span.attrs[telemetry.AttrRunID] != parentRun {
+			t.Errorf("span %s: %s = %q, want %q", span.name, telemetry.AttrRunID, span.attrs[telemetry.AttrRunID], parentRun)
+		}
+		if active, has := span.attrs[telemetry.AttrRunActive]; has {
+			t.Errorf("span %s: %s = %q, want none", span.name, telemetry.AttrRunActive, active)
+		}
+	}
+}
+
+func TestRunStartSpansCarryTheRun(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	spans := collectSpans(t)
+
+	code, stdout, stderr := execute(t, commandRun, "start", "Add the login page")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), startedRunID(t, stdout), dir)
+}
+
+const (
+	schemaTable      = "harness_schema"
+	defaultStateFile = "state.db"
+	stateDirName     = ".harness"
+	gitDirName       = ".git"
+)
+
+func defaultStatePath(repo string) string {
+	return filepath.Join(repo, gitDirName, stateDirName, defaultStateFile)
+}
+
+func TestPreRunMigratesTheState(t *testing.T) {
+	clearHarnessEnv(t)
+	statePath := defaultStatePath(initRepo(t))
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, stderr := execute(t, "version")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	db, err := sql.Open("sqlite", statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	var name string
+	err = db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", schemaTable).Scan(&name)
+	if err != nil {
+		t.Fatalf("table %s missing after the pre-run: %v", schemaTable, err)
+	}
+}
+
+func TestPreRunCreatesNoState(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+
+	code, _, stderr := execute(t, "version")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if _, err := os.Stat(defaultStatePath(dir)); !os.IsNotExist(err) {
+		t.Fatalf("stat %s: err = %v, want the file to not exist", defaultStatePath(dir), err)
+	}
+}
+
+func TestRunAbandonSpansCarryTheRun(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	_, stdout, _ := execute(t, commandRun, "start", "Add the login page")
+	runID := startedRunID(t, stdout)
+	spans := collectSpans(t)
+
+	code, _, stderr := execute(t, commandRun, "abandon")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), runID, dir)
 }
 
 func TestReviewNeedsProofEvidence(t *testing.T) {
