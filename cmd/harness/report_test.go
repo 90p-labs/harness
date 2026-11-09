@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	reportdomain "github.com/jorge07/harness/internal/report/domain"
+	reportdomain "github.com/90p-labs/harness/internal/report/domain"
 )
 
 const noRunLine = "- run: " + reportdomain.RunNone + "\n"
 
 const (
 	commandReport = "report"
-	issueURL      = "https://github.com/jorge07/harness/issues/31"
+	issueURL      = "https://github.com/90p-labs/harness/issues/31"
 	reportTitle   = "guard: commits-checked denies a push for dev@example.com"
 	reportDraft   = `## Summary
 

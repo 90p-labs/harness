@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/fixture"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/fixture"
 )
 
 const chartFolder = "deploy/chart/"

@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jorge07/harness/internal/lint/domain"
-	lintconfig "github.com/jorge07/harness/internal/lint/infrastructure/config"
-	sharedconfig "github.com/jorge07/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	lintconfig "github.com/90p-labs/harness/internal/lint/infrastructure/config"
+	sharedconfig "github.com/90p-labs/harness/internal/shared/infrastructure/config"
 )
 
 func TestDecodeLint(t *testing.T) {

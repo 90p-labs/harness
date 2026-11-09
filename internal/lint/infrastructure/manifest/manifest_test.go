@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/manifest"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/manifest"
 )
 
 func writeManifest(t *testing.T, content string) string {

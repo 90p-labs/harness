@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jorge07/harness/internal/live/application/command/check"
+	"github.com/90p-labs/harness/internal/live/application/command/check"
 )
 
 const (

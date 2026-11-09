@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jorge07/harness/internal/gate/application/command/verify"
-	"github.com/jorge07/harness/internal/gate/domain"
+	"github.com/90p-labs/harness/internal/gate/application/command/verify"
+	"github.com/90p-labs/harness/internal/gate/domain"
 )
 
 const (

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/deploy/application/query/renderchart"
-	"github.com/jorge07/harness/internal/deploy/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/deploy/application/query/renderchart"
+	"github.com/90p-labs/harness/internal/deploy/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 var errHelmFailed = errors.New("helm template failed")

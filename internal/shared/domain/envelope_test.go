@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const specEnvelope = `{"version":1,"event":"tool.before","host":"claude","cwd":"/repo","run":{"id":"r1","phase":"working"},"payload":{"tool":"Bash","input":{"command":"git push"}}}`

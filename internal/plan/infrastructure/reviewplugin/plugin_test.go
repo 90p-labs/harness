@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/plan/domain"
-	"github.com/jorge07/harness/internal/plan/infrastructure/reviewplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/reviewplugin"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

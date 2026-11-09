@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (

@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	deploydomain "github.com/jorge07/harness/internal/deploy/domain"
-	guarddomain "github.com/jorge07/harness/internal/guard/domain"
-	lintdomain "github.com/jorge07/harness/internal/lint/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
+	deploydomain "github.com/90p-labs/harness/internal/deploy/domain"
+	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
+	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 )
 
 const (

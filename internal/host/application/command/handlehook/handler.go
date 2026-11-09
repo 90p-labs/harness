@@ -14,9 +14,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	hostdomain "github.com/jorge07/harness/internal/host/domain"
-	"github.com/jorge07/harness/internal/shared/application/eventbus"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	hostdomain "github.com/90p-labs/harness/internal/host/domain"
+	"github.com/90p-labs/harness/internal/shared/application/eventbus"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

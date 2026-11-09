@@ -6,15 +6,15 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	"github.com/jorge07/harness/internal/host/application/command/handlehook"
-	hostdomain "github.com/jorge07/harness/internal/host/domain"
-	"github.com/jorge07/harness/internal/host/infrastructure/hookcodec"
-	"github.com/jorge07/harness/internal/host/infrastructure/install"
-	"github.com/jorge07/harness/internal/host/ui/cli"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/host/application/command/handlehook"
+	hostdomain "github.com/90p-labs/harness/internal/host/domain"
+	"github.com/90p-labs/harness/internal/host/infrastructure/hookcodec"
+	"github.com/90p-labs/harness/internal/host/infrastructure/install"
+	"github.com/90p-labs/harness/internal/host/ui/cli"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
-const instrumentationName = "github.com/jorge07/harness/internal/host"
+const instrumentationName = "github.com/90p-labs/harness/internal/host"
 
 func codecs() []hostdomain.Codec {
 	return []hostdomain.Codec{hookcodec.NewClaude(), hookcodec.NewCodex()}

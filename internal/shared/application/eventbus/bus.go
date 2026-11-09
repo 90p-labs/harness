@@ -13,11 +13,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (
-	instrumentationName = "github.com/jorge07/harness/internal/shared/application/eventbus"
+	instrumentationName = "github.com/90p-labs/harness/internal/shared/application/eventbus"
 	spanPluginCall      = "plugin.call"
 	metricPluginSeconds = "harness.plugin.duration"
 	metricUnitSeconds   = "s"

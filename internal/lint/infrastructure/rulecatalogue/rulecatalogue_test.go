@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
-	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/rulecatalogue"
 )
 
 func TestLoad(t *testing.T) {

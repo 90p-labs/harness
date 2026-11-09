@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jorge07/harness/internal/live/application/command/check"
-	"github.com/jorge07/harness/internal/live/domain"
-	"github.com/jorge07/harness/internal/live/ui/cli"
+	"github.com/90p-labs/harness/internal/live/application/command/check"
+	"github.com/90p-labs/harness/internal/live/domain"
+	"github.com/90p-labs/harness/internal/live/ui/cli"
 )
 
 var errGitHub = errors.New("gh is down")

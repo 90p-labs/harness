@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
 
 const (

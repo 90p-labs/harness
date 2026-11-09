@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jorge07/harness/internal/plan/application/command/renderview"
+	"github.com/90p-labs/harness/internal/plan/application/command/renderview"
 )
 
 const (

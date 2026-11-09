@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jorge07/harness/internal/report/application/command/fileissue"
-	"github.com/jorge07/harness/internal/report/domain"
+	"github.com/90p-labs/harness/internal/report/application/command/fileissue"
+	"github.com/90p-labs/harness/internal/report/domain"
 )
 
 const (

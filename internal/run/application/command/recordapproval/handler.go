@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/domain"
 )
 
 type Command struct {

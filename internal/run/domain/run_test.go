@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorge07/harness/internal/run/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/run/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 func apply(t *testing.T, run domain.Run, policy domain.Policy, event domain.Event, reason string) domain.Run {

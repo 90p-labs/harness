@@ -3,23 +3,23 @@ package run
 import (
 	"time"
 
-	"github.com/jorge07/harness/internal/run/application/command/decidestop"
-	"github.com/jorge07/harness/internal/run/application/command/recordapproval"
-	"github.com/jorge07/harness/internal/run/application/command/start"
-	"github.com/jorge07/harness/internal/run/application/command/transition"
-	"github.com/jorge07/harness/internal/run/application/query/status"
-	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/infrastructure/persistence"
-	"github.com/jorge07/harness/internal/run/infrastructure/pluginhooks"
-	"github.com/jorge07/harness/internal/run/ui/cli"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/run/application/command/decidestop"
+	"github.com/90p-labs/harness/internal/run/application/command/recordapproval"
+	"github.com/90p-labs/harness/internal/run/application/command/start"
+	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/query/status"
+	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
+	"github.com/90p-labs/harness/internal/run/infrastructure/pluginhooks"
+	"github.com/90p-labs/harness/internal/run/ui/cli"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 
 	"go.opentelemetry.io/otel"
 )
 
-const tracerName = "github.com/jorge07/harness/internal/run"
+const tracerName = "github.com/90p-labs/harness/internal/run"
 
 func policyOf(cfg config.Run) domain.Policy {
 	return domain.Policy{

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 func TestTopLevel(t *testing.T) {
@@ -55,12 +55,12 @@ func initRepo(t *testing.T) string {
 }
 
 func TestRepoKey(t *testing.T) {
-	const github = "github.com/jorge07/harness"
+	const github = "github.com/90p-labs/harness"
 	cases := map[string]struct{ url, want string }{
-		"scp":             {"git@github.com:jorge07/harness.git", github},
-		"https with user": {"https://user@github.com/jorge07/harness.git", github},
-		"https":           {"https://github.com/jorge07/harness", github},
-		"ssh with port":   {"ssh://git@github.com:22/jorge07/harness", github},
+		"scp":             {"git@github.com:90p-labs/harness.git", github},
+		"https with user": {"https://user@github.com/90p-labs/harness.git", github},
+		"https":           {"https://github.com/90p-labs/harness", github},
+		"ssh with port":   {"ssh://git@github.com:22/90p-labs/harness", github},
 		"at sign in path": {"https://host.example/team/repo@v2.git", "host.example/team/repo@v2"},
 		"scp at sign":     {"git@host.example:repo@v2.git", "host.example/repo@v2"},
 	}

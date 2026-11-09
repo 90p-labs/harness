@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/pflag"
 
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 )
 
 const (

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/report/domain"
+	"github.com/90p-labs/harness/internal/report/domain"
 )
 
 const (

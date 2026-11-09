@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jorge07/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/plan/domain"
 )
 
 func traceOf(t *testing.T, text string) domain.Links {

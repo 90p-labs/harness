@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jorge07/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/domain"
 )
 
 const (

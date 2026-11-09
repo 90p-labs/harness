@@ -6,16 +6,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/jorge07/harness/internal/deploy"
-	lintmodule "github.com/jorge07/harness/internal/lint"
-	"github.com/jorge07/harness/internal/lint/application/command/baseline"
-	"github.com/jorge07/harness/internal/lint/application/command/canaries"
-	"github.com/jorge07/harness/internal/lint/application/command/initlint"
-	lintcommand "github.com/jorge07/harness/internal/lint/application/command/lint"
-	lintdomain "github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
-	lintcli "github.com/jorge07/harness/internal/lint/ui/cli"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/deploy"
+	lintmodule "github.com/90p-labs/harness/internal/lint"
+	"github.com/90p-labs/harness/internal/lint/application/command/baseline"
+	"github.com/90p-labs/harness/internal/lint/application/command/canaries"
+	"github.com/90p-labs/harness/internal/lint/application/command/initlint"
+	lintcommand "github.com/90p-labs/harness/internal/lint/application/command/lint"
+	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/rulecatalogue"
+	lintcli "github.com/90p-labs/harness/internal/lint/ui/cli"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 func newLintCommand(flags *pflag.FlagSet, version string) *cobra.Command {

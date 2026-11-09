@@ -7,10 +7,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/jorge07/harness/internal/host"
-	hostdomain "github.com/jorge07/harness/internal/host/domain"
-	hostcli "github.com/jorge07/harness/internal/host/ui/cli"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/host"
+	hostdomain "github.com/90p-labs/harness/internal/host/domain"
+	hostcli "github.com/90p-labs/harness/internal/host/ui/cli"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 func newHookCommand(flags *pflag.FlagSet) *cobra.Command {

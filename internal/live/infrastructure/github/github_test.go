@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorge07/harness/internal/live/domain"
+	"github.com/90p-labs/harness/internal/live/domain"
 )
 
 const (

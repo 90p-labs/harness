@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jorge07/harness/internal/guard/domain"
+	"github.com/90p-labs/harness/internal/guard/domain"
 )
 
 func TestShellCommands(t *testing.T) {

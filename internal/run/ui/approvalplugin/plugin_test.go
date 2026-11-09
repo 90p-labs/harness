@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/run/ui/approvalplugin"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const runID = "20261108-170222-add-a-grill-step"

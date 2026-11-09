@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/jorge07/harness/internal/deploy/application/query/renderchart"
-	"github.com/jorge07/harness/internal/deploy/domain"
-	"github.com/jorge07/harness/internal/deploy/infrastructure/toolplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/deploy/application/query/renderchart"
+	"github.com/90p-labs/harness/internal/deploy/domain"
+	"github.com/90p-labs/harness/internal/deploy/infrastructure/toolplugin"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 func NewPlugins(disabled []string, execPlugins []shareddomain.Plugin) ([]shareddomain.Plugin, error) {

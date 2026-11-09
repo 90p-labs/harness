@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	hostdomain "github.com/jorge07/harness/internal/host/domain"
-	"github.com/jorge07/harness/internal/host/ui/cli"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	hostdomain "github.com/90p-labs/harness/internal/host/domain"
+	"github.com/90p-labs/harness/internal/host/ui/cli"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 type fakeCodec struct {

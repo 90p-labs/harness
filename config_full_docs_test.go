@@ -12,12 +12,12 @@ import (
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 
-	deploydomain "github.com/jorge07/harness/internal/deploy/domain"
-	gateconfig "github.com/jorge07/harness/internal/gate/infrastructure/config"
-	guarddomain "github.com/jorge07/harness/internal/guard/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
+	deploydomain "github.com/90p-labs/harness/internal/deploy/domain"
+	gateconfig "github.com/90p-labs/harness/internal/gate/infrastructure/config"
+	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 )
 
 const (

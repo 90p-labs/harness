@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jorge07/harness/internal/report/domain"
-	gh "github.com/jorge07/harness/internal/shared/infrastructure/github"
+	"github.com/90p-labs/harness/internal/report/domain"
+	gh "github.com/90p-labs/harness/internal/shared/infrastructure/github"
 )
 
 const (

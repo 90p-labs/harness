@@ -21,12 +21,12 @@ import (
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/protobuf/proto"
 
-	plandomain "github.com/jorge07/harness/internal/plan/domain"
-	"github.com/jorge07/harness/internal/run/domain"
-	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
+	plandomain "github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/ui/approvalplugin"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (

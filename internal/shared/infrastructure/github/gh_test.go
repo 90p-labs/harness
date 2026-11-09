@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/shared/infrastructure/github"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/github"
 )
 
 const shell = "sh"

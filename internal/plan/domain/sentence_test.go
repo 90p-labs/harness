@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/plan/domain"
 )
 
 func words(n int) string {

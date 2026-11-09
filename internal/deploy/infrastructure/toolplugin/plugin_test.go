@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/deploy/domain"
-	"github.com/jorge07/harness/internal/deploy/infrastructure/toolplugin"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/deploy/domain"
+	"github.com/90p-labs/harness/internal/deploy/infrastructure/toolplugin"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const fakeHelm = "#!/bin/sh\necho \"# args: $*\"\necho \"# dir: $(pwd)\"\n"

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const wantAskUser = "let the user pick"
@@ -23,7 +23,7 @@ func approvalNoForgeCases() []ruleCase {
 		{name: "go run of the hook", call: bash("go run ./cmd/harness hook --host claude post-tool-use"), deny: true, step: wantAskUser},
 		{name: "go run with a flag", call: bash("go run -race ./cmd/harness hook --host claude stop"), deny: true, step: wantAskUser},
 		{name: "go run of the main file", call: bash("go run ./cmd/harness/main.go hook --host claude post-tool-use"), deny: true, step: wantAskUser},
-		{name: "go run of a module version", call: bash("go run github.com/jorge07/harness/cmd/harness@latest hook --host codex post-tool-use"), deny: true, step: wantAskUser},
+		{name: "go run of a module version", call: bash("go run github.com/90p-labs/harness/cmd/harness@latest hook --host codex post-tool-use"), deny: true, step: wantAskUser},
 		{name: "harness hook after a root flag", call: bash("harness --config .harness.yaml hook --host claude post-tool-use < answer.json"), deny: true, step: wantAskUser},
 		{name: "go run of the hook after a root flag", call: bash("go run ./cmd/harness --state-dsn=x hook --host claude post-tool-use"), deny: true, step: wantAskUser},
 		{name: "harness run approve", call: bash("harness run approve")},

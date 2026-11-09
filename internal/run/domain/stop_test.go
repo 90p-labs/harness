@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/domain"
 )
 
 func TestDecideStop(t *testing.T) {

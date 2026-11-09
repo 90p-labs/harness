@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jorge07/harness/internal/plan/application/query/markdiagram"
+	"github.com/90p-labs/harness/internal/plan/application/query/markdiagram"
 )
 
 const commandDiagram = "diagram"

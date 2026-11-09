@@ -11,10 +11,10 @@ import (
 
 	"go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/jorge07/harness/internal/plan/application/command/submitplan"
-	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
-	"github.com/jorge07/harness/internal/plan/domain"
-	"github.com/jorge07/harness/internal/plan/ui/cli"
+	"github.com/90p-labs/harness/internal/plan/application/command/submitplan"
+	"github.com/90p-labs/harness/internal/plan/application/query/checkplan"
+	"github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/plan/ui/cli"
 )
 
 const (

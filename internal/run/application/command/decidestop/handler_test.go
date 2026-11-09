@@ -9,8 +9,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/run/application/command/decidestop"
-	"github.com/jorge07/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/application/command/decidestop"
+	"github.com/90p-labs/harness/internal/run/domain"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	maxStopBlocks = 3
 )
 
-var key = domain.RunKey{Repo: "github.com/jorge07/harness", Worktree: "/work/harness"}
+var key = domain.RunKey{Repo: "github.com/90p-labs/harness", Worktree: "/work/harness"}
 
 type fakeRepository struct {
 	stored    domain.Run

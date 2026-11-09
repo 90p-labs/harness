@@ -12,12 +12,12 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/jorge07/harness/internal/gate/domain"
-	gateconfig "github.com/jorge07/harness/internal/gate/infrastructure/config"
-	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/config"
-	"github.com/jorge07/harness/internal/shared/infrastructure/execplugin"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	gateconfig "github.com/90p-labs/harness/internal/gate/infrastructure/config"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/execplugin"
 )
 
 const (

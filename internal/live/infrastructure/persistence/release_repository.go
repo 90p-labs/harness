@@ -8,8 +8,8 @@ import (
 	"io/fs"
 	"time"
 
-	"github.com/jorge07/harness/internal/live/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/live/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
 
 const (

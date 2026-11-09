@@ -3,7 +3,7 @@ package domain_test
 import (
 	"testing"
 
-	"github.com/jorge07/harness/internal/report/domain"
+	"github.com/90p-labs/harness/internal/report/domain"
 )
 
 const userHome = "/Users/jorgearco"
@@ -64,8 +64,8 @@ func TestRedact(t *testing.T) {
 		},
 		{
 			"clean text stays unchanged",
-			"git@github.com:jorge07/harness.git token := next() if a == b /usr/local/bin/harness run status",
-			"git@github.com:jorge07/harness.git token := next() if a == b /usr/local/bin/harness run status",
+			"git@github.com:90p-labs/harness.git token := next() if a == b /usr/local/bin/harness run status",
+			"git@github.com:90p-labs/harness.git token := next() if a == b /usr/local/bin/harness run status",
 		},
 		{
 			"a key with its value on the next line and prose stay unchanged",

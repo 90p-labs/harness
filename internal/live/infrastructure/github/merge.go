@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jorge07/harness/internal/live/domain"
-	gh "github.com/jorge07/harness/internal/shared/infrastructure/github"
+	"github.com/90p-labs/harness/internal/live/domain"
+	gh "github.com/90p-labs/harness/internal/shared/infrastructure/github"
 )
 
 var _ domain.GitHub = (*Client)(nil)

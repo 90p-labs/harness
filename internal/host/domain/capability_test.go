@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/jorge07/harness/internal/host/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/host/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 type fakeCodec struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/report/infrastructure/github"
+	"github.com/90p-labs/harness/internal/report/infrastructure/github"
 )
 
 const fakeGH = `#!/bin/sh
@@ -40,14 +40,14 @@ func readLog(t *testing.T, bin, name string) string {
 
 func TestTrackerCreate(t *testing.T) {
 	t.Run("files the issue with the body on stdin", func(t *testing.T) {
-		bin := installFake(t, "https://github.com/jorge07/harness/issues/7", "0")
+		bin := installFake(t, "https://github.com/90p-labs/harness/issues/7", "0")
 
 		url, err := github.New(bin).Create(context.Background(), "hook exits 2", "## Summary\n\nbody\n")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if url != "https://github.com/jorge07/harness/issues/7" {
+		if url != "https://github.com/90p-labs/harness/issues/7" {
 			t.Fatalf("url = %q", url)
 		}
 		wantArgs := "issue\ncreate\n-R\njorge07/harness\n--title\nhook exits 2\n--label\nbug\n--body-file\n-\n"

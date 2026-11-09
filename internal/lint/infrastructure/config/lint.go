@@ -1,8 +1,8 @@
 package config
 
 import (
-	"github.com/jorge07/harness/internal/lint/domain"
-	sharedconfig "github.com/jorge07/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	sharedconfig "github.com/90p-labs/harness/internal/shared/infrastructure/config"
 )
 
 func Decode(cfg sharedconfig.Lint) domain.Settings {

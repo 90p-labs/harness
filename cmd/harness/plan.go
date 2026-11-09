@@ -8,13 +8,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	planmodule "github.com/jorge07/harness/internal/plan"
-	"github.com/jorge07/harness/internal/plan/application/command/renderview"
-	"github.com/jorge07/harness/internal/plan/application/query/checkplan"
-	plancli "github.com/jorge07/harness/internal/plan/ui/cli"
-	"github.com/jorge07/harness/internal/run/application/query/status"
-	"github.com/jorge07/harness/internal/run/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	planmodule "github.com/90p-labs/harness/internal/plan"
+	"github.com/90p-labs/harness/internal/plan/application/command/renderview"
+	"github.com/90p-labs/harness/internal/plan/application/query/checkplan"
+	plancli "github.com/90p-labs/harness/internal/plan/ui/cli"
+	"github.com/90p-labs/harness/internal/run/application/query/status"
+	"github.com/90p-labs/harness/internal/run/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jorge07/harness/internal/live/domain"
-	"github.com/jorge07/harness/internal/live/infrastructure/archive"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/live/domain"
+	"github.com/90p-labs/harness/internal/live/infrastructure/archive"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

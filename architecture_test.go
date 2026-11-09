@@ -16,7 +16,7 @@ const (
 	layerInfrastructure = "infrastructure"
 	layerUI             = "ui"
 	otelSDKPrefix       = "go.opentelemetry.io/otel/sdk"
-	modulePath          = "github.com/jorge07/harness"
+	modulePath          = "github.com/90p-labs/harness"
 	sharedDomainImport  = modulePath + "/internal/shared/domain"
 )
 

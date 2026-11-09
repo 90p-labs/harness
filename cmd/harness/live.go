@@ -11,16 +11,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	livemodule "github.com/jorge07/harness/internal/live"
-	"github.com/jorge07/harness/internal/live/application/command/check"
-	livedomain "github.com/jorge07/harness/internal/live/domain"
-	livecli "github.com/jorge07/harness/internal/live/ui/cli"
-	plandomain "github.com/jorge07/harness/internal/plan/domain"
-	"github.com/jorge07/harness/internal/run/application/command/transition"
-	"github.com/jorge07/harness/internal/run/application/query/status"
-	"github.com/jorge07/harness/internal/run/domain"
-	runcli "github.com/jorge07/harness/internal/run/ui/cli"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	livemodule "github.com/90p-labs/harness/internal/live"
+	"github.com/90p-labs/harness/internal/live/application/command/check"
+	livedomain "github.com/90p-labs/harness/internal/live/domain"
+	livecli "github.com/90p-labs/harness/internal/live/ui/cli"
+	plandomain "github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/query/status"
+	"github.com/90p-labs/harness/internal/run/domain"
+	runcli "github.com/90p-labs/harness/internal/run/ui/cli"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 var (

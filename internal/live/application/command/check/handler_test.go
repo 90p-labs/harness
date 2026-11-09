@@ -14,9 +14,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/live/application/command/check"
-	"github.com/jorge07/harness/internal/live/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/live/application/command/check"
+	"github.com/90p-labs/harness/internal/live/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

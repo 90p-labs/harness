@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jorge07/harness/internal/gate/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

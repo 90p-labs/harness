@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jorge07/harness/internal/lint/domain"
-	"github.com/jorge07/harness/internal/lint/infrastructure/biome"
-	"github.com/jorge07/harness/internal/lint/infrastructure/fixture"
-	"github.com/jorge07/harness/internal/lint/infrastructure/packs"
+	"github.com/90p-labs/harness/internal/lint/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/biome"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/fixture"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
 )
 
 func TestBiomeEngineFixtures(t *testing.T) {

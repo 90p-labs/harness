@@ -6,13 +6,13 @@ import (
 
 	"go.opentelemetry.io/otel"
 
-	"github.com/jorge07/harness/internal/guard/application/guardplugin"
-	"github.com/jorge07/harness/internal/guard/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/git"
+	"github.com/90p-labs/harness/internal/guard/application/guardplugin"
+	"github.com/90p-labs/harness/internal/guard/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
-const instrumentationName = "github.com/jorge07/harness/internal/guard"
+const instrumentationName = "github.com/90p-labs/harness/internal/guard"
 
 func NewPlugins(
 	disabled []string,

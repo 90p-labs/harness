@@ -8,11 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jorge07/harness/internal/run/application/command/start"
-	"github.com/jorge07/harness/internal/run/application/command/transition"
-	"github.com/jorge07/harness/internal/run/application/query/status"
-	"github.com/jorge07/harness/internal/run/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/run/application/command/start"
+	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/query/status"
+	"github.com/90p-labs/harness/internal/run/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

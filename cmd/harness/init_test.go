@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	gateconfig "github.com/jorge07/harness/internal/gate/infrastructure/config"
-	lintdomain "github.com/jorge07/harness/internal/lint/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	gateconfig "github.com/90p-labs/harness/internal/gate/infrastructure/config"
+	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 var (

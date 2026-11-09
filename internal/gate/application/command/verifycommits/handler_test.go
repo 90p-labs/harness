@@ -13,14 +13,14 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/gate/application/command/verify"
-	"github.com/jorge07/harness/internal/gate/application/command/verifycommits"
-	"github.com/jorge07/harness/internal/gate/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/gate/application/command/verify"
+	"github.com/90p-labs/harness/internal/gate/application/command/verifycommits"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (
-	repo     = "github.com/jorge07/harness"
+	repo     = "github.com/90p-labs/harness"
 	workDir  = "/work/harness"
 	baseRef  = "main"
 	headSHA  = "c3c3c3"

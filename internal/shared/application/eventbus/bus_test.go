@@ -15,8 +15,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/jorge07/harness/internal/shared/application/eventbus"
-	"github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/application/eventbus"
+	"github.com/90p-labs/harness/internal/shared/domain"
 )
 
 type fakePlugin struct {

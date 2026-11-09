@@ -8,8 +8,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/jorge07/harness/internal/lint/infrastructure/rulecatalogue"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/lint/infrastructure/rulecatalogue"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (

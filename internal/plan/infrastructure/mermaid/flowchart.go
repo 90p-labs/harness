@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 var ErrStateChart = errors.New("state diagram has no flowchart form")

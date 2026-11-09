@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jorge07/harness/internal/live/domain"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/live/domain"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 func TestFindingsText(t *testing.T) {

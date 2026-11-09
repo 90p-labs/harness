@@ -14,17 +14,17 @@ import (
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/jorge07/harness/internal/gate"
-	"github.com/jorge07/harness/internal/gate/application/command/verify"
-	"github.com/jorge07/harness/internal/gate/domain"
-	"github.com/jorge07/harness/internal/gate/infrastructure/persistence"
-	"github.com/jorge07/harness/internal/shared/application/eventbus"
-	shareddomain "github.com/jorge07/harness/internal/shared/domain"
-	"github.com/jorge07/harness/internal/shared/infrastructure/dbal"
+	"github.com/90p-labs/harness/internal/gate"
+	"github.com/90p-labs/harness/internal/gate/application/command/verify"
+	"github.com/90p-labs/harness/internal/gate/domain"
+	"github.com/90p-labs/harness/internal/gate/infrastructure/persistence"
+	"github.com/90p-labs/harness/internal/shared/application/eventbus"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
 
 const (
-	repoName   = "github.com/jorge07/harness"
+	repoName   = "github.com/90p-labs/harness"
 	gateCount  = 8
 	gateLimit  = 4
 	countRows  = "SELECT COUNT(*) FROM gate_evidence WHERE repo = ?"
