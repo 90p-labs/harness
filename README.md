@@ -32,7 +32,7 @@ With no detected toolchain, `harness gates init` writes no `.harness.yaml`. Writ
 The harness is a plugin for Claude Code and for Codex. The plugin installs these parts:
 
 - The skills `harness` (the loop), `pr-open` (the pull request of the ship step), `lint-setup` (the architecture rules of a project), `ddd` (the DDD layout that the lint packs check), `demo` (a watched browser walkthrough) and `report` (a bug about the harness).
-- The agents `explorer` (the facts for a plan), `advisor` (the check of a plan), `worker` (one task of a plan), `reviewer` (the review of a run, through one lens) and `linter` (the lint setup).
+- The agents are `explorer` (the facts for a plan), `advisor` (the check of a plan) and `worker` (one task of a plan, or a fix). The other agents are `reviewer` (the review of a run, through one lens), `verifier` (the check of one finding) and `linter` (the lint setup).
 - The hooks of the host.
 
 Each skill starts with a decision tree, so an agent reads only the part that it needs. The `pr-open` skill opens the pull request of the ship step. Its body answers Why, What and How, in this order, after a bottom line, with the plan diagrams and the visuals of the done tasks in How. The hooks act only in a git repository with `.harness.yaml` at its top level. In any other folder, they do nothing.

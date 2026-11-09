@@ -53,13 +53,28 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step.
    - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.
    - Send a failed task once to a new `worker` agent, with the same `model` field.
    - Commit in plan order, one commit for each task. Run `harness verify --commits <default branch>`, then `harness run review`.
-5. `reviewing`: start new `reviewer` agents in parallel, each in a fresh context. Set the `model` field of each agent call.
-   - Each round: lens `Spec` with the `model` field set to the first model of the `reviewer` role. Lens `Standards` with the second model.
-   - Keep each report as it is: do not merge the findings into one list. One finding with a proof counts. Rerun the proof of each blocker. Give each inferred finding one check. Do not rerank across lenses.
+   - After `harness run rework`, do the steps Fix and Re-review of phase 5.
+5. `reviewing`: run the steps below in order. Start each agent in a fresh context.
+   - **Common list**: start one `reviewer` agent for each listed model, in parallel, on the same `HEAD`. Set the `model` field of each agent call.
+   - Lens `Spec` runs on the first model of the `reviewer` role, lens `Standards` on the second, and lens `Spec` on every other model. Set the `model` field for each.
+   - Each reviewer returns every finding of its lens in one pass. The lead merges the lists into `findings.md` in the run folder, removes the duplicates and numbers them `F1`, `F2`.
    - A reviewer with no result gets one new `reviewer` agent, with the same `model` field. A second gap is not a pass.
-   - With findings, run `harness run rework --findings "<summary>"` and go back to `working`. Each round starts new `reviewer` agents, each with its `model` field set.
-   - With none, start the pre-ship panel on the same `HEAD`. Start one `reviewer` agent, lens `Spec`, for each listed model that did not review this `HEAD`. Start all of them at once in parallel, each in a fresh context, each with its `model` field set.
-   - A panel finding goes to `harness run rework` like any other finding. When the panel has no finding, or every listed model already reviewed this `HEAD`, run `harness run ship`. The guard needs a review of every listed reviewer model of the host on `HEAD`, and 2 or more models.
+   - **Verify**: start one `verifier` agent for each finding, in parallel, with the `model` field set to the model of the `explorer` role. The lead drops each finding that it calls not real, and takes the severity of the verifier.
+   - With no real finding, run `harness run ship`. The guard needs a review of every listed reviewer model on `HEAD`, and 2 or more models.
+   - With real findings, run `harness run rework --findings "<id, severity, file:line for each>"` once for the whole list. Then go to `working`.
+   - **Fix** (in `working`): start one `worker` agent for each blocker and major finding. Set the `model` field to the first model of the `worker` role.
+   - Start blockers first. Run in parallel only when the files do not overlap.
+   - The lead fixes with git a real finding that no worker can fix, such as the commit order.
+   - Each worker fixes only its finding, test first where a test can show it. It does not commit.
+   - The lead commits each fix with `git commit --fixup=<sha>`, one fixup for each target commit: the commit of the task that owns the file. A file outside the plan trees needs `harness run amend` first.
+   - One more `worker` agent, with the same `model` field, fixes all real minor findings after the blocker and major fixes.
+   - **Re-review** (in `working`): start one `reviewer` agent for each blocker and major fixup. Set the `model` field to the first model of the `reviewer` role.
+   - The reviewer gets the finding line and `git show <fixup sha>`.
+   - The lead adds each new defect of a re-review to `findings.md`. It goes through Verify and Fix like the other findings.
+   - A fix that fails its re-review goes once to a new `worker` agent, with the same `model` field.
+   - Then run `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base <default branch>`, `harness verify --commits <default branch>` and `harness run review`.
+   - **Final panel**: the next common list runs once on the final `HEAD`, with every listed model. Its findings go through Verify and a new rework.
+   - The limit is `run.max_review_rounds` (default 3). Past it, the run blocks.
 6. `shipping`: start the `pr-open` skill. It pushes the branch and opens the pull request as a draft, with the body Why, What and How. The user merges it. Then run `harness run done --pr <url>`.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
