@@ -318,6 +318,26 @@ func TestReadmeListsSkillsAndAgents(t *testing.T) {
 	}
 }
 
+const (
+	configDocFile = "docs/configuration.md"
+	beforePayload = "`run.transition.before` payload `to`"
+)
+
+func TestFilterDocs(t *testing.T) {
+	names := append(slices.Clone(shareddomain.Transitions), shareddomain.Phases...)
+	for _, path := range []string{configDocFile, designFile} {
+		doc := readDoc(t, path)
+		for _, name := range names {
+			if !strings.Contains(doc, "`"+name+"`") {
+				t.Errorf("%s does not name `%s`", path, name)
+			}
+		}
+		if !strings.Contains(doc, beforePayload) {
+			t.Errorf("%s does not mention %s", path, beforePayload)
+		}
+	}
+}
+
 func phaseName(label string) string {
 	if label == phaseNoneMarker {
 		return string(domain.PhaseNone)

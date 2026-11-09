@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jorge07/harness/internal/run/domain"
+	shareddomain "github.com/jorge07/harness/internal/shared/domain"
 )
 
 var allPhases = []domain.Phase{
@@ -82,5 +83,20 @@ func TestTransitionsReturnsCopy(t *testing.T) {
 	first[0].To = domain.PhaseAbandoned
 	if domain.Transitions()[0].To == domain.PhaseAbandoned {
 		t.Fatal("Transitions exposes the table")
+	}
+}
+
+func TestTransitionNamesMatchTable(t *testing.T) {
+	inTable := map[string]bool{}
+	for _, row := range domain.Transitions() {
+		inTable[string(row.Event)] = true
+		if !slices.Contains(shareddomain.Transitions, string(row.Event)) {
+			t.Errorf("table event %q missing from shared Transitions", row.Event)
+		}
+	}
+	for _, name := range shareddomain.Transitions {
+		if !inTable[name] {
+			t.Errorf("shared transition %q is not a table event", name)
+		}
 	}
 }

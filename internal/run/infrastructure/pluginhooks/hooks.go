@@ -20,9 +20,9 @@ func NewHooks(bus plugindomain.Dispatcher, cwd string) Hooks {
 	return Hooks{bus: bus, cwd: cwd}
 }
 
-func (h Hooks) Before(ctx context.Context, run domain.Run, cmd domain.Command) error {
+func (h Hooks) Before(ctx context.Context, run domain.Run, cmd domain.Command, to domain.Phase) error {
 	result, err := h.dispatch(ctx, plugindomain.EventRunTransitionBefore, run, plugindomain.TransitionPayload{
-		Event: string(cmd.Event), From: string(run.Phase), Reason: cmd.Reason,
+		Event: string(cmd.Event), From: string(run.Phase), To: string(to), Reason: cmd.Reason,
 	})
 	if err != nil {
 		return fmt.Errorf("dispatch %s: %w", plugindomain.EventRunTransitionBefore, err)

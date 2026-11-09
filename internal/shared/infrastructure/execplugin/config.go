@@ -23,6 +23,7 @@ func FromConfig(plugins []config.Plugin) ([]domain.Plugin, error) {
 			Events:     events,
 			Command:    entry.Command,
 			Timeout:    entry.Timeout,
+			Filter:     domain.TransitionFilter{Transition: entry.Transition, From: entry.From, To: entry.To},
 		})
 	}
 	return built, nil

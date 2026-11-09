@@ -55,7 +55,7 @@ func TestHooksBeforeDeny(t *testing.T) {
 	plugin := &recorder{verdict: plugindomain.Verdict{Kind: plugindomain.VerdictDeny, Reason: denyReason}}
 	run := domain.Run{ID: runID, Phase: domain.PhaseWorking}
 
-	err := hooksWith(plugin).Before(context.Background(), run, domain.Command{Event: domain.EventSubmitPlan, Reason: "why"})
+	err := hooksWith(plugin).Before(context.Background(), run, domain.Command{Event: domain.EventSubmitPlan, Reason: "why"}, domain.PhaseWorking)
 
 	if !errors.Is(err, domain.ErrTransitionVetoed) || !strings.Contains(err.Error(), denyReason) {
 		t.Fatalf("err = %v", err)
@@ -64,7 +64,22 @@ func TestHooksBeforeDeny(t *testing.T) {
 		t.Fatalf("dispatched %d envelopes", len(plugin.got))
 	}
 	requireEnvelope(t, plugin.got[0], plugindomain.EventRunTransitionBefore, domain.PhaseWorking)
-	want := plugindomain.TransitionPayload{Event: string(domain.EventSubmitPlan), From: string(domain.PhaseWorking), Reason: "why"}
+	want := plugindomain.TransitionPayload{Event: string(domain.EventSubmitPlan), From: string(domain.PhaseWorking), To: string(domain.PhaseWorking), Reason: "why"}
+	if got := decode(t, plugin.got[0]); got != want {
+		t.Fatalf("payload = %+v, want %+v", got, want)
+	}
+}
+
+func TestBeforePayloadCarriesTarget(t *testing.T) {
+	plugin := &recorder{verdict: plugindomain.Verdict{Kind: plugindomain.VerdictAllow}}
+	run := domain.Run{ID: runID, Phase: domain.PhasePlanning}
+
+	err := hooksWith(plugin).Before(context.Background(), run, domain.Command{Event: domain.EventSubmitPlan, Reason: "why"}, domain.PhaseWorking)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := plugindomain.TransitionPayload{Event: string(domain.EventSubmitPlan), From: string(domain.PhasePlanning), To: string(domain.PhaseWorking), Reason: "why"}
 	if got := decode(t, plugin.got[0]); got != want {
 		t.Fatalf("payload = %+v, want %+v", got, want)
 	}
@@ -72,7 +87,7 @@ func TestHooksBeforeDeny(t *testing.T) {
 
 func TestHooksBeforeAllow(t *testing.T) {
 	allow := &recorder{verdict: plugindomain.Verdict{Kind: plugindomain.VerdictAllow}}
-	if err := hooksWith(allow).Before(context.Background(), domain.Run{}, domain.Command{}); err != nil {
+	if err := hooksWith(allow).Before(context.Background(), domain.Run{}, domain.Command{}, domain.PhaseNone); err != nil {
 		t.Fatalf("allow: %v", err)
 	}
 }

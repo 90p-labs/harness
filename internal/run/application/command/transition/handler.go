@@ -91,11 +91,11 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 			return err
 		}
 	}
-	if err := f.hooks.Before(ctx, run, cmd); err != nil {
-		return err
-	}
 	next, err := run.Apply(cmd, policy)
 	if err != nil {
+		return err
+	}
+	if err := f.hooks.Before(ctx, run, cmd, next.Phase); err != nil {
 		return err
 	}
 	if _, err := f.repo.Save(ctx, next); err != nil {

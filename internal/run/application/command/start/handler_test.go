@@ -56,7 +56,7 @@ type fakeHooks struct {
 	afterTo    []domain.Run
 }
 
-func (f *fakeHooks) Before(_ context.Context, run domain.Run, _ domain.Command) error {
+func (f *fakeHooks) Before(_ context.Context, run domain.Run, _ domain.Command, _ domain.Phase) error {
 	f.beforeRuns = append(f.beforeRuns, run)
 	return f.veto
 }

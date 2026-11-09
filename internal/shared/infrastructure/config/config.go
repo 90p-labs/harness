@@ -27,18 +27,21 @@ const (
 	fileFormat = "yaml"
 	envPrefix  = "HARNESS"
 
-	keyStateDSN        = "state.dsn"
-	keyApproval        = "run.approval"
-	keyGoLive          = "run.go_live"
-	keyMaxReviewRounds = "run.max_review_rounds"
-	keyMaxLiveRounds   = "run.max_live_rounds"
-	keyMaxStopBlocks   = "run.max_stop_blocks"
-	keyPlugins         = "plugins"
-	keyRoles           = "roles"
-	keyGuardDisabled   = "guard.disabled"
-	keyDeployDisabled  = "deploy.disabled"
-	keyGitBranch       = "git.default_branch"
-	keyVerifyParallel  = "verify.parallel"
+	keyFilterTransition = "transition"
+	keyFilterFrom       = "from"
+	keyFilterTo         = "to"
+	keyStateDSN         = "state.dsn"
+	keyApproval         = "run.approval"
+	keyGoLive           = "run.go_live"
+	keyMaxReviewRounds  = "run.max_review_rounds"
+	keyMaxLiveRounds    = "run.max_live_rounds"
+	keyMaxStopBlocks    = "run.max_stop_blocks"
+	keyPlugins          = "plugins"
+	keyRoles            = "roles"
+	keyGuardDisabled    = "guard.disabled"
+	keyDeployDisabled   = "deploy.disabled"
+	keyGitBranch        = "git.default_branch"
+	keyVerifyParallel   = "verify.parallel"
 
 	keyLiveEnvironment = "live.environment"
 	keyLiveRollback    = "live.rollback"
@@ -155,6 +158,39 @@ type Plugin struct {
 	Command []string      `mapstructure:"command"`
 	Events  []string      `mapstructure:"events"`
 	Timeout time.Duration `mapstructure:"timeout"`
+
+	Transition []string `mapstructure:"transition"`
+	From       []string `mapstructure:"from"`
+	To         []string `mapstructure:"to"`
+}
+
+func (p Plugin) validateFilter() error {
+	if len(p.Transition)+len(p.From)+len(p.To) == 0 {
+		return nil
+	}
+	for _, name := range p.Events {
+		event := shareddomain.EventName(name)
+		if event != shareddomain.EventRunTransitionBefore && event != shareddomain.EventRunTransitionAfter {
+			return fmt.Errorf("plugin %q sets a transition filter but subscribes to %q", p.Name, name)
+		}
+	}
+	keys := []struct {
+		key    string
+		values []string
+		valid  []string
+	}{
+		{keyFilterTransition, p.Transition, shareddomain.Transitions},
+		{keyFilterFrom, p.From, shareddomain.Phases},
+		{keyFilterTo, p.To, shareddomain.Phases},
+	}
+	for _, k := range keys {
+		for _, value := range k.values {
+			if !slices.Contains(k.valid, value) {
+				return fmt.Errorf("plugin %q %s %q is unknown, want one of %s", p.Name, k.key, value, strings.Join(k.valid, ", "))
+			}
+		}
+	}
+	return nil
 }
 
 type RoleHost map[string][]string
@@ -271,6 +307,9 @@ func (c *Config) validate() error {
 			return fmt.Errorf("plugin %q has no event", plugin.Name)
 		case plugin.Timeout < 0:
 			return fmt.Errorf("plugin %q has a negative timeout %s", plugin.Name, plugin.Timeout)
+		}
+		if err := plugin.validateFilter(); err != nil {
+			return err
 		}
 		seen[plugin.Name] = true
 		if plugin.Timeout == 0 {

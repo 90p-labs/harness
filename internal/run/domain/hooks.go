@@ -8,6 +8,6 @@ type PlanGate interface {
 }
 
 type TransitionHooks interface {
-	Before(ctx context.Context, run Run, cmd Command) error
+	Before(ctx context.Context, run Run, cmd Command, to Phase) error
 	After(ctx context.Context, from Run, to Run)
 }

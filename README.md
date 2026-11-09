@@ -313,6 +313,8 @@ $ harness run plan
 error: plan rejected: plan-has-risks: the plan has no ## Risks section
 ```
 
+A plugin on `run.transition.before` or `run.transition.after` can run for chosen transitions only. Add the keys `transition`, `from` or `to` to the entry: see [Filter a transition](docs/configuration.md#filter-a-transition).
+
 ## A full run
 
 This run is real output from a small Go repository. The agent normally runs these commands, and the hooks enforce the order.
