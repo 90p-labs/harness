@@ -178,6 +178,39 @@ func TestParseSketches(t *testing.T) {
 	}
 }
 
+func TestParseTaskModel(t *testing.T) {
+	text := strings.Join([]string{
+		"## Tasks",
+		"",
+		"### 1. Ping domain",
+		"",
+		"- Side: backend",
+		"- Model: haiku",
+		"",
+		"### 2. Ping query",
+		"",
+		"- Side: backend",
+	}, "\n")
+
+	doc, problems := domain.Parse(text)
+
+	if len(problems) != 0 {
+		t.Fatalf("problems = %v", problems)
+	}
+	if len(doc.Tasks) != 2 {
+		t.Fatalf("tasks = %+v", doc.Tasks)
+	}
+	if got := doc.Tasks[0].Model; got != "haiku" {
+		t.Errorf("task 1 model = %q, want haiku", got)
+	}
+	if got := doc.Tasks[0].FieldLines[domain.FieldModel]; got != 6 {
+		t.Errorf("task 1 model line = %d, want 6", got)
+	}
+	if got := doc.Tasks[1].Model; got != "" {
+		t.Errorf("task 2 model = %q, want empty", got)
+	}
+}
+
 func TestDocumentBase(t *testing.T) {
 	doc, _ := domain.Parse(readValid(t))
 	if got := doc.Base(); got != "main" {

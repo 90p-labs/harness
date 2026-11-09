@@ -61,6 +61,7 @@ var (
 	idAttr      = regexp.MustCompile(`\bid="([^"]+)"`)
 	navGroup    = regexp.MustCompile(`(?s)data-nav-group="([^"]+)"(.*?)</ol>`)
 	sectionTag  = regexp.MustCompile(`<section id="([^"]+)"[^>]*data-group="([^"]+)"`)
+	taskCard    = regexp.MustCompile(`(?s)<article id="[^"]+" class="task".*?</article>`)
 )
 
 func parsePlan(t *testing.T) domain.Document {
@@ -280,6 +281,29 @@ func TestPageNoEvidence(t *testing.T) {
 	})
 	if strings.Contains(page, `class="phase"`) || strings.Contains(page, "<span>run ") {
 		t.Error("the header must show no run id and no phase")
+	}
+}
+
+func TestPageTaskModel(t *testing.T) {
+	in := baseInput(t)
+	in.Doc.Tasks[0].Model = "haiku"
+	page := render(t, in)
+
+	cards := taskCard.FindAllString(page, -1)
+	if len(cards) != 2 {
+		t.Fatalf("task cards = %d, want 2", len(cards))
+	}
+	for _, card := range cards {
+		switch {
+		case strings.Contains(card, "<h3>Ping domain</h3>"):
+			if !strings.Contains(card, "haiku") {
+				t.Errorf("task 1 card lacks the model haiku")
+			}
+		case strings.Contains(card, "<h3>Ping query</h3>"):
+			if strings.Contains(card, "haiku") {
+				t.Errorf("task 2 card shows a model it does not set")
+			}
+		}
 	}
 }
 

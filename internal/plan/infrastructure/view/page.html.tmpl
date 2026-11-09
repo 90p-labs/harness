@@ -75,7 +75,7 @@
 <section id="tasks" data-group="{{.G.Tasks}}" aria-labelledby="tasks-h"><h2 id="tasks-h">Tasks</h2>
 <p class="lede">Tasks in one wave share no dependency, so they can run in parallel.</p><div class="waves">
 {{range .Waves}}<div class="wave"><p class="wave-n">Wave {{.Number}}</p>
-{{range .Tasks}}<article id="{{.Key}}" class="task" data-key="{{.Key}}"><header><span class="tn">{{.Number}}</span><h3>{{.Name}}</h3><span class="side">{{.Side}}</span></header>
+{{range .Tasks}}<article id="{{.Key}}" class="task" data-key="{{.Key}}"><header><span class="tn">{{.Number}}</span><h3>{{.Name}}</h3><span class="side">{{.Side}}</span>{{if .Model}}<span class="side">{{.Model}}</span>{{end}}</header>
 <p class="tf"><em>Test first</em>{{.TestFirst}}</p>
 <ul class="owned">{{range .Owned}}<li><code>{{.}}</code></li>{{end}}</ul>
 <div class="links">{{template "chips" dict "Name" "DoD" "Chips" .DoD}}{{template "chips" dict "Name" "After" "Chips" .After}}{{template "chips" dict "Name" "Commit" "Chips" .Commits}}</div></article>

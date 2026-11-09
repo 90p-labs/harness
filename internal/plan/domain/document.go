@@ -31,6 +31,7 @@ const (
 	FieldTestFirst = "Test first"
 	FieldDoD       = "DoD"
 	FieldDependsOn = "Depends on"
+	FieldModel     = "Model"
 )
 
 const (
@@ -130,6 +131,7 @@ type Task struct {
 	TestFirst  string
 	DoD        []int
 	DependsOn  []int
+	Model      string
 	Line       int
 	FieldLines map[string]int
 }
