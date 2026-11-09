@@ -48,3 +48,12 @@ Start from the tested config `examples/python/.importlinter` of the harness plug
 | `ddd/layer-direction` | a `layers` contract on each context: the application layer never imports the infrastructure layer |
 | `ddd/cross-context` | an `independence` contract on the contexts, and a `layers` contract that keeps `shared` below the contexts |
 | `ddd/file-suffix` | not checked: a waiver |
+
+## Patterns
+
+| Topic | In Python |
+|---|---|
+| `use-cases.md` | `place_order_command.py` and `place_order_handler.py` share one folder. A frozen dataclass is the message, and it holds primitives. A model library checks the raw input in the controller. The handler builds the value objects through their factories. |
+| `composition-root.md` | The `__init__.py` of a context is its module. `main.py` is the composition root. A DI container is an option: a class still gets its dependencies through its constructor. |
+| `events.md` | Event sourcing is an option: an aggregate records frozen dataclass events and an event store keeps them. A small in-process bus can carry them. An integration event interface lives in `shop.shared.domain`, which every layer may use. |
+| `tests.md` | A test runner runs the `test_*.py` files. An object mother is an `order_mother.py` module. The architecture test is import-linter. The `lint-setup` skill proves its rules once with canaries. |

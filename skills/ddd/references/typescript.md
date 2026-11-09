@@ -55,7 +55,7 @@ src/
 - A folder under the business root with a `*.module.ts` at its top level, or with a `domain`, `application` or `infrastructure` child, is a context. Contexts can nest in groups, such as `src/contexts/agency/hhrr/salaries/`.
 - A group holds no file of its own. Only the business root holds `kernel.ts` (`ddd/parent-no-code`, `ddd/one-kernel`).
 - The CQRS folders are `commands/`, `queries/` and `event-handlers/` (`ddd/cqrs-folders`). A `commands/NAME/` or `queries/NAME/` folder holds one `*.command.ts` or `*.query.ts` and one `*.handler.ts` (`ddd/handler-pair`).
-- The module file of a context imports the module of another context. A file in `event-handlers/` imports the `*.event.ts` of another context. No other file imports another context (`ddd/cross-context`).
+- The module file of a context imports the module of another context. A file in `event-handlers/` imports the `*.event.ts` of another context. No other file imports another context (`ddd/cross-context`). The convention puts an integration event interface in the root `shared/domain/`, so an event handler imports no other context.
 
 ## File names
 
@@ -90,3 +90,12 @@ The suffix is the second last dot part of the name, such as `aggregate` in `orde
 | `ddd-es/projection-read-only` | a `*.projection.ts` import of a repository port, an aggregate or a `commands/` path |
 
 `harness lint` runs the checks. `harness lint --json` gives the findings with their rule ids.
+
+## Patterns
+
+| Topic | In TypeScript |
+|---|---|
+| `use-cases.md` | The `*.command.ts` message and the `*.handler.ts` handler share one folder. A schema library checks the raw input in the controller. The message holds primitives. |
+| `composition-root.md` | `order.module.ts` wires one context. `contexts/kernel.ts` wires the modules. A DI container is an option: a class still gets its dependencies through its constructor. |
+| `events.md` | For event sourcing, hollywood-js (https://github.com/jorge07/hollywood) is one option. It gives a bus, a container, an event store and projections. A plain event bus also works. An integration event interface is a `*.event.ts` file in the root `shared/domain/`. |
+| `tests.md` | A test runner runs the `*.spec.ts` files. An object mother is a `*.mother.ts` file. The architecture test is `harness lint` with the canaries of the pack. |
