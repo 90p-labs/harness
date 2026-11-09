@@ -4,7 +4,7 @@ This page holds the repository layout, the test commands and the bug report for 
 
 ## Report a harness bug
 
-An agent files a bug about the harness with the `report` skill (`/report` on Claude Code). The skill reproduces the bug on a clean repository, fills `skills/report/references/issue-template.md` and shows a dry-run to the user. It files the issue only after the user says yes:
+An agent files a bug about the harness with the `report` skill (`/90p:report` on Claude Code). The skill reproduces the bug on a clean repository, fills `skills/report/references/issue-template.md` and shows a dry-run to the user. It files the issue only after the user says yes:
 
 ```console
 $ harness report --dry-run --title "hook: a bad Stop payload exits 2" --body-file draft.md

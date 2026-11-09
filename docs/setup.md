@@ -8,9 +8,20 @@ The plugin starts the binary through `bin/harness`, which runs `dist/harness-OS-
 
 - A command downloads the binary of release `v<plugin version>` with `gh`. Without `gh`, or when the download fails, it builds the binary with Go. Without both, it exits 127 and names the fix.
 - A hook never builds, because it must not block the session. It starts the `gh` download in the background and skips itself. A skipped hook prints `{}`, so the guard is off until the binary is there. When the download fails, the next hooks print its error, and a hook tries again after 10 minutes.
-- On a machine with Go and no `gh`, start `/harness:harness status` once (Codex: `$harness:harness status`). The skill runs `bin/harness version`, which builds the binary.
+- On a machine with Go and no `gh`, start `/90p:harness status` once (Codex: `$90p:harness status`). The skill runs `bin/harness version`, which builds the binary.
 
 The plugin puts no `harness` command on the `PATH`. The setup commands below and a gate such as `harness lint --json` need one: build it from source, or download the asset `harness-OS-ARCH` of release `v<plugin version>` (`gh release download v<plugin version> -R 90p-labs/harness -p harness-OS-ARCH`), make it executable and put it on the `PATH` as `harness`.
+
+## Move from the old plugin name
+
+The plugin was named `harness`. The plugin is now named `90p`. When both plugins are installed, each hook runs twice.
+
+1. Run `claude plugin uninstall harness@harness`.
+2. Run `claude plugin marketplace update harness`.
+3. Run `claude plugin install 90p@harness`.
+4. Run `/reload-plugins` or start a new session.
+
+The commands now start with `/90p:` (for example `/90p:harness`). The agents now start with `90p:` (for example `90p:reviewer`). Do this before `make install-claude`.
 
 ## Build from source
 

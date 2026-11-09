@@ -1,6 +1,6 @@
 ---
 name: lint-setup
-description: "Sets up the architecture rules of the harness catalogue on a project in any language: the native tool config, a wrapper lint plugin, and a temporary proof folder with one canary for each rule, run by harness lint canaries --proof and then deleted. Use when harness init prints the next step for the lint-setup skill, or when the user types /harness:lint-setup (Codex: $harness:lint-setup) with a language."
+description: "Sets up the architecture rules of the harness catalogue on a project in any language: the native tool config, a wrapper lint plugin, and a temporary proof folder with one canary for each rule, run by harness lint canaries --proof and then deleted. Use when harness init prints the next step for the lint-setup skill, or when the user types /90p:lint-setup (Codex: $90p:lint-setup) with a language."
 argument-hint: "[language]"
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: demo
-description: "Run a visible, paced browser walkthrough of an app feature with observed outcomes and console/network diagnostics. Use for a watched demo or QA walkthrough, including /demo (Codex: $harness:demo)."
+description: "Run a visible, paced browser walkthrough of an app feature with observed outcomes and console/network diagnostics. Use for a watched demo or QA walkthrough, including /90p:demo (Codex: $90p:demo)."
 ---
 
 ## Decision tree

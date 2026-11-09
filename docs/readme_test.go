@@ -21,7 +21,8 @@ const (
 )
 
 var (
-	installPaths = []string{"Claude Code", "Codex", "Build from source"}
+	installPaths   = []string{"Claude Code", "Codex", "Build from source"}
+	planViewImages = []string{"plan-view-summary.png", "plan-view-specs.png", "plan-view-tasks.png"}
 )
 
 func TestReadmeInstallOrder(t *testing.T) {
@@ -46,8 +47,11 @@ func TestReadmeInstallOrder(t *testing.T) {
 }
 
 const (
-	readmeMaxLines = 160
-	headingLine    = "## "
+	readmeMaxLines  = 170
+	headingLine     = "## "
+	firstRunHeading = "\n## Your first run\n"
+	readmeImagesDir = "docs/images/"
+	runsImagesDir   = "images/"
 
 	setupPage          = "docs/setup.md"
 	setupPinned        = "make install-claude"
@@ -76,6 +80,19 @@ func TestReadmeIsShort(t *testing.T) {
 	lines := strings.Count(repository.Read(t, readmeFile), "\n")
 	if lines > readmeMaxLines {
 		t.Errorf("%s has %d lines, want at most %d", readmeFile, lines, readmeMaxLines)
+	}
+}
+
+func TestReadmeShowsPlanView(t *testing.T) {
+	firstRun := repository.Section(t, repository.Read(t, readmeFile), firstRunHeading)
+	runs := repository.Read(t, runsPage)
+	for _, name := range planViewImages {
+		if !strings.Contains(firstRun, "("+readmeImagesDir+name+")") {
+			t.Errorf("the Your first run section of %s does not link %s%s", readmeFile, readmeImagesDir, name)
+		}
+		if !strings.Contains(runs, "("+runsImagesDir+name+")") {
+			t.Errorf("%s does not link %s%s", runsPage, runsImagesDir, name)
+		}
 	}
 }
 

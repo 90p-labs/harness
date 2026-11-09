@@ -1,6 +1,6 @@
 ---
 name: report
-description: "File a bug about the harness itself (the loop, the hooks, the guard rules, the gates, the CLI) as an issue in 90p-labs/harness, with reproduction steps, redacted traces, a fix suggestion and a workaround, after the user confirms the draft. Use when the user types /report (Codex: $harness:report), or asks to report a harness bug, a wrong guard deny or a wrong hook result."
+description: "File a bug about the harness itself (the loop, the hooks, the guard rules, the gates, the CLI) as an issue in 90p-labs/harness, with reproduction steps, redacted traces, a fix suggestion and a workaround, after the user confirms the draft. Use when the user types /90p:report (Codex: $90p:report), or asks to report a harness bug, a wrong guard deny or a wrong hook result."
 argument-hint: "[what went wrong]"
 ---
 

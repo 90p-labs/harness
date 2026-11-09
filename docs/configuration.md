@@ -207,7 +207,7 @@ The roles, and the agent names that the guard maps to each role:
 | `reviewer` | `reviewer`, `second-reviewer`, `code-reviewer`, `pr-reviewer` |
 | `advisor` | `advisor`: the check of a plan. It never counts as a reviewer for `review-models` |
 
-The guard compares the agent name in lower case, after the last `:`, so `harness:explorer` is `explorer`. An agent with another name is not checked.
+The guard compares the agent name in lower case, after the last `:`, so `90p:explorer` is `explorer`. An agent with another name is not checked.
 
 The hosts:
 

@@ -1,5 +1,5 @@
 {
-  "name": "harness",
+  "name": "90p",
   "version": "0.1.0",
   "description": "Drives a coding agent through a fixed loop: plan, work, review, ship and watch production, with guard hooks from a Go binary.",
   "keywords": ["harness", "workflow", "guard", "hooks", "ddd", "tdd"],
@@ -10,6 +10,6 @@
     "shortDescription": "Plan, build, verify, review and ship one change.",
     "developerName": "Jorge Arco",
     "category": "Coding",
-    "defaultPrompt": ["Use $harness:harness to plan, build, review and ship a change."]
+    "defaultPrompt": ["Use $90p:harness to plan, build, review and ship a change."]
   }
 }

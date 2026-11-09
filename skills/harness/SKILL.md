@@ -1,6 +1,6 @@
 ---
 name: harness
-description: "Drives one change through the harness loop: plan, approval, test-first work, verify gates, review and ship. Use when the user types /harness:harness (Codex: $harness:harness) with a prompt, or with status, approve or abandon, in a repository that has .harness.yaml."
+description: "Drives one change through the harness loop: plan, approval, test-first work, verify gates, review and ship. Use when the user types /90p:harness (Codex: $90p:harness) with a prompt, or with status, approve or abandon, in a repository that has .harness.yaml."
 argument-hint: "[prompt | status | approve | abandon]"
 ---
 

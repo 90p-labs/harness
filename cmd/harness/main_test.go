@@ -1209,7 +1209,7 @@ func editPlan(t *testing.T, dir, runID string, edit func(string) string) {
 }
 
 const (
-	reviewerDoneFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"subagent_type":"harness:reviewer","model":%q,"prompt":"review"}}`
+	reviewerDoneFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"subagent_type":"90p:reviewer","model":%q,"prompt":"review"}}`
 	modelSonnet        = "sonnet"
 	modelHaiku         = "haiku"
 	modelOpus          = "opus"
