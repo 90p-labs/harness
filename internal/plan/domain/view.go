@@ -9,6 +9,7 @@ type ViewRun struct {
 
 type ViewInput struct {
 	Doc      Document
+	Program  *Program
 	Problems []Problem
 	Links    Links
 	Run      ViewRun

@@ -15,4 +15,8 @@ const (
 	RuleDiagramRequired  RuleID = "diagram-required"
 	RuleTraceUnlinked    RuleID = "trace-unlinked"
 	RuleOpenQuestions    RuleID = "open-questions"
+	RuleRunField         RuleID = "run-field"
+	RuleRunDepends       RuleID = "run-depends"
+	RuleRunOverlap       RuleID = "run-overlap"
+	RulePlanKind         RuleID = "plan-kind"
 )
