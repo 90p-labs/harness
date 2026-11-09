@@ -29,13 +29,13 @@ roles:
     codex: [gpt-6-astra]
   explorer:
     claude: [haiku]
-    codex: [gpt-5.5]
+    codex: [gpt-6-luna]
   worker:
     claude: [sonnet, haiku]
-    codex: [gpt-5.6-luna, gpt-5.5]
+    codex: [gpt-6.1-sol, gpt-6-luna]
   reviewer:
     claude: [sonnet, haiku, opus]
-    codex: [gpt-5.6-terra, gpt-5.6-luna, gpt-5.5]
+    codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]
   advisor:
     claude: [fable]
     codex: [gpt-6-astra]
@@ -221,11 +221,11 @@ roles:
   lead:
     codex: [gpt-6-astra]
   explorer:
-    codex: [gpt-5.5]
+    codex: [gpt-6-luna]
   worker:
-    codex: [gpt-5.6-luna, gpt-5.5]
+    codex: [gpt-6.1-sol, gpt-6-luna]
   reviewer:
-    codex: [gpt-5.6-terra, gpt-5.6-luna, gpt-5.5]
+    codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]
   advisor:
     codex: [gpt-6-astra]
 ```

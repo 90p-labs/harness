@@ -195,7 +195,7 @@ The rule `review-models` needs 2 different reviewer models on `HEAD`. So a host 
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
-| `roles` | map of role to a map of host to a list of models | `lead.claude: [opus]`, `lead.codex: [gpt-6-astra]`, `explorer.claude: [haiku]`, `explorer.codex: [gpt-5.5]`, `worker.claude: [sonnet, haiku]`, `worker.codex: [gpt-5.6-luna, gpt-5.5]`, `reviewer.claude: [sonnet, haiku, opus]`, `reviewer.codex: [gpt-5.6-terra, gpt-5.6-luna, gpt-5.5]`, `advisor.claude: [fable]`, `advisor.codex: [gpt-6-astra]` | `HARNESS_ROLES_<ROLE>_CLAUDE` and `HARNESS_ROLES_<ROLE>_CODEX` for the 5 roles with a default, such as `HARNESS_ROLES_LEAD_CLAUDE`. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
+| `roles` | map of role to a map of host to a list of models | `lead.claude: [opus]`, `lead.codex: [gpt-6-astra]`, `explorer.claude: [haiku]`, `explorer.codex: [gpt-6-luna]`, `worker.claude: [sonnet, haiku]`, `worker.codex: [gpt-6.1-sol, gpt-6-luna]`, `reviewer.claude: [sonnet, haiku, opus]`, `reviewer.codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]`, `advisor.claude: [fable]`, `advisor.codex: [gpt-6-astra]` | `HARNESS_ROLES_<ROLE>_CLAUDE` and `HARNESS_ROLES_<ROLE>_CODEX` for the 5 roles with a default, such as `HARNESS_ROLES_LEAD_CLAUDE`. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
 
 The roles, and the agent names that the guard maps to each role:
 
