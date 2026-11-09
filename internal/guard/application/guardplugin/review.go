@@ -72,12 +72,14 @@ func (p reviewShip) Handle(ctx context.Context, envelope shareddomain.Envelope) 
 	if err != nil {
 		return shareddomain.Verdict{}, err
 	}
-	var listed []string
-	for _, roles := range p.deps.Models {
-		listed = append(listed, roles[string(shareddomain.RoleReviewer)]...)
+	listed := make(map[shareddomain.Host][]string, len(p.deps.Models))
+	for host, roles := range p.deps.Models {
+		if list := slices.Clone(roles[string(shareddomain.RoleReviewer)]); len(list) > 0 {
+			slices.Sort(list)
+			listed[host] = slices.Compact(list)
+		}
 	}
-	slices.Sort(listed)
-	reason, denied := domain.DenyReviewModels(models, slices.Compact(listed))
+	reason, denied := domain.DenyReviewModels(models, listed)
 	if !denied {
 		return shareddomain.Verdict{Kind: shareddomain.VerdictAllow}, nil
 	}

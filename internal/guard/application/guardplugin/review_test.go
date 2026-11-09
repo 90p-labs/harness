@@ -18,6 +18,10 @@ const (
 	agentWorker   = "worker"
 	agentExplorer = "explorer"
 	modelOpus     = "opus"
+	modelHaiku    = "haiku"
+	modelSol      = "gpt-6.1-sol"
+	modelTerra    = "gpt-6.1-terra"
+	modelAstra    = "gpt-6-astra"
 	otherEvent    = "submit-plan"
 	writeFailure  = "disk full"
 )
@@ -121,6 +125,33 @@ func TestReviewModelsShip(t *testing.T) {
 				if c.deny && !strings.Contains(v.Reason, m) {
 					t.Errorf("reason %q does not list %q", v.Reason, m)
 				}
+			}
+		})
+	}
+
+	hostLists := []struct {
+		name   string
+		models []string
+		deny   bool
+	}{
+		{"claude list incomplete", []string{modelSonnet, modelHaiku}, true},
+		{"claude list complete", []string{modelSonnet, modelHaiku, modelOpus}, false},
+	}
+	for _, c := range hostLists {
+		t.Run(c.name, func(t *testing.T) {
+			d := deps(&fakeStop{})
+			hostStore := &reviewStore{models: c.models}
+			d.ReviewModels = hostStore.read
+			d.Models = map[shareddomain.Host]map[string][]string{
+				shareddomain.HostClaude: {string(shareddomain.RoleReviewer): {modelSonnet, modelHaiku, modelOpus}},
+				shareddomain.HostCodex:  {string(shareddomain.RoleReviewer): {modelSol, modelTerra, modelAstra}},
+			}
+			v := dispatch(t, newBus(build(t, nil, d)), transitionEnvelope(t, shareddomain.TransitionApproveReview))
+			if (v.Kind == shareddomain.VerdictDeny) != c.deny {
+				t.Fatalf("verdict = %+v, want deny=%v", v, c.deny)
+			}
+			if c.deny && !strings.Contains(v.Reason, modelOpus) {
+				t.Errorf("reason %q does not name %q", v.Reason, modelOpus)
 			}
 		})
 	}
