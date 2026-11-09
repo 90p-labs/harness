@@ -42,7 +42,7 @@ func TestConfigurationPage(t *testing.T) {
 		}
 	}
 
-	rows := map[string][]string{guardSection: {guarddomain.RuleStopHoldsTurn}}
+	rows := map[string][]string{guardSection: {guarddomain.RuleStopHoldsTurn, guarddomain.RuleReviewModels}}
 	for _, rule := range guarddomain.Rules() {
 		rows[guardSection] = append(rows[guardSection], rule.ID)
 	}
@@ -50,7 +50,7 @@ func TestConfigurationPage(t *testing.T) {
 		rows[lintSection] = append(rows[lintSection], string(pack))
 	}
 	rows[deploySection] = deploydomain.Tools
-	for _, role := range []shareddomain.Role{shareddomain.RoleLead, shareddomain.RoleWorker, shareddomain.RoleReviewer, shareddomain.RoleExplorer} {
+	for _, role := range []shareddomain.Role{shareddomain.RoleLead, shareddomain.RoleWorker, shareddomain.RoleReviewer, shareddomain.RoleExplorer, shareddomain.RoleAdvisor} {
 		rows[rolesSection] = append(rows[rolesSection], string(role))
 	}
 	for _, host := range []shareddomain.Host{shareddomain.HostClaude, shareddomain.HostCodex} {

@@ -211,10 +211,13 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `test-no-focus-skip` | `tool.before` | A focused or skipped test in a test edit |
 | `shell-write-source` | `tool.before` | A shell write to a source file |
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
-| `agent-model-routing` | `tool.before` | An agent call whose model differs from the role table of the host |
+| `agent-model-routing` | `tool.before` | An agent call whose model is not in the list of its role for the host, or that has no model |
+| `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 distinct models reviewed `HEAD` |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD`. A push that only deletes remote refs is allowed |
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
+
+After each Agent call of the `reviewer` role, a hook writes a review record: the repo, `HEAD` and the model, in the gate state beside the commit checks. The rule `review-models` reads the distinct models of `HEAD`. A background agent sends `tool.after` at dispatch, so a record proves a dispatch, not a finished review. `subagent.stopped` carries no model, so this limit stays. A repository on Codex sets `guard.disabled: [review-models]`, because Codex sends no Agent call with a model.
 
 Event kinds:
 
@@ -495,7 +498,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `live.environment` | `production` | The GitHub deployment environment |
 | `live.rollback` | empty | The rollback line of the findings |
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
-| `roles` | `explorer.claude: haiku`, `worker.claude: sonnet` | A role is `lead`, `worker`, `reviewer` or `explorer`; a host is `claude` or `codex` |
+| `roles` | `explorer.claude: [haiku]`, `worker.claude: [sonnet, haiku]`, `reviewer.claude: [sonnet, haiku, opus]`, `advisor.claude: [fable]` | A role is `lead`, `worker`, `reviewer`, `explorer` or `advisor`; a host is `claude` or `codex`. A value is a list of models; a scalar is a list of one |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
 | `deploy.disabled` | empty list | A list of default deploy plugin names (`helm`, `promtool`); an unknown name is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |

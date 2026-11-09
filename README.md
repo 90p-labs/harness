@@ -15,7 +15,7 @@ Status: pre-alpha.
 The harness is a plugin for Claude Code and for Codex. The plugin installs these parts:
 
 - The skills `harness` (the loop), `pr-open` (the pull request of the ship step), `lint-setup` (the architecture rules of a project), `ddd` (the DDD layout that the lint packs check) and `report` (a bug about the harness).
-- The agents `explorer` (the facts for a plan), `reviewer` (the review of a run) and `linter` (the lint setup).
+- The agents `explorer` (the facts for a plan), `advisor` (the check of a plan), `worker` (one task of a plan), `reviewer` (the review of a run, through one lens) and `linter` (the lint setup).
 - The hooks of the host.
 
 Each skill starts with a decision tree, so an agent reads only the part that it needs. The `pr-open` skill opens the pull request of the ship step. Its body answers Why, What and How, in this order, with the plan diagrams in How. The hooks act only in a git repository with `.harness.yaml` at its top level. In any other folder, they do nothing.
@@ -123,8 +123,14 @@ run:
   approval: true          # wait for a human approval of each plan
   max_review_rounds: 3    # the last allowed rework blocks the run
 roles:
+  explorer:
+    claude: [haiku]
+  worker:
+    claude: [sonnet, haiku]
   reviewer:
-    claude: opus          # the guard denies an agent call on another model
+    claude: [sonnet, haiku, opus]  # the guard denies an agent call on another model
+  advisor:
+    claude: [fable]
 lint:
   packs: [ddd]
 verify:
@@ -458,8 +464,8 @@ With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes 
 | Plan check | `submit-plan`, `amend` and `approve-plan`: the plan rules, then the `plan.submitted` plugins |
 | Gates | `harness verify` in `working`; the review needs a passing proof of each criterion |
 | Trace check | `submit-for-review`: the trees, the commits and the owned files against the branch |
-| Reviewers | `reviewing`: the agents of the `reviewer` role, then `ship` or `rework` |
-| Guard | each tool call (`tool.before`) and each stop (`turn.stopping`) of the agent, in every phase |
+| Reviewers | `reviewing`: the agents of the `reviewer` role, on 2 models with 2 lenses (Spec and Standards), then `ship` or `rework`. `ship` needs 2 models on `HEAD` |
+| Guard | each tool call (`tool.before` and `tool.after`), each stop (`turn.stopping`) of the agent and each run transition (`run.transition.before`), in every phase |
 | Plugins | every transition (`run.transition.before`, `run.transition.after`), each gate, each plan, each host hook, gate detection, lint and live signals |
 | Live check | `releasing` and `observing`: `harness live check` reads the deploy and the signals |
 

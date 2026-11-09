@@ -131,11 +131,13 @@ plugins:
 
 ## `roles`
 
-The model of each agent role on each host. The guard rule `agent-model-routing` denies an agent call whose model is not the model of its role. A role with no model for the host is not checked.
+The models of each agent role on each host. A host maps to a list of models, and a single model still loads as a list of one. The guard rule `agent-model-routing` denies an agent call whose model is not in the list of its role. A role with no model for the host is not checked.
+
+The rule `review-models` needs 2 different reviewer models on `HEAD`. So a host that lists a `reviewer` role needs 2 or more models there, or `review-models` in `guard.disabled`. With one model, `harness run ship` is always denied.
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
-| `roles` | map of role to a map of host to model | `explorer.claude: haiku`, `worker.claude: sonnet` | `HARNESS_ROLES_EXPLORER_CLAUDE` and `HARNESS_ROLES_WORKER_CLAUDE` only | The model for each role and host |
+| `roles` | map of role to a map of host to a list of models | `explorer.claude: [haiku]`, `worker.claude: [sonnet, haiku]`, `reviewer.claude: [sonnet, haiku, opus]`, `advisor.claude: [fable]` | `HARNESS_ROLES_<ROLE>_CLAUDE` for the 4 roles with a default. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
 
 The roles, and the agent names that the guard maps to each role:
 
@@ -145,6 +147,7 @@ The roles, and the agent names that the guard maps to each role:
 | `explorer` | `explore`, `explorer`, `general-purpose`, `claude-code-guide` |
 | `worker` | `worker` |
 | `reviewer` | `reviewer`, `second-reviewer`, `code-reviewer`, `pr-reviewer` |
+| `advisor` | `advisor`: the check of a plan. It never counts as a reviewer for `review-models` |
 
 The guard compares the agent name in lower case, after the last `:`, so `harness:explorer` is `explorer`. An agent with another name is not checked.
 
@@ -162,7 +165,7 @@ The file merges with the defaults for each role and host. A host that you set re
 ```yaml
 roles:
   reviewer:
-    claude: opus
+    claude: [sonnet, opus]
   worker:
     claude: sonnet
 ```
@@ -193,6 +196,7 @@ The rule ids:
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` before `harness verify --commits` passes for `HEAD` |
 | `approval-no-forge` | `tool.before` | A question tool call with answers in its input, or a shell call of `harness hook` |
 | `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`) |
+| `review-models` | `run.transition.before` | `harness run ship` when fewer than 2 different models reviewed `HEAD`. A hook records the model of each `reviewer` agent call in the reviewing phase. A Codex repository turns it off, because Codex sends no model in an agent call |
 
 ```yaml
 guard:
@@ -369,15 +373,15 @@ gates:
 
 ### The model of each role
 
-1. Set the model under the role and the host.
-2. Start the agent with that model. Else the rule `agent-model-routing` denies the call and names the model.
+1. Set the models under the role and the host: one model, or a list.
+2. Start the agent with a model from that list. Else the rule `agent-model-routing` denies the call and names the model.
 
 ```yaml
 roles:
   explorer:
     claude: haiku
   reviewer:
-    claude: opus
+    claude: [sonnet, haiku, opus]
 ```
 
 ### Turn off one guard rule
@@ -395,7 +399,8 @@ guard:
 
 1. Run `harness init --host codex`. It writes the hooks into `.codex/hooks.json`.
 2. The default roles name only the `claude` host, so the guard checks no model on Codex. To check one, set the Codex model under the role, as `roles.reviewer.codex`.
-3. Commit `.harness.yaml` and `.codex/hooks.json`.
+3. Add `review-models` to `guard.disabled`. Codex sends no model in an agent call, so else `harness run ship` is always denied.
+4. Commit `.harness.yaml` and `.codex/hooks.json`.
 
 ### A lint pack setting
 
