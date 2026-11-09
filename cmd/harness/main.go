@@ -73,7 +73,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	if failed, err := root.ExecuteContextC(ctx); err != nil {
+	if failed, err := root.ExecuteContextC(telemetry.ParentFromEnv(ctx)); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		switch {
 		case errors.As(err, new(refusalError)):

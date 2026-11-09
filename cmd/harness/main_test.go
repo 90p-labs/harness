@@ -4,13 +4,20 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
+
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"google.golang.org/protobuf/proto"
 
 	plandomain "github.com/jorge07/harness/internal/plan/domain"
 	"github.com/jorge07/harness/internal/run/domain"
@@ -30,8 +37,57 @@ const (
 
 func clearOTLPEnv(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{envOTLPEndpoint, envOTLPTraces, envOTLPMetrics} {
+	for _, name := range []string{envOTLPEndpoint, envOTLPTraces, envOTLPMetrics, envTraceparent} {
 		t.Setenv(name, "")
+	}
+}
+
+const (
+	envTraceparent    = "TRACEPARENT"
+	parentTraceID     = "0af7651916cd43dd8448eb211c80319c"
+	parentTraceparent = "00-" + parentTraceID + "-b7ad6b7169203331-01"
+	diagramInput      = "flowchart TD\n    a --> b +\n"
+)
+
+func TestTraceparentParent(t *testing.T) {
+	clearOTLPEnv(t)
+	clearHarnessEnv(t)
+	t.Chdir(t.TempDir())
+	var mu sync.Mutex
+	var traceIDs []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		request := &collectortrace.ExportTraceServiceRequest{}
+		if proto.Unmarshal(body, request) == nil {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, resource := range request.GetResourceSpans() {
+				for _, scope := range resource.GetScopeSpans() {
+					for _, span := range scope.GetSpans() {
+						traceIDs = append(traceIDs, fmt.Sprintf("%x", span.GetTraceId()))
+					}
+				}
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(envOTLPEndpoint, server.URL)
+	t.Setenv(envTraceparent, parentTraceparent)
+
+	code, _, stderr := executeWithStdin(t, diagramInput, commandDiagram)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if len(traceIDs) == 0 {
+		t.Fatal("the collector got no span")
+	}
+	for _, id := range traceIDs {
+		if id != parentTraceID {
+			t.Errorf("span trace id = %s, want %s", id, parentTraceID)
+		}
 	}
 }
 

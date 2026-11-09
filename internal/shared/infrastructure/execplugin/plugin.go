@@ -11,17 +11,14 @@ import (
 	"syscall"
 	"time"
 
-	"go.opentelemetry.io/otel/propagation"
-
 	"github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
 const (
 	DefaultTimeout = 5 * time.Second
 	waitDelay      = 500 * time.Millisecond
 	killGrace      = 2 * time.Second
-	traceparentEnv = "TRACEPARENT"
-	traceparentKey = "traceparent"
 )
 
 var errEmptyCommand = errors.New("empty command")
@@ -74,7 +71,10 @@ func (p ExecPlugin) Handle(ctx context.Context, envelope domain.Envelope) (domai
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return stopGroup(cmd.Process.Pid) }
 	cmd.WaitDelay = waitDelay
-	cmd.Env = append(os.Environ(), traceparentVar(callCtx))
+	cmd.Env = os.Environ()
+	if entry, ok := telemetry.TraceparentEntry(callCtx); ok {
+		cmd.Env = append(cmd.Env, entry)
+	}
 
 	if err := cmd.Run(); err != nil && !exitedCleanly(cmd, err) {
 		if callCtx.Err() != nil {
@@ -112,10 +112,4 @@ func stopGroup(pid int) error {
 // A plugin that exits 0 but leaves a child on stdout trips WaitDelay; its verdict is already written.
 func exitedCleanly(cmd *exec.Cmd, err error) bool {
 	return errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success()
-}
-
-func traceparentVar(ctx context.Context) string {
-	carrier := propagation.MapCarrier{}
-	propagation.TraceContext{}.Inject(ctx, carrier)
-	return traceparentEnv + "=" + carrier.Get(traceparentKey)
 }
