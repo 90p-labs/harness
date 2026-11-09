@@ -59,9 +59,8 @@ func resolveRun(cmd *cobra.Command) {
 	if err != nil {
 		return
 	}
-	ctx = telemetry.WithRun(ctx, worktree, "")
 	ref := resolveActiveRun(ctx, cmd.Root().PersistentFlags(), cwd, domain.RunKey{Repo: repo, Worktree: worktree})
-	cmd.SetContext(context.WithValue(telemetry.WithRun(ctx, "", ref.ID), runRefKey{}, ref))
+	cmd.SetContext(context.WithValue(telemetry.WithRun(ctx, worktree, ref.ID), runRefKey{}, ref))
 }
 
 func resolveActiveRun(ctx context.Context, flags *pflag.FlagSet, cwd string, key domain.RunKey) shareddomain.RunRef {
@@ -73,7 +72,7 @@ func resolveActiveRun(ctx context.Context, flags *pflag.FlagSet, cwd string, key
 	if err != nil || !dbal.FileExists(cfg.State.DSN, commonDir) {
 		return shareddomain.RunRef{}
 	}
-	db, err := dbal.Open(ctx, cfg.State.DSN, commonDir)
+	db, err := openState(ctx, cfg, commonDir)
 	if err != nil {
 		return shareddomain.RunRef{}
 	}

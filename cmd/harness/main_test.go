@@ -25,6 +25,7 @@ import (
 	"github.com/jorge07/harness/internal/run/domain"
 	"github.com/jorge07/harness/internal/run/ui/approvalplugin"
 	shareddomain "github.com/jorge07/harness/internal/shared/domain"
+	"github.com/jorge07/harness/internal/shared/infrastructure/config"
 	"github.com/jorge07/harness/internal/shared/infrastructure/telemetry"
 )
 
@@ -547,6 +548,23 @@ func TestHookSpansCarryTheRun(t *testing.T) {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
 	assertSpansCarryRun(t, spans(), runID, dir)
+}
+
+func TestPreRunHonoursStateDSN(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+	stateFlag := "--" + config.FlagStateDSN
+	dsn := "sqlite:" + filepath.Join(t.TempDir(), "elsewhere.db")
+	_, stdout, _ := execute(t, stateFlag, dsn, commandRun, "start", "Add the login page")
+	runID := startedRunID(t, stdout)
+	spans := collectSpans(t)
+
+	code, _, stderr := executeWithStdin(t, hookSessionJSON, stateFlag, dsn, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	assertSpansCarryRun(t, spans(), runID, "")
 }
 
 func TestHookSpansMarkNoRun(t *testing.T) {
