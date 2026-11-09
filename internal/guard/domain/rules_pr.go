@@ -27,15 +27,17 @@ const (
 	nextStepBody       = "pass the text inline, or write the file in a separate call"
 	nextStepShape      = "write the body with the lines ## Why, ## What and ## How, in this order"
 	reasonBodyFileRead = "cannot read the body file: "
+	nextStepBottomLine = "start the body with the bottom line: one or two sentences above ## Why"
 	nextStepWords      = "split the line into lines of 40 words or fewer"
 )
 
 var (
-	mergePath      = regexp.MustCompile(`pulls/\d+/merge`)
-	bodySections   = []string{"## Why", "## What", "## How"}
-	bodyFlags      = []string{"--body", "-b"}
-	bodyFileFlags  = []string{"--body-file", "-F"}
-	prBodyCommands = []string{subCreate, subEdit}
+	mergePath       = regexp.MustCompile(`pulls/\d+/merge`)
+	markdownHeading = regexp.MustCompile(`^#{1,6}(\s|$)`)
+	bodySections    = []string{"## Why", "## What", "## How"}
+	bodyFlags       = []string{"--body", "-b"}
+	bodyFileFlags   = []string{"--body-file", "-F"}
+	prBodyCommands  = []string{subCreate, subEdit}
 )
 
 func denyPRMerge(call ToolCall, _ RuleContext) (string, bool) {
@@ -144,5 +146,12 @@ func checkSections(lines []string) (string, bool) {
 			return deny(fmt.Sprintf("%s is before %s", bodySections[i], bodySections[i-1]), nextStepShape)
 		}
 	}
+	if !slices.ContainsFunc(outside[:at[0]], isBottomLine) {
+		return deny("the body has no bottom line above "+bodySections[0], nextStepBottomLine)
+	}
 	return "", false
+}
+
+func isBottomLine(line string) bool {
+	return line != "" && !markdownHeading.MatchString(line)
 }

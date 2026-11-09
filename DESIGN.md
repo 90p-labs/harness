@@ -203,7 +203,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 |---|---|---|
 | `pr-no-merge` | `tool.before` | `gh pr merge` |
 | `pr-draft-only` | `tool.before` | `gh pr create` without `--draft` |
-| `pr-body-shape` | `tool.before` | A PR body with no `## Why`, `## What` or `## How`, these sections out of order, a line above 40 words, or a diagram with no marks |
+| `pr-body-shape` | `tool.before` | A PR body with no `## Why`, `## What` or `## How`, these sections out of order, a body with no bottom line above `## Why`, a line above 40 words, or a diagram with no marks |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch |
 | `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |

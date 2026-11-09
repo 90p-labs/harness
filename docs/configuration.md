@@ -242,7 +242,7 @@ The rule ids:
 |---|---|---|
 | `pr-no-merge` | `tool.before` | `gh pr merge` |
 | `pr-draft-only` | `tool.before` | `gh pr create` without `--draft` |
-| `pr-body-shape` | `tool.before` | A PR body without `## Why`, `## What` and `## How` in this order, a line above 40 words, or a diagram with no marks |
+| `pr-body-shape` | `tool.before` | A PR body without `## Why`, `## What` and `## How` in this order, a body with no bottom line above `## Why`, a line above 40 words, or a diagram with no marks |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch (see `git`) |
 | `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |
