@@ -110,7 +110,7 @@ run:
 
 ## `plugins`
 
-Your own commands on the event bus. The harness writes the event envelope as JSON on stdin and reads one verdict from stdout. The [README plugins section](../README.md#plugins) gives the verdict format and four examples.
+Your own commands on the event bus. The harness writes the event envelope as JSON on stdin and reads one verdict from stdout. The [plugins page](plugins.md) gives the verdict format and an example for each plugin kind.
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
@@ -410,7 +410,7 @@ live:
 3. Add `.harness/` to `.gitignore`.
 4. Commit `.harness.yaml`, `.harness-lint/` and the host config.
 
-The [README](../README.md#set-up-a-repository) gives the step by step setup without `harness init`.
+The [setup page](setup.md#step-by-step) gives the step by step setup without `harness init`.
 
 ### A gate with paths and needs
 
