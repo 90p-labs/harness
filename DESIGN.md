@@ -1179,7 +1179,7 @@ The hook command also fills `Envelope.Run` with the id and the phase of the acti
 
 ## Report command
 
-`harness report --title T --body-file F` files a harness bug as an issue in `jorge07/harness` with the label `bug`. The skill `skills/report/` guides the agent: reproduce, collect the traces, write the draft, run a dry-run, wait for the user, and file.
+`harness report --title T --body-file F` files a harness bug as an issue in `90p-labs/harness` with the label `bug`. The skill `skills/report/` guides the agent: reproduce, collect the traces, write the draft, run a dry-run, wait for the user, and file.
 
 The draft is markdown. It needs each heading below with text. A section with a `[fill: ...]` placeholder counts as missing. A heading inside a code fence does not count.
 
@@ -1197,7 +1197,7 @@ Rules:
 - The command puts an `### Environment` block directly after `## Traces`: the harness version, the OS and architecture, and the active run id and phase, or `none`.
 - Then it redacts the title and the body. It writes `<redacted>` for an email, a GitHub, Slack, GitLab or npm token, an API key, an AWS key, an `Authorization` header value, a JWT, a private key block and a URL credential. It also redacts the value of a key or a flag whose name holds `token`, `secret`, `password`, `api_key`, `access_key` or `private_key`. It writes `~` for the home folder, also in its dash-encoded form `-Users-<name>`, and for any `/Users/<name>` and `/home/<name>`. A `git@host:path` remote stays.
 - `--dry-run` prints the title, a blank line and the body. It files nothing.
-- Without `--dry-run`, it runs `gh issue create -R jorge07/harness --title T --label bug --body-file -` with the body on stdin, and prints the issue URL. A gh error exits 1 with the gh stderr.
+- Without `--dry-run`, it runs `gh issue create -R 90p-labs/harness --title T --label bug --body-file -` with the body on stdin, and prints the issue URL. A gh error exits 1 with the gh stderr.
 
 The live and report modules run gh through `internal/shared/infrastructure/github`.
 

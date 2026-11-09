@@ -8,7 +8,7 @@ Accepted, 2026-11-07.
 
 Kodify is a TypeScript harness with company parts and several known defects. The project needs an open source harness that anyone can extend.
 
-The module is `github.com/jorge07/harness`. The binary is `harness`. The license is MIT.
+The module is `github.com/90p-labs/harness`. The binary is `harness`. The license is MIT.
 
 ## Decision
 
