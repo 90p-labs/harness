@@ -99,6 +99,29 @@ func execute(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	return executeWithStdin(t, "", args...)
 }
 
+func TestPRCheck(t *testing.T) {
+	body := filepath.Join(t.TempDir(), "body.md")
+	write := func(text string) {
+		if err := os.WriteFile(body, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.\n")
+	if code, stdout, _ := execute(t, "pr", "check", "--body-file", body); code != exitOK || stdout != "ok\n" {
+		t.Fatalf("good body: code = %d, stdout = %q", code, stdout)
+	}
+
+	write("Bottom line: x.\n\n## Why\nBecause.\n")
+	if code, stdout, _ := execute(t, "pr", "check", "--body-file", body); code != exitRuntime || !strings.Contains(stdout, "the body has no ## What line") {
+		t.Fatalf("bad body: code = %d, stdout = %q", code, stdout)
+	}
+
+	if code, _, stderr := execute(t, "pr", "check"); code != exitUsage || !strings.Contains(stderr, "--body-file is required") {
+		t.Fatalf("no flag: code = %d, stderr = %q", code, stderr)
+	}
+}
+
 func executeWithStdin(t *testing.T, stdin string, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	previous := version

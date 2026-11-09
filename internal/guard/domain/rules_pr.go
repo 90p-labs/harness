@@ -21,13 +21,16 @@ const (
 	fenceMarker        = "```"
 	fenceMermaid       = "mermaid"
 	maxBodyWords       = 40
+	wordsQuoted        = 6
+	problemSeparator   = "; "
+	reasonJoin         = ". "
 	nextStepUser       = "leave it to the user"
 	nextStepDraft      = "open the pull request with --draft"
 	nextStepDiagram    = "draw it with `harness diagram`"
-	nextStepBody       = "pass the text inline, or write the file in a separate call"
+	nextStepBody       = "write the file in a separate call and pass a literal absolute path, or pass the text inline"
 	nextStepShape      = "write the body with the lines ## Why, ## What and ## How, in this order"
 	reasonBodyFileRead = "cannot read the body file: "
-	nextStepBottomLine = "start the body with the bottom line: one or two sentences above ## Why"
+	nextStepBottomLine = "start the body with the bottom line: one or two sentences above %s"
 	nextStepWords      = "split the line into lines of 40 words or fewer"
 )
 
@@ -93,14 +96,20 @@ func checkBody(body string) (string, bool) {
 	if strings.TrimSpace(body) == "" {
 		return "", false
 	}
-	lines := strings.Split(body, "\n")
-	if reason, denied := checkSections(lines); denied {
-		return reason, true
+	if problems := BodyProblems(body); len(problems) > 0 {
+		return strings.Join(problems, problemSeparator), true
 	}
+	return "", false
+}
+
+func BodyProblems(body string) []string {
+	lines := strings.Split(body, "\n")
+	problems := sectionProblems(lines)
 	var diagram []string
 	inFence, inMermaid := false, false
-	for _, line := range lines {
+	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		words := strings.Fields(line)
 		switch {
 		case strings.HasPrefix(trimmed, fenceMarker) && !inFence:
 			inFence = true
@@ -109,21 +118,26 @@ func checkBody(body string) (string, bool) {
 		case strings.HasPrefix(trimmed, fenceMarker):
 			inFence = false
 			if inMermaid {
-				if problems := shareddomain.CheckMarks(strings.Join(diagram, "\n")); len(problems) > 0 {
-					return deny("the mermaid diagram is not marked: "+problems[0], nextStepDiagram)
+				for _, mark := range shareddomain.CheckMarks(strings.Join(diagram, "\n")) {
+					problems = append(problems, problem("the mermaid diagram is not marked: "+mark, nextStepDiagram))
 				}
 			}
 			inMermaid = false
 		case inFence:
 			diagram = append(diagram, line)
-		case len(strings.Fields(line)) > maxBodyWords:
-			return deny(fmt.Sprintf("a body line has more than %d words", maxBodyWords), nextStepWords)
+		case len(words) > maxBodyWords:
+			reason := fmt.Sprintf("line %d has %d words, more than %d words: %q", i+1, len(words), maxBodyWords, strings.Join(words[:wordsQuoted], " "))
+			problems = append(problems, problem(reason, nextStepWords))
 		}
 	}
-	return "", false
+	return problems
 }
 
-func checkSections(lines []string) (string, bool) {
+func problem(reason, nextStep string) string {
+	return reason + reasonJoin + nextStep
+}
+
+func sectionProblems(lines []string) []string {
 	var outside []string
 	inFence := false
 	for _, line := range lines {
@@ -134,22 +148,26 @@ func checkSections(lines []string) (string, bool) {
 			outside = append(outside, trimmed)
 		}
 	}
-	at := make([]int, len(bodySections))
-	for i, section := range bodySections {
-		at[i] = slices.Index(outside, section)
-		if at[i] < 0 {
-			return deny(fmt.Sprintf("the body has no %s line", section), nextStepShape)
+	var problems []string
+	firstSection, firstName, prevAt, prevName := len(outside), bodySections[0], -1, ""
+	for _, section := range bodySections {
+		at := slices.Index(outside, section)
+		if at < 0 {
+			problems = append(problems, problem(fmt.Sprintf("the body has no %s line", section), nextStepShape))
+			continue
 		}
-	}
-	for i := 1; i < len(at); i++ {
-		if at[i] < at[i-1] {
-			return deny(fmt.Sprintf("%s is before %s", bodySections[i], bodySections[i-1]), nextStepShape)
+		if at < firstSection {
+			firstSection, firstName = at, section
 		}
+		if at < prevAt {
+			problems = append(problems, problem(fmt.Sprintf("%s is before %s", section, prevName), nextStepShape))
+		}
+		prevAt, prevName = at, section
 	}
-	if !slices.ContainsFunc(outside[:at[0]], isBottomLine) {
-		return deny("the body has no bottom line above "+bodySections[0], nextStepBottomLine)
+	if !slices.ContainsFunc(outside[:firstSection], isBottomLine) {
+		problems = append(problems, problem("the body has no bottom line above "+firstName, fmt.Sprintf(nextStepBottomLine, firstName)))
 	}
-	return "", false
+	return problems
 }
 
 func isBottomLine(line string) bool {

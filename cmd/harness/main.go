@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	guardcli "github.com/90p-labs/harness/internal/guard/ui/cli"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 )
@@ -114,6 +115,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newVerifyCommand(root.PersistentFlags()), newGatesCommand(root.PersistentFlags()), newLintCommand(root.PersistentFlags(), version), newLiveCommand(root.PersistentFlags()))
 	root.AddCommand(newInitCommand(root.PersistentFlags(), version))
 	root.AddCommand(newReportCommand(root.PersistentFlags()))
+	root.AddCommand(guardcli.NewPRCommand())
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",

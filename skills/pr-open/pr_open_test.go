@@ -13,11 +13,13 @@ const (
 	designFile  = "DESIGN.md"
 	readmeFile  = "README.md"
 	prOpenSkill = "skills/pr-open/SKILL.md"
+	prCheckStep = "harness pr check --body-file"
+	prCreate    = "gh pr create"
 )
 
 var (
 	prBodySections = []string{"## Why", "## What", "## How"}
-	prOpenSteps    = []string{"harness run status", "harness diagram", "harness verify --commits", "gh pr create --draft", "gh pr edit", "--body-file"}
+	prOpenSteps    = []string{"harness run status", "harness diagram", "harness verify --commits", prCheckStep, "gh pr create --draft", "gh pr edit", "--body-file"}
 )
 
 func TestPROpen(t *testing.T) {
@@ -35,6 +37,9 @@ func TestPROpen(t *testing.T) {
 		if !strings.Contains(skill, step) {
 			t.Errorf("%s does not name %q", prOpenSkill, step)
 		}
+	}
+	if strings.Index(skill, prCheckStep) > strings.Index(skill, prCreate) {
+		t.Errorf("%s runs %q after %q", prOpenSkill, prCheckStep, prCreate)
 	}
 	if keys := repository.FrontmatterKeys(t, prOpenSkill); !slices.Equal(keys, []string{"argument-hint", "description", "name"}) {
 		t.Errorf("%s frontmatter keys = %v, want argument-hint, description and name", prOpenSkill, keys)

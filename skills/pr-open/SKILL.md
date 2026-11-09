@@ -92,9 +92,10 @@ Write the body in a file `pr-body.md` in the scratchpad, or in the temp dir on a
 ## 4. Open or edit the pull request
 
 1. Run `harness verify --commits <base>`. The guard denies a push and a create before it passes.
-2. Push the branch: `git push -u origin HEAD`.
-3. Run `gh pr view --json url,state`. With an open pull request, run `gh pr edit --body-file <body>`.
-4. With no pull request, run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file <body>`.
-5. Report the URL. Do not mark the pull request ready and do not merge it.
+2. Run `harness pr check --body-file <literal absolute path of the body file>`. Fix every problem that it prints. Write the path as a literal, not as a variable.
+3. Push the branch: `git push -u origin HEAD`.
+4. Run `gh pr view --json url,state`. With an open pull request, run `gh pr edit --body-file <body>`.
+5. With no pull request, run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file <body>`.
+6. Report the URL. Do not mark the pull request ready and do not merge it.
 
 When the guard denies the body, read the reason, fix the body file and run the command again.
