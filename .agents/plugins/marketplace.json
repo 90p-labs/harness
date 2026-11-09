@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "harness",
+      "name": "90p",
       "source": {
         "source": "local",
         "path": "./"

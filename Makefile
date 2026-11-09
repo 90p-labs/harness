@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X main.version=$(VERSION)
 PLATFORMS ?= darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 MARKETPLACE := harness
-PLUGIN := harness@$(MARKETPLACE)
+PLUGIN := 90p@$(MARKETPLACE)
 
 .PHONY: build dist test check install-claude
 

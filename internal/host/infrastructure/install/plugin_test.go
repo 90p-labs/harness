@@ -17,6 +17,8 @@ const (
 	claudeHooksFile   = "hooks/hooks.json"
 	codexHooksFile    = "hooks/codex.json"
 	repositoryRoot    = "./"
+	pluginName        = "90p"
+	marketplaceName   = "harness"
 )
 
 type manifest struct {
@@ -45,7 +47,12 @@ func TestPluginManifests(t *testing.T) {
 		t.Errorf("claude = %s %s, codex = %s %s, want one name and one version", claude.Name, claude.Version, codex.Name, codex.Version)
 	}
 
+	if claude.Name != pluginName {
+		t.Errorf("plugin name = %q, want %q", claude.Name, pluginName)
+	}
+
 	var claudeMarket struct {
+		Name    string `json:"name"`
 		Plugins []struct {
 			Name   string `json:"name"`
 			Source string `json:"source"`
@@ -56,7 +63,12 @@ func TestPluginManifests(t *testing.T) {
 		t.Errorf("%s plugins = %+v, want %s at %s", claudeMarketplace, claudeMarket.Plugins, claude.Name, repositoryRoot)
 	}
 
+	if claudeMarket.Name != marketplaceName {
+		t.Errorf("%s name = %q, want %q", claudeMarketplace, claudeMarket.Name, marketplaceName)
+	}
+
 	var codexMarket struct {
+		Name    string `json:"name"`
 		Plugins []struct {
 			Name   string `json:"name"`
 			Source struct {
@@ -67,6 +79,10 @@ func TestPluginManifests(t *testing.T) {
 	readJSON(t, codexMarketplace, &codexMarket)
 	if len(codexMarket.Plugins) != 1 || codexMarket.Plugins[0].Name != codex.Name || codexMarket.Plugins[0].Source.Path != repositoryRoot {
 		t.Errorf("%s plugins = %+v, want %s at %s", codexMarketplace, codexMarket.Plugins, codex.Name, repositoryRoot)
+	}
+
+	if codexMarket.Name != marketplaceName {
+		t.Errorf("%s name = %q, want %q", codexMarketplace, codexMarket.Name, marketplaceName)
 	}
 
 	if filepath.Clean(codex.Hooks) != codexHooksFile {
