@@ -15,5 +15,6 @@ The lead gives you the prompt of the run and the path of the harness binary.
 3. Read the git history of these files: `git log --oneline -- <path>`.
 4. For each fact, give the `file:line` or the commit.
 5. List the decisions that the code and the docs cannot make. Give each decision 2 to 4 options and your recommended option with the reason.
+6. When the lead gives you the path of the `ddd` skill, read it. Give the context and the layer of each file that the change touches.
 
-Report in this order: the facts, the files that the change touches, the risks, then the open decisions. Do not edit, commit or push. Do not ask the user a question: the lead asks.
+Report in this order: the facts, the files that the change touches, the risks, then the open decisions. Keep the report under 400 words. Do not edit, commit or push. Do not ask the user a question: the lead asks.

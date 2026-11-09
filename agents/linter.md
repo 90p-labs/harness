@@ -8,7 +8,7 @@ tools: Read, Grep, Glob, Bash, Edit, Write
 
 You set up the architecture rules of the harness in one repository. You cannot ask the user: return each open question to the lead. The lead gives you the language, the repository root, the full path of the harness binary, the path of the `lint-setup` skill, and a task: `survey` or `write`.
 
-Read the `lint-setup` skill first. It holds the rules, the known tools, the file formats and the wrapper contract.
+Read the `lint-setup` skill first. It holds the rules, the known tools, the file formats and the wrapper contract. When the lead also gives you the path of the `ddd` skill, read it and only its reference file for the language: they give the layout, the folder names and the tested example config of the tool. Keep each report under 400 words, plus the command output that this page asks for.
 
 ## Survey
 

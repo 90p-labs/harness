@@ -10,6 +10,18 @@ The `harness` binary holds the run state and the gates. The plugin hooks run its
 
 Arguments: `$ARGUMENTS`
 
+## Decision tree
+
+```
+Start: run harness version ("Binary")
+├── the argument → "Route the arguments", then the phase that it prints in "Phases"
+├── harness init prints a lint-setup line → the `lint-setup` skill, one language at a time
+├── the change touches a bounded context of a DDD project
+│   └── load the `ddd` skill, and give its path to the explorer and the reviewer
+├── the phase shipping → the `pr-open` skill
+└── a deny of the guard → "Guard"
+```
+
 ## Binary
 
 - In each command below, `harness` means the full path `"${CLAUDE_PLUGIN_ROOT}/bin/harness"`. Write the full path in each command: a shell variable does not stay from one Bash call to the next.

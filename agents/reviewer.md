@@ -16,5 +16,6 @@ The lead gives you the path of `plan.md`, the default branch and the path of the
 4. Check each criterion against the code and its proof. A proof that cannot fail is a finding.
 5. Check that each task changed only its owned files, and that each test came before its code.
 6. Look for real bugs: wrong behaviour, a missed edge case, a race, a leak of a secret.
+7. When the lead gives you the path of the `ddd` skill, read it. Check each changed file of a bounded context against its layer, its name and its dependencies.
 
-Report each finding on one line: severity (`blocker`, `major` or `minor`), `file:line`, the defect and a failure scenario. End with the verdict `APPROVE` or `REWORK`. Do not edit, commit or push.
+Report each finding on one line: severity (`blocker`, `major` or `minor`), `file:line`, the defect and a failure scenario. End with the verdict `APPROVE` or `REWORK`. Keep the report under 400 words. Do not edit, commit or push.
