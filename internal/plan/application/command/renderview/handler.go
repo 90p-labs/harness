@@ -72,15 +72,20 @@ func (h Handler) Handle(ctx context.Context, c Command) (out string, err error) 
 	if err != nil {
 		return "", err
 	}
-	in := domain.ViewInput{
-		Doc:      report.Doc,
-		Problems: report.Problems,
-		Links:    domain.Trace(report.Doc),
-		Run:      domain.ViewRun{ID: c.RunID, Phase: c.Phase, Track: string(report.Track), Branch: report.Doc.RunPR().Branch},
-		Charts:   h.charts(report.Doc),
-		Sketches: h.sketches(report.Doc, filepath.Dir(c.Path)),
+	var in domain.ViewInput
+	if report.Program != nil {
+		in = domain.ViewInput{Program: report.Program, Problems: report.Problems, Run: domain.ViewRun{ID: c.RunID, Phase: c.Phase}}
+	} else {
+		in = domain.ViewInput{
+			Doc:      report.Doc,
+			Problems: report.Problems,
+			Links:    domain.Trace(report.Doc),
+			Run:      domain.ViewRun{ID: c.RunID, Phase: c.Phase, Track: string(report.Track), Branch: report.Doc.RunPR().Branch},
+			Charts:   h.charts(report.Doc),
+			Sketches: h.sketches(report.Doc, filepath.Dir(c.Path)),
+		}
+		h.addEvidence(ctx, c, &in)
 	}
-	h.addEvidence(ctx, c, &in)
 	problems = len(in.Problems)
 
 	page, err := h.deps.Renderer.Render(in)

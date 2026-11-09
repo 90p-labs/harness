@@ -158,3 +158,19 @@ func TestSubmitPlanCollect(t *testing.T) {
 		}
 	})
 }
+
+func TestProgramKind(t *testing.T) {
+	bus := &fakeBus{}
+	check := func(context.Context, string, int) (domain.Report, error) {
+		return domain.Report{Program: &domain.Program{}}, nil
+	}
+
+	_, err := submitplan.NewHandler(check, bus, testCwd).Handle(t.Context(), command(validPlan))
+
+	if !errors.Is(err, domain.ErrPlanHasProblems) || !strings.Contains(err.Error(), "plan.md:1: "+string(domain.RulePlanKind)+": ") {
+		t.Fatalf("err = %v, want ErrPlanHasProblems with a %s line", err, domain.RulePlanKind)
+	}
+	if len(bus.envelopes) != 0 {
+		t.Errorf("dispatches = %d, want 0", len(bus.envelopes))
+	}
+}

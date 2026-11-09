@@ -209,3 +209,53 @@ func TestCheckPlanReport(t *testing.T) {
 		}
 	})
 }
+
+func TestProgramKind(t *testing.T) {
+	program, err := os.ReadFile("../../../domain/testdata/program.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid, err := os.ReadFile(validPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, _ := newHandler(t)
+
+	t.Run("a program has runs, no document and no problem", func(t *testing.T) {
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), program)})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if len(report.Problems) != 0 || report.Program == nil || len(report.Program.Runs) != 8 {
+			t.Fatalf("report = %+v, want no problem and 8 runs", report)
+		}
+		if report.Track != "" || len(report.Doc.Lines) != 0 {
+			t.Errorf("track = %q, doc = %+v, want both empty", report.Track, report.Doc)
+		}
+	})
+
+	t.Run("a broken program gives its rule", func(t *testing.T) {
+		broken := slices.Concat(program, []byte("\nA broken — line.\n"))
+
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), broken)})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if len(report.Problems) != 1 || report.Problems[0].Rule != domain.RuleEmDash {
+			t.Fatalf("problems = %v, want one %s", report.Problems, domain.RuleEmDash)
+		}
+	})
+
+	t.Run("a single-run plan has no program", func(t *testing.T) {
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), valid)})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if report.Program != nil || len(report.Problems) != 0 || report.Track != shareddomain.TrackFull {
+			t.Errorf("report = %+v, want no program, no problem and the full track", report)
+		}
+	})
+}
