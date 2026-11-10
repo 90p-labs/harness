@@ -284,7 +284,7 @@ func setDefaults(v *viper.Viper) {
 			string(shareddomain.HostCodex):  []string{"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"},
 		},
 		string(shareddomain.RoleAdvisor): map[string]any{
-			string(shareddomain.HostClaude): []string{"fable"},
+			string(shareddomain.HostClaude): []string{"fable", "opus"},
 			string(shareddomain.HostCodex):  []string{"gpt-6-astra"},
 		},
 	})

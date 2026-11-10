@@ -251,7 +251,7 @@ The rule `review-models` needs a counted review of every reviewer model of the h
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
-| `roles` | map of role to a map of host to a list of models | `lead.claude: [opus]`, `lead.codex: [gpt-6-astra]`, `explorer.claude: [haiku]`, `explorer.codex: [gpt-6-luna]`, `worker.claude: [sonnet, haiku]`, `worker.codex: [gpt-6.1-sol, gpt-6-luna]`, `reviewer.claude: [sonnet, haiku, opus]`, `reviewer.codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]`, `advisor.claude: [fable]`, `advisor.codex: [gpt-6-astra]` | `HARNESS_ROLES_<ROLE>_CLAUDE` and `HARNESS_ROLES_<ROLE>_CODEX` for the 5 roles with a default, such as `HARNESS_ROLES_LEAD_CLAUDE`. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
+| `roles` | map of role to a map of host to a list of models | `lead.claude: [opus]`, `lead.codex: [gpt-6-astra]`, `explorer.claude: [haiku]`, `explorer.codex: [gpt-6-luna]`, `worker.claude: [sonnet, haiku]`, `worker.codex: [gpt-6.1-sol, gpt-6-luna]`, `reviewer.claude: [sonnet, haiku, opus]`, `reviewer.codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]`, `advisor.claude: [fable, opus]`, `advisor.codex: [gpt-6-astra]` | `HARNESS_ROLES_<ROLE>_CLAUDE` and `HARNESS_ROLES_<ROLE>_CODEX` for the 5 roles with a default, such as `HARNESS_ROLES_LEAD_CLAUDE`. A comma list, such as `sonnet,opus`, sets several models | The models for each role and host |
 
 The roles, and the agent names that the guard maps to each role:
 
@@ -261,7 +261,7 @@ The roles, and the agent names that the guard maps to each role:
 | `explorer` | `explore`, `explorer`, `claude-code-guide`, `verifier`: a verifier with no model would run on the lead model |
 | `worker` | `worker`, `general-purpose`, `claude`: the last two have every tool and can edit files |
 | `reviewer` | `reviewer`, `second-reviewer`, `code-reviewer`, `pr-reviewer` |
-| `advisor` | `advisor`: the check of a plan. It never counts as a reviewer for `review-models` |
+| `advisor` | `advisor`: the check of a plan. It never counts as a reviewer for `review-models`. `harness plan check` prints `advisor: on, model <m>`. It names the first model on a full track and the second on a path trigger. A role with one model uses it for both. |
 
 The guard compares the agent name in lower case, after the last `:`, so `90p:explorer` is `explorer`. An agent with another name is not checked.
 

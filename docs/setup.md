@@ -102,7 +102,7 @@ roles:
   reviewer:
     claude: [sonnet, haiku, opus]  # the guard denies an agent call on another model
   advisor:
-    claude: [fable]
+    claude: [fable, opus]
 lint:
   packs: [ddd]
 verify:

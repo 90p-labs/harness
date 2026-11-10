@@ -591,7 +591,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `live.environment` | `production` | The GitHub deployment environment |
 | `live.rollback` | empty | The rollback line of the findings |
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
-| `roles` | `lead.claude: [opus]`, `lead.codex: [gpt-6-astra]`, `explorer.claude: [haiku]`, `explorer.codex: [gpt-6-luna]`, `worker.claude: [sonnet, haiku]`, `worker.codex: [gpt-6.1-sol, gpt-6-luna]`, `reviewer.claude: [sonnet, haiku, opus]`, `reviewer.codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]`, `advisor.claude: [fable]`, `advisor.codex: [gpt-6-astra]` | A role is `lead`, `worker`, `reviewer`, `explorer` or `advisor`; a host is `claude` or `codex`. A value is a list of models; a scalar is a list of one |
+| `roles` | `lead.claude: [opus]`, `lead.codex: [gpt-6-astra]`, `explorer.claude: [haiku]`, `explorer.codex: [gpt-6-luna]`, `worker.claude: [sonnet, haiku]`, `worker.codex: [gpt-6.1-sol, gpt-6-luna]`, `reviewer.claude: [sonnet, haiku, opus]`, `reviewer.codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]`, `advisor.claude: [fable, opus]`, `advisor.codex: [gpt-6-astra]` | A role is `lead`, `worker`, `reviewer`, `explorer` or `advisor`; a host is `claude` or `codex`. A value is a list of models; a scalar is a list of one |
 | `guard.disabled` | empty list | A list of guard rule ids; an unknown id is an error that names it |
 | `deploy.disabled` | empty list | A list of default deploy plugin names (`helm`, `promtool`); an unknown name is an error that names it |
 | `git.default_branch` | empty, so `origin/HEAD`, else `main` | A set value wins for `git-no-push-default` and for the trace base of the review |
@@ -712,7 +712,7 @@ A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. 
 - With `--file`, it checks that file with live round 0.
 - Without `--file`, it checks `plan.md` in the run folder of the active run, with the live round of the run.
 - It prints one problem on each stdout line, as `plan.md:12: rule: text`. A diagram of an unchecked kind prints `plan.md:30: note: diagram kind flowchart is not checked`.
-- A clean single-run plan prints the advisor line, as `advisor: on (full track)`, then one line for each wave, as `wave 1: task 1 (haiku), task 2`. The lead reads the task order there, and renders no page for it.
+- A clean single-run plan prints the advisor line, as `advisor: on, model fable`, then one line for each wave, as `wave 1: task 1 (haiku), task 2`. The lead reads the task order there, and renders no page for it.
 - It exits 0 on a clean plan, and 1 when there is a problem or the file is unreadable.
 - Without `--file` and with no active run, it exits 2 and prints the usage.
 - The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.

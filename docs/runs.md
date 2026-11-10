@@ -37,7 +37,7 @@ Check the plan, render it, and submit it:
 ```console
 $ harness plan check
 plan.md:43: note: diagram kind flowchart is not checked
-advisor: on (full track)
+advisor: on, model fable
 wave 1: task 1, task 2
 wave 2: task 3
 $ harness plan view

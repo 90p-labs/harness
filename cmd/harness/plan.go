@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/90p-labs/harness/internal/host/infrastructure/install"
 	planmodule "github.com/90p-labs/harness/internal/plan"
 	"github.com/90p-labs/harness/internal/plan/application/command/renderview"
 	"github.com/90p-labs/harness/internal/plan/application/query/checkplan"
@@ -15,6 +17,7 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 )
 
 func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
@@ -24,6 +27,7 @@ func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
 			return plancli.Handlers{}, nil, err
 		}
 		handlers := planmodule.NewModule(env.bus, env.key.Worktree, env.proofs, env.defaultBranch)
+		handlers.AdvisorModels = advisorModels(env.cfg.Roles, install.DetectHosts(env.key.Worktree, os.Getenv))
 		handlers.DefaultPlan = func(ctx context.Context) (checkplan.Query, error) {
 			return activePlan(ctx, flags)
 		}
@@ -34,6 +38,15 @@ func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
 	})
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
 	return cmd
+}
+
+// advisorModels gives the advisor models of the one detected host, and of claude when no host or many are detected.
+func advisorModels(roles map[string]config.RoleHost, detected []shareddomain.Host) []string {
+	host := shareddomain.HostClaude
+	if hosts := hostsOrKnown(detected); len(hosts) == 1 {
+		host = hosts[0]
+	}
+	return roles[string(shareddomain.RoleAdvisor)][string(host)]
 }
 
 const diagramHint = "hint: harness diagram --help"

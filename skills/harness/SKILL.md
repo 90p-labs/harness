@@ -52,7 +52,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - On `Change the plan`, ask what to change, edit `plan.md`, and ask the `Plan` question again.
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
 4. `working`: you are the driver. You do not write the code of a task. `harness plan check` gives the waves and the model of each task.
-   - A light-track run can use `sonnet` as the lead. The track shows in the advisor line of `harness plan check`. On a light track, the lead does not ask a `sonnet` session to switch.
+   - A light-track run can use `sonnet` as the lead. `harness plan check` prints `advisor: off (light track)` on a light track. On a light track, the lead does not ask a `sonnet` session to switch.
    - For each wave, start one `worker` agent for each task, in the background, with the `model` field set to the `Model` of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap.
    - Use low effort for a haiku task that is mundane: docs, a rename or a config change.
    - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.
