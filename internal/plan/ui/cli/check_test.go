@@ -86,7 +86,7 @@ func TestPlanHelpProgram(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	want := append([]string{domain.HeadingRuns, domain.HeadingMeasurement, domain.FormRunHeading, domain.FormRunDepends, domain.FormScope}, domain.ProgramFields...)
+	want := append([]string{domain.HeadingRuns, domain.HeadingMeasurement, domain.FormRunHeading, domain.FormRunDepends, domain.FormScope, domain.FormWave, domain.FormBranch, string(domain.RuleRunField), string(domain.RuleRunDepends), string(domain.RuleRunOverlap)}, domain.ProgramFields...)
 	for _, w := range want {
 		if !strings.Contains(out, w) {
 			t.Errorf("help does not hold %q", w)

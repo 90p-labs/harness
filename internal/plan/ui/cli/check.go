@@ -70,7 +70,7 @@ func planHelp() string {
 		fmt.Sprintf("  A frontend task needs a sketch link `%s` to a file in the plan folder.", sketch),
 		fmt.Sprintf("The syntax parse covers only %s and %s. The mark check covers every marked kind: it needs one mark.", domain.DiagramState, domain.DiagramClass),
 		fmt.Sprintf("A plan with ## %s is a multi-run plan. Headings: %s, %s, optional %s and %s. Run: `### %s`, then a bullet for each of: %s, then %s.", domain.HeadingRuns, domain.HeadingGoal, domain.HeadingRuns, domain.HeadingMeasurement, domain.HeadingDecisions, domain.FormRunHeading, strings.Join(domain.ProgramFields, ", "), domain.FormScope),
-		fmt.Sprintf("In a run, %s is %s. Each dependency names a run of an earlier wave. Runs of one wave own no common path. `harness run plan` takes only a single-run plan.", domain.FieldDependsOn, domain.FormRunDepends),
+		fmt.Sprintf("In a run, %s is %s, %s is %s and %s is %s. Each dependency names a run of an earlier wave (rule %s). Runs of one wave own no common path (rule %s). A missing or malformed field is rule %s. `harness run plan` takes only a single-run plan.", domain.FieldWave, domain.FormWave, domain.FieldBranch, domain.FormBranch, domain.FieldDependsOn, domain.FormRunDepends, domain.RuleRunDepends, domain.RuleRunOverlap, domain.RuleRunField),
 		fmt.Sprintf("A sentence has %d words at most. Use no em dash.", domain.MaxSentenceWords),
 	}, "\n")
 }
