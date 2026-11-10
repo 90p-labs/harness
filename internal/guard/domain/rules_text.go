@@ -39,8 +39,7 @@ func carriesText(c Command) bool {
 	return isCommand(c, cmdGh, subPR) && len(c.Args) > 2 && slices.Contains(prTextActions, c.Args[2])
 }
 
-func TextFiles(line string) [][]string {
-	commands := invocations(line)
+func mainTextFiles(commands []Command) [][]string {
 	files := make([][]string, len(commands))
 	dir := ""
 	for i, c := range commands {
@@ -63,6 +62,14 @@ func resolvePath(dir, path string) string {
 		return path
 	}
 	return filepath.Join(dir, path)
+}
+
+func TextFiles(line string) [][]string {
+	commands, flat := flatInvocations(line)
+	if !flat {
+		commands = invocations(line)
+	}
+	return mainTextFiles(commands)
 }
 
 func fileNames(c Command, flags ...string) []string {

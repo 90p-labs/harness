@@ -10,6 +10,7 @@ type Command struct {
 	Redirects []string
 	Inputs    []string
 	Heredoc   string
+	Op        string
 }
 
 type redirectMode int
@@ -193,6 +194,8 @@ func isDigits(s string) bool {
 
 func (p *shellParser) scan() string {
 	var b strings.Builder
+	// An open quote at the end of a line moves pos past the end.
+	defer func() { p.pos = min(p.pos, len(p.src)) }()
 	for p.pos < len(p.src) {
 		c := p.src[p.pos]
 		switch {
@@ -229,7 +232,7 @@ func (p *shellParser) scanDoubleQuoted(b *strings.Builder) {
 			p.copySubstitution(b)
 			continue
 		}
-		if c == '\\' && strings.ContainsRune("\"\\$`", p.peek(1)) {
+		if c == '\\' && strings.ContainsRune(doubleQuoteEscapes, p.peek(1)) {
 			p.pos++
 			c = p.src[p.pos]
 		}

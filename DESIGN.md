@@ -203,13 +203,13 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 |---|---|---|
 | `pr-no-merge` | `tool.before` | `gh pr merge` |
 | `pr-draft-only` | `tool.before` | `gh pr create` without `--draft` |
-| `pr-body-shape` | `tool.before` | A PR body with no `## Why`, `## What` or `## How`, these sections out of order, a body with no bottom line above `## Why`, a line above 40 words, or a diagram with no marks |
+| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch |
 | `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |
 | `secrets-read` | `tool.before` | A read of a secret file |
 | `test-no-focus-skip` | `tool.before` | A focused or skipped test in a test edit |
-| `shell-write-source` | `tool.before` | A shell write to a source file |
+| `shell-write-source` | `tool.before` | A shell write to a source file. The rule expands variables and follows the `cd` of the same command only on a flat line. A flat line is simple commands joined by `;`, `&&`, `\|\|`, `\|`, `&` or a newline. The rule expands a variable or follows a `cd` only when the assignment or `cd` surely runs. A word such as `set`, `export` or `eval`, a subshell, a substitution or an unquoted heredoc makes a line not flat. A write command with an option outside its allow list, such as `cp -t`, makes a line not flat. A write command with a word that the rule cannot resolve also makes a line not flat. The deny names the file. On any other line, or for a target it cannot resolve, the deny asks for a literal absolute path. |
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
 | `agent-model-routing` | `tool.before` | An agent call whose model is not in the list of its role for the host, or that has no model |
 | `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 models have a record on `HEAD`. Also when a reviewer model of the host list has no record |
