@@ -1653,3 +1653,36 @@ func TestHookGuardEndToEnd(t *testing.T) {
 		}
 	}
 }
+
+func TestPluginCallSpanDetail(t *testing.T) {
+	const pluginCallSpan = "plugin.call"
+	for _, tc := range []struct {
+		name, detail string
+		wantSpans    bool
+	}{
+		{"default", "", false},
+		{"full", "full", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearHarnessEnv(t)
+			initRepo(t)
+			spans := collectSpans(t)
+			t.Setenv(telemetry.EnvTraceDetail, tc.detail)
+
+			code, _, stderr := executeWithStdin(t, hookSessionJSON, commandHook, initHostFlag, hostClaude, "pre-tool-use")
+
+			if code != exitOK {
+				t.Fatalf("code = %d, stderr = %q", code, stderr)
+			}
+			var calls int
+			for _, span := range spans() {
+				if span.name == pluginCallSpan {
+					calls++
+				}
+			}
+			if has := calls > 0; has != tc.wantSpans {
+				t.Errorf("has plugin.call spans = %v (%d spans), want %v", has, calls, tc.wantSpans)
+			}
+		})
+	}
+}

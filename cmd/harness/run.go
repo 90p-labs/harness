@@ -146,7 +146,7 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 		return livecli.Lines(results), err
 	})
 	approval := approvalplugin.New(approvalAdapter{cfg: cfg, commonDir: commonDir, worktree: worktree}.Record)
-	bus = eventbus.NewBus(slices.Concat(plugins, guards, deployPlugins, []shareddomain.Plugin{review, planView, session, approval}), otel.GetTracerProvider(), otel.GetMeterProvider())
+	bus = eventbus.NewBus(slices.Concat(plugins, guards, deployPlugins, []shareddomain.Plugin{review, planView, session, approval}), otel.GetTracerProvider(), otel.GetMeterProvider()).WithTraceDetail(telemetry.TraceDetailFromEnv())
 	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, proofs: proofs, defaultBranch: defaultBranch}, nil
 }
 

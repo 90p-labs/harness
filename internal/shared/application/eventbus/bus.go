@@ -41,6 +41,12 @@ type Bus struct {
 	plugins  []domain.Plugin
 	tracer   trace.Tracer
 	duration metric.Float64Histogram
+	detail   domain.TraceDetail
+}
+
+func (b Bus) WithTraceDetail(detail domain.TraceDetail) Bus {
+	b.detail = detail
+	return b
 }
 
 func NewBus(plugins []domain.Plugin, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) Bus {
@@ -51,7 +57,7 @@ func NewBus(plugins []domain.Plugin, tracerProvider trace.TracerProvider, meterP
 		metric.WithUnit(metricUnitSeconds),
 		metric.WithExplicitBucketBoundaries(durationBuckets...),
 	)
-	return Bus{plugins: sorted, tracer: tracerProvider.Tracer(instrumentationName), duration: duration}
+	return Bus{plugins: sorted, tracer: tracerProvider.Tracer(instrumentationName), duration: duration, detail: domain.TraceDetailCompact}
 }
 
 func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.DispatchResult, error) {
@@ -60,7 +66,7 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 		return domain.DispatchResult{}, fmt.Errorf("%w: %q", domain.ErrUnknownEvent, envelope.Event)
 	}
 
-	var denies, contexts []string
+	var denies, deniedBy, contexts []string
 	var failures []domain.DispatchFailure
 	var findings []domain.Finding
 	for _, plugin := range b.plugins {
@@ -89,6 +95,7 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 		}
 		if verdict.Kind == domain.VerdictDeny && (kind == domain.KindVeto || kind == domain.KindCollect) {
 			denies = append(denies, plugin.Name()+": "+verdict.Reason)
+			deniedBy = append(deniedBy, plugin.Name())
 			if kind == domain.KindVeto {
 				break
 			}
@@ -98,6 +105,7 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 	result := domain.DispatchResult{
 		Verdict:  domain.Verdict{Kind: domain.VerdictAllow, Context: strings.Join(contexts, "\n\n"), Findings: findings},
 		Failures: failures,
+		DeniedBy: deniedBy,
 	}
 	if len(denies) > 0 {
 		result.Verdict.Kind = domain.VerdictDeny
@@ -107,27 +115,39 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 }
 
 func (b Bus) call(ctx context.Context, plugin domain.Plugin, envelope domain.Envelope) (domain.Verdict, error) {
-	ctx, span := b.tracer.Start(ctx, spanPluginCall)
-	defer span.End()
+	full := b.detail == domain.TraceDetailFull
+	var span trace.Span
+	if full {
+		ctx, span = b.tracer.Start(ctx, spanPluginCall)
+	}
 
 	start := time.Now()
 	verdict, err := plugin.Handle(ctx, envelope)
+	end := time.Now()
 	if err == nil && !verdict.Kind.Known() {
 		err = fmt.Errorf("%w: %s: %w %q", domain.ErrPluginFailed, plugin.Name(), errUnknownVerdict, verdict.Kind)
 	}
 
+	if span == nil && (err != nil || verdict.Kind == domain.VerdictDeny) {
+		_, span = b.tracer.Start(ctx, spanPluginCall, trace.WithTimestamp(start))
+	}
 	outcome := string(verdict.Kind)
 	if err != nil {
 		outcome = verdictFailure
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 	}
 	attrs := []attribute.KeyValue{
 		attrEvent.String(string(envelope.Event)),
 		attrPlugin.String(plugin.Name()),
 		attrVerdict.String(outcome),
 	}
-	span.SetAttributes(attrs...)
-	b.duration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs...))
+	if span != nil {
+		if err != nil {
+			span.RecordError(err, trace.WithTimestamp(end))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.SetAttributes(attrs...)
+		span.End(trace.WithTimestamp(end))
+	}
+	b.duration.Record(ctx, end.Sub(start).Seconds(), metric.WithAttributes(attrs...))
 	return verdict, err
 }

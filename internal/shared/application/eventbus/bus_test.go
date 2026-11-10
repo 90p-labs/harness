@@ -305,7 +305,7 @@ func TestDispatchSpans(t *testing.T) {
 	bus := f.newBus(
 		f.plugin("a", tool, allow(), nil),
 		f.plugin("b", tool, domain.Verdict{}, errors.New("boom")),
-	)
+	).WithTraceDetail(domain.TraceDetailFull)
 
 	if _, err := f.dispatch(bus, domain.EventToolBefore); err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -334,6 +334,9 @@ func TestDispatchSpans(t *testing.T) {
 	}
 	if second.Status().Code != codes.Error {
 		t.Fatalf("second span status = %v, want error", second.Status())
+	}
+	if len(second.Events()) != 1 || second.Events()[0].Time.After(second.EndTime()) {
+		t.Fatalf("exception events = %+v, want one not after the span end %v", second.Events(), second.EndTime())
 	}
 }
 
@@ -429,4 +432,77 @@ func TestBusPlainSubscriptionReceivesAll(t *testing.T) {
 	if !slices.Equal(f.calls, []string{"matched", "plain"}) {
 		t.Fatalf("calls = %v, want [matched plain]", f.calls)
 	}
+}
+
+func TestDispatchNamesDenyingPlugins(t *testing.T) {
+	f := newFixture()
+	tool := events(domain.EventToolBefore)
+	bus := f.newBus(
+		f.plugin("a", tool, allow(), nil),
+		f.plugin("b", tool, deny("no"), nil),
+		f.plugin("c", tool, deny("never"), nil),
+	)
+
+	result, err := f.dispatch(bus, domain.EventToolBefore)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"b"}; !slices.Equal(result.DeniedBy, want) {
+		t.Errorf("DeniedBy = %v, want %v (a veto stops at the first deny)", result.DeniedBy, want)
+	}
+}
+
+func TestPluginCallSpanDetail(t *testing.T) {
+	boom := errors.New("boom")
+	tool := events(domain.EventToolBefore)
+	for _, tc := range []struct {
+		name         string
+		verdict      domain.Verdict
+		err          error
+		compactSpans int
+	}{
+		{"allow", allow(), nil, 0},
+		{"deny", deny("no"), nil, 1},
+		{"error", domain.Verdict{}, boom, 1},
+	} {
+		for _, detail := range []domain.TraceDetail{domain.TraceDetailCompact, domain.TraceDetailFull} {
+			t.Run(tc.name+"/"+string(detail), func(t *testing.T) {
+				f := newFixture()
+				bus := f.newBus(f.plugin("p", tool, tc.verdict, tc.err)).WithTraceDetail(detail)
+
+				_, _ = f.dispatch(bus, domain.EventToolBefore)
+
+				want := tc.compactSpans
+				if detail == domain.TraceDetailFull {
+					want = 1
+				}
+				if got := len(f.spans.Ended()); got != want {
+					t.Errorf("spans = %d, want %d", got, want)
+				}
+				if got := histogramCount(t, f.reader); got != 1 {
+					t.Errorf("duration samples = %d, want 1", got)
+				}
+			})
+		}
+	}
+}
+
+func histogramCount(t *testing.T, reader sdkmetric.Reader) uint64 {
+	t.Helper()
+	var collected metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &collected); err != nil {
+		t.Fatal(err)
+	}
+	var count uint64
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if h, ok := m.Data.(metricdata.Histogram[float64]); ok {
+				for _, p := range h.DataPoints {
+					count += p.Count
+				}
+			}
+		}
+	}
+	return count
 }
