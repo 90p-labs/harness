@@ -9,8 +9,11 @@ This run is real output from a small Go repository. The agent normally runs thes
 ```console
 $ harness run start "Let a customer cancel an order before it ships"
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=planning review_round=0 live_round=0
+models: lead=opus explorer=haiku worker=sonnet,haiku reviewer=sonnet,haiku,opus advisor=fable,opus
 next: write the plan in .harness/runs/20261108-132848-let-a-customer-cancel-an-order-before-it/plan.md, then harness run plan
 ```
+
+The `models:` line lists the models of each role for the host, from `roles` in the configuration. With two hosts it prints one line for each, named `models (claude):` and `models (codex):`.
 
 Write `plan.md` in the run folder. `harness plan --help` gives the format. Write each diagram through `harness diagram`: a `+`, `*` or `-` at the end of a line marks it new, changed or removed. `harness diagram --help` gives the forms for each diagram kind.
 

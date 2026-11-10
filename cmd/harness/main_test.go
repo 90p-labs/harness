@@ -53,6 +53,23 @@ const (
 	diagramInput      = "flowchart TD\n    a --> b +\n"
 )
 
+func TestRunModelsFallsBackToKnownHosts(t *testing.T) {
+	roles := map[string]config.RoleHost{
+		"lead": {"claude": {"opus"}, "codex": {"gpt"}},
+	}
+	none := runModels(roles, nil)
+	if len(none) != 2 || none[0].Host != "claude" || none[1].Host != "codex" {
+		t.Fatalf("no host: got %+v, want claude then codex", none)
+	}
+	if got := none[1].Roles["lead"]; len(got) != 1 || got[0] != "gpt" {
+		t.Fatalf("codex lead: got %v, want [gpt]", got)
+	}
+	one := runModels(roles, []shareddomain.Host{shareddomain.HostCodex})
+	if len(one) != 1 || one[0].Host != "codex" {
+		t.Fatalf("one host: got %+v, want codex only", one)
+	}
+}
+
 func TestTraceparentParent(t *testing.T) {
 	clearOTLPEnv(t)
 	clearHarnessEnv(t)

@@ -18,6 +18,7 @@ import (
 	"github.com/90p-labs/harness/internal/deploy"
 	"github.com/90p-labs/harness/internal/guard"
 	hostmodule "github.com/90p-labs/harness/internal/host"
+	"github.com/90p-labs/harness/internal/host/infrastructure/install"
 	livemodule "github.com/90p-labs/harness/internal/live"
 	livecli "github.com/90p-labs/harness/internal/live/ui/cli"
 	planmodule "github.com/90p-labs/harness/internal/plan"
@@ -173,7 +174,28 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
+	handlers.Models = runModels(env.cfg.Roles, install.DetectHosts(env.key.Worktree, os.Getenv))
 	return handlers, env.state.Close, nil
+}
+
+// runModels reads the same modelsByHost the guards read, so the line cannot drift from harness config.
+// With no host detected it lists every known host.
+func runModels(roles map[string]config.RoleHost, detected []shareddomain.Host) []cli.HostModels {
+	hosts := hostsOrKnown(detected)
+	byHost := modelsByHost(roles)
+	models := make([]cli.HostModels, 0, len(hosts))
+	for _, host := range hosts {
+		models = append(models, cli.HostModels{Host: string(host), Roles: byHost[host]})
+	}
+	return models
+}
+
+// hostsOrKnown is the one fallback of the models and advisor lines: every known host when none is detected.
+func hostsOrKnown(detected []shareddomain.Host) []shareddomain.Host {
+	if len(detected) == 0 {
+		return []shareddomain.Host{shareddomain.HostClaude, shareddomain.HostCodex}
+	}
+	return detected
 }
 
 func openRun(ctx context.Context, env environment) (cli.Handlers, *dbal.DB, error) {
