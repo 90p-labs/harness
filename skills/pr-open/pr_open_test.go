@@ -14,12 +14,13 @@ const (
 	readmeFile  = "README.md"
 	prOpenSkill = "skills/pr-open/SKILL.md"
 	prCheckStep = "harness pr check --body-file"
+	prBodyStep  = "harness pr body"
 	prCreate    = "gh pr create"
 )
 
 var (
 	prBodySections = []string{"## Why", "## What", "## How"}
-	prOpenSteps    = []string{"harness run status", "harness diagram", "harness verify --commits", prCheckStep, "gh pr create --draft", "gh pr edit", "--body-file"}
+	prOpenSteps    = []string{"harness run status", "harness diagram", "harness verify --commits", prBodyStep, prCheckStep, "gh pr create --draft", "gh pr edit", "--body-file"}
 )
 
 func TestPROpen(t *testing.T) {
@@ -99,7 +100,7 @@ func TestPROpenBottomLine(t *testing.T) {
 		t.Fatalf("%s has no body template", prOpenSkill)
 	}
 	above := skill[strings.LastIndex(skill[:why], "```\n")+4 : why]
-	if !strings.HasPrefix(strings.TrimSpace(above), "<the bottom line") {
+	if !strings.HasPrefix(strings.TrimSpace(above), "<bottom line") {
 		t.Errorf("%s: the body template has no bottom line placeholder above ## Why", prOpenSkill)
 	}
 }

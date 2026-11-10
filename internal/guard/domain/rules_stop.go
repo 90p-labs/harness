@@ -5,7 +5,7 @@ import "context"
 const (
 	RuleStopHoldsTurn = "stop-holds-turn"
 
-	StopHoldsTurnNextStep = "finish the phase work, or wait for the background agents and shell tasks, then stop again"
+	StopHoldsTurnNextStep = "finish the work or wait for agents"
 )
 
 type StopDecider interface {

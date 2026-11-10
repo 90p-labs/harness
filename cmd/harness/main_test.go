@@ -53,6 +53,23 @@ const (
 	diagramInput      = "flowchart TD\n    a --> b +\n"
 )
 
+func TestRunModelsFallsBackToKnownHosts(t *testing.T) {
+	roles := map[string]config.RoleHost{
+		"lead": {"claude": {"opus"}, "codex": {"gpt"}},
+	}
+	none := runModels(roles, nil)
+	if len(none) != 2 || none[0].Host != "claude" || none[1].Host != "codex" {
+		t.Fatalf("no host: got %+v, want claude then codex", none)
+	}
+	if got := none[1].Roles["lead"]; len(got) != 1 || got[0] != "gpt" {
+		t.Fatalf("codex lead: got %v, want [gpt]", got)
+	}
+	one := runModels(roles, []shareddomain.Host{shareddomain.HostCodex})
+	if len(one) != 1 || one[0].Host != "codex" {
+		t.Fatalf("one host: got %+v, want codex only", one)
+	}
+}
+
 func TestTraceparentParent(t *testing.T) {
 	clearOTLPEnv(t)
 	clearHarnessEnv(t)
@@ -855,6 +872,72 @@ func TestPreRunCreatesNoState(t *testing.T) {
 	}
 	if _, err := os.Stat(defaultStatePath(dir)); !os.IsNotExist(err) {
 		t.Fatalf("stat %s: err = %v, want the file to not exist", defaultStatePath(dir), err)
+	}
+}
+
+func TestPRBodyCreatesNoState(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	gitIn(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFiles(t, dir, "chore: first", nil)
+
+	code, _, stderr := execute(t, "pr", "body")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if _, err := os.Stat(defaultStatePath(dir)); !os.IsNotExist(err) {
+		t.Fatalf("stat %s: err = %v, want the file to not exist", defaultStatePath(dir), err)
+	}
+}
+
+func TestPRBodyBaseFlag(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: first", nil)
+	gitIn(t, dir, "tag", "pr-base")
+	commitFiles(t, dir, "feat: second", nil)
+
+	code, stdout, stderr := execute(t, "pr", "body", "--base", "pr-base")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if !strings.Contains(stdout, "- feat: second\n") || strings.Contains(stdout, "chore: first") {
+		t.Fatalf("stdout = %q, want only the commits over pr-base", stdout)
+	}
+}
+
+func TestPRBodyRefusesAnOptionAsBase(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: first", nil)
+
+	code, stdout, _ := execute(t, "pr", "body", "--base=--output=x")
+
+	if code == exitOK || stdout != "" {
+		t.Fatalf("code = %d, stdout = %q, want a refusal with no body", code, stdout)
+	}
+}
+
+func TestPRBodyPrintsThePlanDiagramUnderHow(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	gitIn(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFiles(t, dir, "chore: first", nil)
+	_, out, _ := execute(t, commandRun, "start", "Add the login page")
+	runID := startedRunID(t, out)
+	fence := "```mermaid\nflowchart TD\n    a --> b +\n```\n"
+	writeRunPlan(t, dir, runID, "# Plan\n\n"+fence)
+
+	code, stdout, stderr := execute(t, "pr", "body")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	_, how, found := strings.Cut(stdout, "## How\n")
+	if !found || !strings.Contains(how, fence) {
+		t.Fatalf("stdout = %q, want the fence under How", stdout)
 	}
 }
 
@@ -1772,9 +1855,9 @@ func TestPlanCheckValidFixture(t *testing.T) {
 
 	code, stdout, stderr := execute(t, commandPlan, commandCheck, "--file", file)
 
-	const advisorLine = "advisor: on (full track)\n"
+	const advisorLine = "advisor: on, model fable\nwave 1: task 1\nwave 2: task 2\n"
 	if code != exitOK || stdout != advisorLine || stderr != "" {
-		t.Fatalf("code = %d, stdout = %q, stderr = %q, want the advisor line only", code, stdout, stderr)
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want the advisor line and the wave lines only", code, stdout, stderr)
 	}
 }
 
@@ -1790,8 +1873,8 @@ func TestPlanViewWiring(t *testing.T) {
 	code, stdout, stderr := execute(t, commandPlan, "view", "--file", plan)
 
 	page := filepath.Join(dir, "plan.html")
-	if code != exitOK || strings.TrimSpace(stdout) != page || stderr != "" {
-		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, page)
+	if code != exitOK || strings.TrimSpace(stdout) != "plan.html" || stderr != "" {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, "plan.html")
 	}
 	html, err := os.ReadFile(page)
 	if err != nil {

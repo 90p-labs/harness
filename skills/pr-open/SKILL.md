@@ -27,12 +27,12 @@ Start: run harness version ("Binary"), then step 1
 
 - In each command below, `harness` means the full path `"${CLAUDE_PLUGIN_ROOT}/bin/harness"`. Write the full path in each command.
 - On Codex, `${CLAUDE_PLUGIN_ROOT}` shows unexpanded. Use `bin/harness` two folders above this `SKILL.md`.
-- Run `harness version` first. If it fails, stop and report the error.
+- Run `harness version` first. If it fails, stop and report the error. Skip it when the harness skill started this skill: the loop already ran it.
 
 ## 1. Collect the sources
 
 1. The base is the argument. With no argument, it is the `PR sequence` base of the plan, else `git.default_branch` of `.harness.yaml`.
-2. Run `harness run status`. Its first line is `run <id> phase=...`. The plan is `.harness/runs/<id>/plan.md`. With `active: no`, there is no plan.
+2. Run `harness run status`. Its first line is `run <id> phase=...`. The plan is `.harness/runs/<id>/plan.md`. With `active: no`, there is no plan. Skip the command when you hold the run id from the harness loop.
 3. Read the commits: `git log --format='%h %s' <base>..HEAD`.
 4. A done task is a plan task whose `### Commits` line has the subject of a commit in that log. That line names the task with `(task n)`. The commit subject has no `(task n)`.
 5. Read the changed files: `git diff --name-only <base>...HEAD`. Read the diff of each file that a reviewer must understand.
@@ -61,29 +61,29 @@ Start: run harness version ("Binary"), then step 1
 
 ## 3. Write the body
 
-Write the body in a file `pr-body.md` in the scratchpad, or in the temp dir on a host with none. Keep its absolute path, `<body>` below. Do not write it in the repository.
+Run `harness pr body --base <base>` with the base of step 1. It prints the skeleton with the bottom line and Why placeholders. What has one bullet for each branch commit, and How has the `mermaid` fences of the plan. Write its output in a file `pr-body.md` in the scratchpad, or in the temp dir on a host with none. Keep its absolute path, `<body>` below. Do not write it in the repository.
+
+Replace the two placeholders. Keep the fences as the command printed them. Edit a What bullet only when the diff needs a clearer name. Add the visuals of step 2 that the plan lacks.
 
 ```
-<the bottom line: what the PR changes and what the reviewer must check>
+<bottom line: what the PR changes and what the reviewer must check>
 
 ## Why
 
-<the problem and the reason for the change, from the plan Goal and Decisions>
+<why: the problem and the reason for the change>
 
 ## What
 
-<the main change, in one sentence>
-
-- <one bullet for each change that a reviewer sees in the diff>
+- <one bullet for each branch commit, printed by the command>
 
 ## How
 
-<how the change works, with the kept diagrams and the visuals>
+The change adds no diagram.
 ```
 
 - Write the body BLUF (bottom line up front). The bottom line is one or two sentences in one line. Each section starts with its main point.
 - `## Why`: two to four sentences. Name the problem first. Use the plan `## Goal` and the decisions that a reviewer can question.
-- `## What` starts with one sentence that names the main change. Then one bullet for each change, in the order of the commits. Name the file or the command.
+- `## What`: the command prints one bullet for each commit, in the order of the commits. Edit a bullet only when the diff needs a clearer name.
 - `## How`: the mechanism. Put a visual of step 2 where it explains faster than text. Put one sentence above each visual: its main point.
 - A How with no visual says why in one sentence.
 - A line outside a fence has 40 words at most. A table row is one line.

@@ -32,7 +32,10 @@ const (
 	reviewRisksHead   = "## Review risks"
 	planningItem      = "2. `planning`"
 	approvalItem      = "3. `awaiting_approval`"
-	advisorOnLine     = "advisor: on"
+	advisorOnLine     = "advisor: on, model <m>"
+	modelsLine        = "`models:` line"
+	adrIndexText      = "`docs/adr/index.md` first"
+	configCommand     = "harness config"
 	advisorOffLine    = "advisor: off"
 	decisionsHead     = "## Decisions"
 	handoffFile       = "handoff.md"
@@ -156,6 +159,15 @@ func TestHarnessSkillHandoff(t *testing.T) {
 		if !strings.Contains(planning, want) {
 			t.Errorf("%s: the item %q does not name %q", skillFile, planningItem, want)
 		}
+	}
+	if !strings.Contains(planning, modelsLine) {
+		t.Errorf("%s: the item %q does not name %q", skillFile, planningItem, modelsLine)
+	}
+	if !strings.Contains(skill, adrIndexText) {
+		t.Errorf("%s does not name %q", skillFile, adrIndexText)
+	}
+	if strings.Contains(planning, configCommand) {
+		t.Errorf("%s: the item %q still runs %q", skillFile, planningItem, configCommand)
 	}
 	for _, want := range []string{handoffFile, endTurnPhrase} {
 		if !strings.Contains(skill, want) {

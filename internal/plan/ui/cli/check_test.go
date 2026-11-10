@@ -94,8 +94,55 @@ func TestPlanHelpProgram(t *testing.T) {
 	}
 }
 
+func TestAdvisorLineNamesModel(t *testing.T) {
+	const waves = "wave 1: task 1\nwave 2: task 2\n"
+	raw, err := os.ReadFile(validPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	light := strings.NewReplacer("Track: full", "Track: light", "domain/", "hooks/", "application/query/pingquery/", "service/pingq/pingquery/",
+		"└── application/", "└── service/", "└── query/", "└── pingq/").Replace(string(raw))
+	lightFile := filepath.Join(t.TempDir(), "plan.md")
+	if err := os.WriteFile(lightFile, []byte(light), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	off := strings.ReplaceAll(light, "hooks/", "model/")
+	offFile := filepath.Join(t.TempDir(), "off.md")
+	if err := os.WriteFile(offFile, []byte(off), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withModels := func(models ...string) cli.Connect {
+		inner := connect(nil, new(bool))
+		return func(ctx context.Context) (cli.Handlers, func() error, error) {
+			handlers, closer, err := inner(ctx)
+			handlers.AdvisorModels = models
+			return handlers, closer, err
+		}
+	}
+	for name, tc := range map[string]struct {
+		models []string
+		file   string
+		want   string
+	}{
+		"full track uses the first model":       {[]string{"fable", "opus"}, validPlan, "advisor: on, model fable\n"},
+		"path trigger uses the second model":    {[]string{"fable", "opus"}, lightFile, "advisor: on, model opus (light track, risky path)\n"},
+		"one model serves both triggers (full)": {[]string{"fable"}, validPlan, "advisor: on, model fable\n"},
+		"one model serves both triggers (path)": {[]string{"fable"}, lightFile, "advisor: on, model fable (light track, risky path)\n"},
+		"off names no model":                    {[]string{"fable", "opus"}, offFile, "advisor: off (light track)\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, err := execute(t, withModels(tc.models...), subCommand, flagFile, tc.file)
+
+			if err != nil || out != tc.want+waves {
+				t.Fatalf("err = %v, out = %q, want %q", err, out, tc.want+waves)
+			}
+		})
+	}
+}
+
 func TestCheckPrintsAdvisor(t *testing.T) {
 	const programPlan = "../../domain/testdata/program.md"
+	const waves = "wave 1: task 1\nwave 2: task 2\n"
 	broken := filepath.Join(t.TempDir(), "plan.md")
 	if err := os.WriteFile(broken, []byte(brokenPlan), 0o600); err != nil {
 		t.Fatal(err)
@@ -104,8 +151,8 @@ func TestCheckPrintsAdvisor(t *testing.T) {
 	t.Run("a full track plan", func(t *testing.T) {
 		out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, validPlan)
 
-		if err != nil || out != "advisor: on (full track)\n" {
-			t.Fatalf("err = %v, out = %q, want the full track line", err, out)
+		if err != nil || out != "advisor: on\n"+waves {
+			t.Fatalf("err = %v, out = %q, want the bare on line", err, out)
 		}
 	})
 
@@ -126,15 +173,15 @@ func TestCheckPrintsAdvisor(t *testing.T) {
 	t.Run("a light plan with a hook folder", func(t *testing.T) {
 		out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, lightPlan("hooks/"))
 
-		if err != nil || out != "advisor: on (guard, security or hook path)\n" {
-			t.Fatalf("err = %v, out = %q, want the path line", err, out)
+		if err != nil || out != "advisor: on (light track, risky path)\n"+waves {
+			t.Fatalf("err = %v, out = %q, want the bare on line", err, out)
 		}
 	})
 
 	t.Run("a light plan with no risky path", func(t *testing.T) {
 		out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, lightPlan("model/"))
 
-		if err != nil || out != "advisor: off (light track)\n" {
+		if err != nil || out != "advisor: off (light track)\n"+waves {
 			t.Fatalf("err = %v, out = %q, want the light track line", err, out)
 		}
 	})
@@ -143,8 +190,8 @@ func TestCheckPrintsAdvisor(t *testing.T) {
 		for _, file := range []string{programPlan, broken} {
 			out, _ := execute(t, connect(nil, new(bool)), subCommand, flagFile, file)
 
-			if strings.Contains(out, "advisor:") {
-				t.Errorf("%s: out = %q, want no advisor line", file, out)
+			if strings.Contains(out, "advisor:") || strings.Contains(out, "wave ") {
+				t.Errorf("%s: out = %q, want no advisor line and no wave line", file, out)
 			}
 		}
 	})
@@ -210,4 +257,23 @@ func TestPlanCheckCommand(t *testing.T) {
 			t.Fatalf("err = %v, want ErrNoPlanFile", err)
 		}
 	})
+}
+
+func TestCheckNamesTheModelOfATask(t *testing.T) {
+	const dependsLine = "- Depends on: task 1\n"
+	valid, err := os.ReadFile(validPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "plan.md")
+	withModel := strings.Replace(string(valid), dependsLine, dependsLine+"- Model: haiku\n", 1)
+	if err := os.WriteFile(file, []byte(withModel), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, file)
+
+	if want := "wave 1: task 1\nwave 2: task 2 (haiku)\n"; err != nil || !strings.HasSuffix(out, want) {
+		t.Fatalf("err = %v, out = %q, want the suffix %q", err, out, want)
+	}
 }

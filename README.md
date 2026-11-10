@@ -138,7 +138,7 @@ The agent normally runs these commands, and the hooks enforce the order. The blo
 | `harness plan view` | Write the plan as an HTML page |
 | `harness verify` | Run the gates and the acceptance criteria |
 | `harness verify --commits main` | Check each commit of the branch |
-| `harness pr check --body-file <path>` | Print every problem of a PR body |
+| `harness pr body`, `harness pr check --body-file <path>` | Print a PR body skeleton, or every problem of a PR body |
 | `harness lint` | Run the lint packs |
 | `harness config` | Print the effective config |
 | `/90p:report` | File a bug about the harness |

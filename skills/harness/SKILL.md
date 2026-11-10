@@ -41,18 +41,18 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
 
 ## Phases
 
-1. `planning`: start the `explorer` agent. Set the `model` field of the agent call to the model of the `explorer` role in `.harness.yaml`. Give it the prompt. It reads `CONTEXT.md`, `docs/adr/` and the code that the change touches, and returns the facts and the open decisions.
-2. `planning`: on Claude, compare the session model with the model of the `lead` role (`harness config`). When they differ, tell the user to run `/model` to switch, and continue: it is guidance, not a deny. Then write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`.
-   - Run `harness plan check`. It prints an advisor line from the plan complexity.
-   - On `advisor: on`, start the `advisor` agent, with the `model` field set to the model of the `advisor` role. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept.
+1. `planning`: start the `explorer` agent. Set the `model` field of the agent call to the model of the `explorer` role, from the `models:` line of `harness run start` or `harness run status`. Give it the prompt. It reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the code that the change touches. It returns the facts and the open decisions.
+2. `planning`: on Claude, compare the session model with the model of the `lead` role in the `models:` line. When they differ, tell the user to run `/model` to switch, and continue: it is guidance, not a deny. Then write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`.
+   - Run `harness plan check`. It prints an advisor line from the plan complexity, then one line for each wave of tasks. The wave lines print only for a clean single-run plan.
+   - On `advisor: on, model <m>`, with or without the text `(light track, risky path)`, start the `advisor` agent, with the `model` field set to `<m>`, the model that the line names. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept.
    - On `advisor: off`, start no advisor. Decide each open point yourself and record each decision under `## Decisions` in `plan.md`.
    - Then run `harness run plan`.
-3. `awaiting_approval`: show the plan (`harness plan view` gives the page). Grill the open questions in rounds with the question tool of the host: `references/grill.md`. When `## Open questions` holds only `- none`, ask the `Plan` question with the options `Approve` (first) and `Change the plan`. Stop until the user answers.
+3. `awaiting_approval`: show the plan. `harness run plan` wrote the page `plan.html` in the run folder. Grill the open questions in rounds with the question tool of the host: `references/grill.md`. When `## Open questions` holds only `- none`, ask the `Plan` question with the options `Approve` (first) and `Change the plan`. Stop until the user answers.
    - On `Approve`, the hook records the approval for the current `plan.md`. Run `harness run approve`.
    - On `Change the plan`, ask what to change, edit `plan.md`, and ask the `Plan` question again.
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
-4. `working`: you are the driver. You do not write the code of a task. `harness plan view` gives the waves.
-   - A light-track run can use `sonnet` as the lead. The track shows in `harness plan view`. On a light track, the lead does not ask a `sonnet` session to switch.
+4. `working`: you are the driver. You do not write the code of a task. `harness plan check` gives the waves (only for a clean single-run plan) and the model of each task.
+   - A light-track run can use `sonnet` as the lead. `harness plan check` prints `advisor: off (light track)` on a light track. The text `(light track, risky path)` on the `on` line marks a light-track plan with a guard, security or hook path. On a light track, the lead does not ask a `sonnet` session to switch.
    - For each wave, start one `worker` agent for each task, in the background, with the `model` field set to the `Model` of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap.
    - Use low effort for a haiku task that is mundane: docs, a rename or a config change.
    - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.

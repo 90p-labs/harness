@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -65,7 +66,47 @@ var phaseHints = map[domain.Phase]string{
 	domain.PhaseAbandoned:        "the run is closed, start the next with harness run start",
 }
 
+// HostModels is the resolved role models of one host, one entry per line of the models output.
+type HostModels struct {
+	Host  string
+	Roles map[string][]string
+}
+
+const (
+	modelsLabel      = "models"
+	modelsListJoiner = ","
+)
+
+var modelRoles = []shareddomain.Role{
+	shareddomain.RoleLead, shareddomain.RoleExplorer, shareddomain.RoleWorker,
+	shareddomain.RoleReviewer, shareddomain.RoleAdvisor,
+}
+
+// modelLines prints one line per host that has roles and names the host only when more than one line prints.
+func modelLines(all []HostModels) []string {
+	models := make([]HostModels, 0, len(all))
+	for _, m := range all {
+		if len(m.Roles) > 0 {
+			models = append(models, m)
+		}
+	}
+	lines := make([]string, 0, len(models))
+	for _, m := range models {
+		parts := make([]string, 0, len(modelRoles))
+		for _, role := range modelRoles {
+			parts = append(parts, fmt.Sprintf("%s=%s", role, strings.Join(m.Roles[string(role)], modelsListJoiner)))
+		}
+		label := modelsLabel
+		if len(models) > 1 {
+			label = fmt.Sprintf("%s (%s)", modelsLabel, m.Host)
+		}
+		lines = append(lines, label+": "+strings.Join(parts, " "))
+	}
+	return lines
+}
+
 type Handlers struct {
+	Models     []HostModels
 	Key        domain.RunKey
 	Start      start.Handler
 	Transition transition.Handler
@@ -139,7 +180,7 @@ func startCommand(connect Connect) *cobra.Command {
 				if err := h.Start.Handle(ctx, start.Command{Key: h.Key, Prompt: args[0]}); err != nil {
 					return err
 				}
-				if _, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}); err != nil {
+				if _, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}, modelLines(h.Models)); err != nil {
 					return err
 				}
 				return printRepeatClasses(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), h)
@@ -155,7 +196,7 @@ func statusCommand(connect Connect) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
-				_, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key})
+				_, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}, modelLines(h.Models))
 				if errors.Is(err, domain.ErrRunNotFound) {
 					_, err = fmt.Fprintln(cmd.OutOrStdout(), noActiveRun)
 				}
@@ -209,7 +250,7 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 				if err = h.Transition.Handle(ctx, command); err != nil {
 					return err
 				}
-				after, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{RunID: current.ID})
+				after, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{RunID: current.ID}, nil)
 				if err != nil {
 					return err
 				}
@@ -250,12 +291,17 @@ func withHandlers(cmd *cobra.Command, connect Connect, run func(context.Context,
 	return run(cmd.Context(), handlers)
 }
 
-func printStatus(ctx context.Context, out io.Writer, h Handlers, query status.Query) (status.Status, error) {
+// printStatus prints the status lines; extra lines go after the first line.
+func printStatus(ctx context.Context, out io.Writer, h Handlers, query status.Query, extra []string) (status.Status, error) {
 	current, err := h.Status.Handle(ctx, query)
 	if err != nil {
 		return current, err
 	}
-	for _, line := range Lines(current) {
+	lines := Lines(current)
+	if len(extra) > 0 {
+		lines = slices.Concat(lines[:1], extra, lines[1:])
+	}
+	for _, line := range lines {
 		if _, err := fmt.Fprintln(out, line); err != nil {
 			return current, err
 		}

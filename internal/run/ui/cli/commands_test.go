@@ -10,7 +10,9 @@ import (
 
 	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/90p-labs/harness/internal/run/application/command/start"
 	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/query/report"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/run/ui/cli"
@@ -308,4 +310,122 @@ func TestHandoffLines(t *testing.T) {
 			t.Errorf("line = %q, want none for a phase that releases the turn", got)
 		}
 	})
+}
+
+func TestTransitionDoesNotPrintModels(t *testing.T) {
+	repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: domain.PhasePlanning}}
+	connect := func(context.Context) (cli.Handlers, func() error, error) {
+		flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, noApprovals{}, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"), noTrace{})
+		return cli.Handlers{
+			Transition: transition.NewHandler(repo, flow, nil, domain.Policy{}),
+			Status:     status.NewHandler(repo),
+			Models:     []cli.HostModels{{Host: "claude", Roles: map[string][]string{"lead": {"cL"}}}},
+		}, func() error { return nil }, nil
+	}
+	cmd := cli.NewCommand(connect)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"plan"})
+
+	if err := cmd.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(out.String(), "models") {
+		t.Errorf("a transition printed the models line:\n%s", out.String())
+	}
+}
+
+func TestStatusPrintsModels(t *testing.T) {
+	roles := func(prefix string) map[string][]string {
+		return map[string][]string{
+			"lead": {prefix + "L"}, "explorer": {prefix + "E"}, "worker": {prefix + "W1", prefix + "W2"},
+			"reviewer": {prefix + "R1", prefix + "R2", prefix + "R3"}, "advisor": {prefix + "A1", prefix + "A2"},
+		}
+	}
+	cases := map[string]struct {
+		models []cli.HostModels
+		want   []string
+		absent bool
+		never  string
+	}{
+		"one host": {
+			models: []cli.HostModels{{Host: "claude", Roles: roles("c")}},
+			want:   []string{"models: lead=cL explorer=cE worker=cW1,cW2 reviewer=cR1,cR2,cR3 advisor=cA1,cA2"},
+		},
+		"two hosts or no host": {
+			models: []cli.HostModels{{Host: "claude", Roles: roles("c")}, {Host: "codex", Roles: roles("x")}},
+			want: []string{
+				"models (claude): lead=cL explorer=cE worker=cW1,cW2 reviewer=cR1,cR2,cR3 advisor=cA1,cA2",
+				"models (codex): lead=xL explorer=xE worker=xW1,xW2 reviewer=xR1,xR2,xR3 advisor=xA1,xA2",
+			},
+		},
+		"no host": {models: nil, want: nil, absent: true},
+		"a host with no roles is skipped": {
+			models: []cli.HostModels{{Host: "claude", Roles: roles("c")}, {Host: "codex"}},
+			want:   []string{"models: lead=cL explorer=cE worker=cW1,cW2 reviewer=cR1,cR2,cR3 advisor=cA1,cA2"},
+			never:  "codex",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: domain.PhasePlanning}}
+			connect := func(context.Context) (cli.Handlers, func() error, error) {
+				return cli.Handlers{Status: status.NewHandler(repo), Models: tc.models}, func() error { return nil }, nil
+			}
+			cmd := cli.NewCommand(connect)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetArgs([]string{"status"})
+
+			if err := cmd.ExecuteContext(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, line := range tc.want {
+				if !strings.Contains(out.String(), line+"\n") {
+					t.Errorf("output lacks %q:\n%s", line, out.String())
+				}
+			}
+			if tc.absent && strings.Contains(out.String(), "models") {
+				t.Errorf("output holds a models line:\n%s", out.String())
+			}
+			if tc.never != "" && strings.Contains(out.String(), tc.never) {
+				t.Errorf("output holds %q:\n%s", tc.never, out.String())
+			}
+		})
+	}
+}
+
+func TestStartPrintsModels(t *testing.T) {
+	now := time.Date(2026, 11, 10, 8, 20, 0, 0, time.UTC)
+	store := &reportStore{}
+	models := []cli.HostModels{{Host: "claude", Roles: map[string][]string{
+		"lead": {"L"}, "explorer": {"E"}, "worker": {"W1", "W2"}, "reviewer": {"R"}, "advisor": {"A"},
+	}}}
+	connect := func(context.Context) (cli.Handlers, func() error, error) {
+		flow := transition.NewFlow(store, silentHooks{}, passingGate{}, nil, domain.Policy{}, func() time.Time { return now }, noop.NewTracerProvider().Tracer("test"), noTrace{})
+		return cli.Handlers{
+			Key:    reportKey,
+			Start:  start.NewHandler(store, flow, func() time.Time { return now }),
+			Status: status.NewHandler(store),
+			Report: report.NewHandler(store, store, func() time.Time { return now },
+				func(id string) string { return "trace-of-" + id }, noop.NewTracerProvider().Tracer("test")),
+			Models: models,
+		}, func() error { return nil }, nil
+	}
+	cmd := cli.NewCommand(connect)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"start", "add login"})
+
+	if err := cmd.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	const line = "models: lead=L explorer=E worker=W1,W2 reviewer=R advisor=A\n"
+	lines := strings.SplitAfter(out.String(), "\n")
+	if len(lines) < 2 || lines[1] != line {
+		t.Fatalf("output:\n%s\nwant the second line %q", out.String(), line)
+	}
 }

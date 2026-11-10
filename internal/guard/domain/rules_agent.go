@@ -18,6 +18,7 @@ var agentRoles = map[string]shareddomain.Role{
 	"explore":           shareddomain.RoleExplorer,
 	"explorer":          shareddomain.RoleExplorer,
 	"claude-code-guide": shareddomain.RoleExplorer,
+	"verifier":          shareddomain.RoleExplorer,
 	"general-purpose":   shareddomain.RoleWorker,
 	"claude":            shareddomain.RoleWorker,
 	"worker":            shareddomain.RoleWorker,

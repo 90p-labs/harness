@@ -263,6 +263,8 @@ func ruleCases() map[string][]ruleCase {
 			{name: "worker without model", call: agentOf("worker", ""), deny: true, step: "one of sonnet, haiku"},
 			{name: "worker with the second listed model", call: agentOf("worker", "haiku")},
 			{name: "explorer model", call: agentOf("explore", "haiku")},
+			{name: "verifier without model", call: agentOf("90p:verifier", ""), deny: true, step: "haiku"},
+			{name: "verifier on the explorer model", call: agentOf("90p:verifier", "haiku")},
 			{name: "claude agent with an unlisted model", call: agentOf("claude", "opus"), deny: true, step: "one of sonnet, haiku"},
 			{name: "general purpose on a worker model", call: agentOf("general-purpose", "sonnet")},
 			{name: "prefixed upper case worker", call: agentOf("kodify:Worker", "sonnet")},

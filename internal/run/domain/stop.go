@@ -21,12 +21,12 @@ func DecideStop(run Run, policy Policy, agentRunning bool, handoff error) (StopV
 	}
 	run.StopBlocks++
 	run.StopBlocksTotal++
-	reason := fmt.Sprintf("the run is in phase %s and is not finished; the hook sees no background agent or shell task. Run a long command in the background, then stop", run.Phase)
+	reason := fmt.Sprintf("phase %s; the hook sees no background agent or shell task. Run long commands in the background", run.Phase)
 	switch {
 	case errors.Is(handoff, ErrHandoffMissing):
-		reason += ". After a phase change, write handoff.md, then stop"
+		reason += ". Write handoff.md after a phase change"
 	case handoff != nil:
-		reason += ". The handoff is refused: " + handoff.Error()
+		reason += ". " + handoff.Error()
 	}
 	return StopVerdict{Block: true, Reason: reason}, run
 }

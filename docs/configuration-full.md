@@ -38,7 +38,7 @@ roles:
     claude: [sonnet, haiku, opus]
     codex: [gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra]
   advisor:
-    claude: [fable]
+    claude: [fable, opus]
     codex: [gpt-6-astra]
 guard:
   disabled: [pr-draft-only]

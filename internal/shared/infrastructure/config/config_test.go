@@ -74,7 +74,7 @@ func TestLoadDefaults(t *testing.T) {
 		"explorer": {"claude": {"haiku"}, "codex": {"gpt-6-luna"}},
 		"worker":   {"claude": {"sonnet", "haiku"}, "codex": {"gpt-6.1-sol", "gpt-6-luna"}},
 		"reviewer": {"claude": {"sonnet", "haiku", "opus"}, "codex": {"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"}},
-		"advisor":  {"claude": {"fable"}, "codex": {"gpt-6-astra"}},
+		"advisor":  {"claude": {"fable", "opus"}, "codex": {"gpt-6-astra"}},
 		"lead":     {"claude": {"opus"}, "codex": {"gpt-6-astra"}},
 	}
 	if !reflect.DeepEqual(got.Roles, wantRoles) {
@@ -388,7 +388,7 @@ func TestLoadRoles(t *testing.T) {
 		"reviewer": {"claude": {"opus"}, "codex": {"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra"}},
 		"worker":   {"claude": {"opus", "sonnet"}, "codex": {"gpt-6.1-sol", "gpt-6-luna"}},
 		"explorer": {"claude": {"haiku"}, "codex": {"gpt-6-luna"}},
-		"advisor":  {"claude": {"fable"}, "codex": {"gpt-6-astra"}},
+		"advisor":  {"claude": {"fable", "opus"}, "codex": {"gpt-6-astra"}},
 	}
 	if !reflect.DeepEqual(got.Roles, want) {
 		t.Errorf("roles = %+v, want %+v", got.Roles, want)

@@ -20,17 +20,27 @@ const (
 	commandCheck = "check"
 	flagFile     = "file"
 
-	advisorFull = "advisor: on (full track)"
-	advisorPath = "advisor: on (guard, security or hook path)"
-	advisorOff  = "advisor: off (light track)"
+	advisorOn     = "advisor: on, model %s"
+	advisorOnBare = "advisor: on"
+	advisorPath   = " (light track, risky path)"
+	advisorOff    = "advisor: off (light track)"
+
+	waveLineForm  = "wave %d: %s"
+	waveTaskForm  = "task %d"
+	waveModelForm = "task %d (%s)"
+	waveTaskSep   = ", "
 )
 
 var ErrNoPlanFile = errors.New("no plan file: give --file or start a run")
 
 type Handlers struct {
-	Check       checkplan.Handler
-	Submit      submitplan.Handler
-	View        renderview.Handler
+	Check  checkplan.Handler
+	Submit submitplan.Handler
+	View   renderview.Handler
+	// AdvisorModels lists the models of the advisor role for the host: the first serves a full track, the second a path trigger.
+	AdvisorModels []string
+	// RepoTop is the repository top that plan view prints the page path against; empty prints the path as given.
+	RepoTop     string
 	DefaultPlan func(ctx context.Context) (checkplan.Query, error)
 	DefaultView func(ctx context.Context) (renderview.Command, error)
 }
@@ -110,7 +120,10 @@ func checkCommand(connect Connect) *cobra.Command {
 				return domain.ErrPlanHasProblems
 			}
 			if report.Program == nil {
-				fmt.Fprintln(cmd.OutOrStdout(), advisorLine(report))
+				fmt.Fprintln(cmd.OutOrStdout(), advisorLine(report, handlers.AdvisorModels))
+				for _, line := range waveLines(report.Doc.Tasks) {
+					fmt.Fprintln(cmd.OutOrStdout(), line)
+				}
 			}
 			return nil
 		},
@@ -119,15 +132,49 @@ func checkCommand(connect Connect) *cobra.Command {
 	return cmd
 }
 
-func advisorLine(report domain.Report) string {
+func advisorLine(report domain.Report, models []string) string {
 	switch {
 	case report.Track == shareddomain.TrackFull:
-		return advisorFull
+		return advisorOnLine(models, 0)
 	case domain.NeedsAdvisor(report.Doc):
-		return advisorPath
+		return advisorOnLine(models, 1) + advisorPath
 	default:
 		return advisorOff
 	}
+}
+
+func advisorOnLine(models []string, index int) string {
+	switch {
+	case len(models) == 0:
+		return advisorOnBare
+	case index >= len(models):
+		index = len(models) - 1
+	}
+	return fmt.Sprintf(advisorOn, models[index])
+}
+
+// waveLines gives the lead the task order as text, so that it reads no plan page.
+func waveLines(tasks []domain.Task) []string {
+	waves, err := domain.Waves(tasks)
+	if err != nil {
+		return nil
+	}
+	models := make(map[int]string, len(tasks))
+	for _, t := range tasks {
+		models[t.Number] = t.Model
+	}
+	lines := make([]string, len(waves))
+	for i, wave := range waves {
+		names := make([]string, len(wave))
+		for j, n := range wave {
+			names[j] = fmt.Sprintf(waveTaskForm, n)
+			if models[n] != "" {
+				names[j] = fmt.Sprintf(waveModelForm, n, models[n])
+			}
+		}
+		lines[i] = fmt.Sprintf(waveLineForm, i+1, strings.Join(names, waveTaskSep))
+	}
+	return lines
 }
 
 func queryFor(cmd *cobra.Command, handlers Handlers) (checkplan.Query, error) {
