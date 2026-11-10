@@ -42,7 +42,14 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 
 A run moves through phases. The transition table is deterministic: a row is `(from, event, guard) -> to`. The guards of one `(from, event)` pair exclude each other, so only one row applies.
 
-`Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver: every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` never takes the waiver.
+`Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver. A waiver means every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` takes the waiver only as a tree-only amend. The run must start in `working` and have no live round. The plan may change only in the 2 tree fences, or by a test path added or removed in an `Owned files` line.
+
+The approve step keeps a copy of the plan, `approved-plan.md`, in the run folder. The copy counts only when its sha256 is the hash of the latest `plan_approvals` row of the run. A waived amend does not replace the copy. The plan domain holds the closed test path list. A path that is not in clean form, or that has a `..` segment, is never a test path. A path is a test path when it has one of these forms:
+
+- A Go file that ends in `_test.go`.
+- A Python file that starts with `test_` or ends in `_test.py`.
+- A `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs` or `.cjs` file with `.test` or `.spec` before the extension.
+- A `.md`, `.json`, `.jsonl`, `.txt`, `.yaml`, `.yml` or `.golden` file under a `testdata` folder.
 
 Each guard is a named pure function of the run and the policy:
 
@@ -661,6 +668,12 @@ The `ui` layer: a `ui` package imports its own `application` and `domain` packag
 `harness plan check [--file path]` checks a plan in any phase, with or without a run.
 
 A plan has the heading `## Open questions`. It holds `- none` alone, or one question bullet on each line. A non-bullet line, an empty section or `- none` beside a question gives the problem `open-questions`. The lead grills each question with the user and moves each answer to `## Decisions`.
+
+A plan has the heading `## Review risks`. It is required. It holds `- none`, or one risk on each line. Each risk has `Test:` and a backticked test name, or `Decision:` and text. The test must be in a criterion proof or in a `Test first` line. A bad line gives the problem `risk-unanchored`.
+
+A plan needs the heading `## Threat model` when a path of the code tree or the test tree has a `guard` or `security` folder. It holds the bullets `Attacker`, `Input forms` and `Fail closed`. A missing heading or bullet gives the problem `threat-model`. ADR 0019 states the attacker.
+
+A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. Split the change into a multi-run plan.
 
 - With `--file`, it checks that file with live round 0.
 - Without `--file`, it checks `plan.md` in the run folder of the active run, with the live round of the run.

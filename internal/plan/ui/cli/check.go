@@ -47,6 +47,8 @@ func planHelp() string {
 		"Write the plan as markdown. `harness plan check` lists each problem with its line and rule.",
 		fmt.Sprintf("Level-2 headings: %s.", strings.Join(domain.TopHeadings, ", ")),
 		fmt.Sprintf("## %s: `- %s` or one `- question` on each line. The answers move to ## %s as `- <date>: <question>: <answer>`.", domain.HeadingOpenQuestions, domain.OpenQuestionsNone, domain.HeadingDecisions),
+		fmt.Sprintf("## %s: `- %s` or one `- risk` on each line, as %s (rule %s). A test name must be in a proof or a Test first line.", domain.HeadingReviewRisks, domain.RisksNone, domain.FormRiskLine, domain.RuleRiskUnanchored),
+		fmt.Sprintf("## %s is required when a tree path has a %s folder. It needs the bullets %s, each with text (rule %s). A single-run plan has %d tasks at most: split a larger change into a multi-run plan with ## %s (rule %s).", domain.HeadingThreatModel, strings.Join(domain.ThreatFolders, " or "), strings.Join(domain.ThreatLabels, ", "), domain.RuleThreatModel, domain.MaxRunTasks, domain.HeadingRuns, domain.RulePlanSize),
 		fmt.Sprintf("## %s ends with %d level-3 headings in this order: %s.", domain.HeadingSpecs, len(domain.FinalHeadings), strings.Join(domain.FinalHeadings, ", ")),
 		fmt.Sprintf("Each other level-3 heading there needs a %s line with %s. Each criterion is in one of them.", domain.CriteriaKey, domain.FormSpecCriteria),
 		fmt.Sprintf("## %s: an optional line `%s %s` or `%s %s`.", domain.HeadingGoal, domain.TrackPrefix, shareddomain.TrackLight, domain.TrackPrefix, shareddomain.TrackFull),

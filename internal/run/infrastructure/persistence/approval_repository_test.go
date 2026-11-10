@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
@@ -32,6 +33,44 @@ func TestApprovalRecordRepository(t *testing.T) {
 			}
 			assertHas(t, approvals, run.ID, approvedHash, true)
 			assertHas(t, approvals, run.ID, editedHash, false)
+		})
+	}
+}
+
+func TestApprovalLatest(t *testing.T) {
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := context.Background()
+			s := openStore(t, c)
+			run := newRun(t, "20261108-170222-add-a-grill-step", domain.EventStart)
+			if _, err := s.repo.Save(ctx, run); err != nil {
+				t.Fatal(err)
+			}
+			approvals := persistence.NewSQLApprovalRepository(s.db)
+			save := func(hash string, at time.Time) {
+				t.Helper()
+				if err := approvals.Save(ctx, run.ID, hash, at); err != nil {
+					t.Fatal(err)
+				}
+			}
+			assertLatest := func(want string) {
+				t.Helper()
+				got, ok, err := approvals.Latest(ctx, run.ID)
+				if err != nil || !ok || got != want {
+					t.Fatalf("Latest = %q, %v, %v, want %q", got, ok, err, want)
+				}
+			}
+
+			if _, ok, err := approvals.Latest(ctx, run.ID); err != nil || ok {
+				t.Fatalf("Latest with no row = %v, %v", ok, err)
+			}
+			save(approvedHash, clock)
+			save(editedHash, clock.Add(time.Minute))
+			assertLatest(editedHash)
+			save(approvedHash, clock.Add(2*time.Minute))
+			assertLatest(approvedHash)
+			save(editedHash, clock.Add(2*time.Minute))
+			assertLatest(editedHash)
 		})
 	}
 }

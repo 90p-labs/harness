@@ -151,7 +151,25 @@ func (p *parser) content(line string, n int) {
 		p.specsContent(line, n)
 	case HeadingOpenQuestions:
 		p.openQuestion(line, n)
+	case HeadingReviewRisks:
+		p.reviewRisk(line, n)
+	case HeadingThreatModel:
+		if bullet, ok := strings.CutPrefix(line, bulletMark); ok {
+			p.doc.ThreatModel = append(p.doc.ThreatModel, strings.TrimSpace(bullet))
+		}
 	}
+}
+
+func (p *parser) reviewRisk(line string, n int) {
+	if line == "" {
+		return
+	}
+	risk, ok := strings.CutPrefix(line, bulletMark)
+	if !ok {
+		p.problem(n, RuleRiskUnanchored, "line must be `- %s` or `- risk`", RisksNone)
+		return
+	}
+	p.doc.ReviewRisks = append(p.doc.ReviewRisks, Risk{Text: strings.TrimSpace(risk), Line: n})
 }
 
 func (p *parser) openQuestion(line string, n int) {

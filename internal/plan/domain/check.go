@@ -49,7 +49,7 @@ var (
 	SignalsHeader  = []string{"Criterion", "Signal", "Source", "Query", "Breach", "Window", "Panel"}
 	TaskSides      = []string{SideBackend, SideFrontend, SideOther}
 	TaskFields     = []string{FieldSide, FieldOwned, FieldTestFirst, FieldDoD, FieldDependsOn}
-	TopHeadings    = []string{HeadingGoal, HeadingCriteria, HeadingTasks, HeadingDecisions, HeadingOpenQuestions, HeadingSpecs}
+	TopHeadings    = []string{HeadingGoal, HeadingCriteria, HeadingTasks, HeadingDecisions, HeadingReviewRisks, HeadingOpenQuestions, HeadingSpecs}
 	FinalHeadings  = []string{HeadingCodeTree, HeadingTestTree, HeadingCommits, HeadingPRs}
 	SignalFolders  = []string{FolderCommand, FolderQuery, FolderHTTP, FolderConsumer}
 
@@ -83,6 +83,9 @@ func Check(doc Document, in CheckInput) []Problem {
 	checkSentences(doc, add)
 	checkTrace(doc, add)
 	checkOpenQuestions(doc, add)
+	checkReviewRisks(doc, add)
+	checkThreatModel(doc, add)
+	checkPlanSize(doc, add)
 	SortProblems(problems)
 	return problems
 }

@@ -16,6 +16,8 @@ const (
 	HeadingTasks         = "Tasks"
 	HeadingDecisions     = "Decisions"
 	HeadingOpenQuestions = "Open questions"
+	HeadingReviewRisks   = "Review risks"
+	HeadingThreatModel   = "Threat model"
 	HeadingSignals       = "Signals"
 	HeadingRegression    = "Regression impact"
 	HeadingSpecs         = "Tech specs"
@@ -65,6 +67,8 @@ type Document struct {
 	Diagrams      []Diagram
 	Sketches      []Sketch
 	OpenQuestions []string
+	ReviewRisks   []Risk
+	ThreatModel   []string
 }
 
 func (d Document) QuestionsOpen() bool {

@@ -1,6 +1,7 @@
 package harness_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -25,9 +26,14 @@ const (
 	reviewingItem     = "5. `reviewing`"
 	shippingItem      = "6. `shipping`"
 	fixupFlag         = "--fixup"
+	templateFile      = "skills/harness/references/plan-template.md"
+	ruleSourceGlob    = "internal/plan/domain/*.go"
+	threatModelADR    = "ADR 0019"
+	reviewRisksHead   = "## Review risks"
 )
 
 var (
+	ruleID       = regexp.MustCompile(`RuleID = "([a-z-]+)"`)
 	grillViews   = []string{"Product", "QA", "Tech specs"}
 	reviewLabels = []string{"**Common list**", "**Verify**", "**Fix**", "**Re-review**", "**Final panel**"}
 )
@@ -103,5 +109,30 @@ func TestHarnessSkillReviewRound(t *testing.T) {
 	}
 	if !strings.Contains(round, fixupFlag) {
 		t.Errorf("%s does not name %q in the item %q", skillFile, fixupFlag, reviewingItem)
+	}
+}
+
+func TestPlanTemplate(t *testing.T) {
+	template := repository.Read(t, templateFile)
+	sources, err := repository.Glob(t, ruleSourceGlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := 0
+	for _, path := range sources {
+		for _, m := range ruleID.FindAllStringSubmatch(repository.Read(t, path), -1) {
+			rules++
+			if !strings.Contains(template, "`"+m[1]+"`") {
+				t.Errorf("%s does not name the rule %q in backticks", templateFile, m[1])
+			}
+		}
+	}
+	if rules == 0 {
+		t.Fatalf("no rule id in %s", ruleSourceGlob)
+	}
+	for _, want := range []string{threatModelADR, reviewRisksHead} {
+		if !strings.Contains(template, want) {
+			t.Errorf("%s does not name %q", templateFile, want)
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 type ApprovalRepository interface {
 	Has(ctx context.Context, runID, planHash string) (bool, error)
 	Save(ctx context.Context, runID, planHash string, at time.Time) error
+	Latest(ctx context.Context, runID string) (hash string, ok bool, err error)
 }
 
 type Submission struct {

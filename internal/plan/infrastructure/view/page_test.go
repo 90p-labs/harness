@@ -344,6 +344,25 @@ func TestPageSketchError(t *testing.T) {
 	}
 }
 
+func TestPageReviewRisks(t *testing.T) {
+	in := baseInput(t)
+	doc, _ := domain.Parse(viewPlan + "\n## Review risks\n\n- Late reply. Test: `TestPong`.\n" +
+		"\n## Threat model\n\n- Attacker: an honest agent.\n")
+	in.Doc = doc
+	in.Links = domain.Trace(doc)
+
+	page := render(t, in)
+
+	for _, want := range []string{
+		"<h3>Review risks</h3><ul><li>Late reply. Test: <code>TestPong</code>.</li></ul>",
+		"<h3>Threat model</h3><ul><li>Attacker: an honest agent.</li></ul>",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("notes do not hold %q", want)
+		}
+	}
+}
+
 func TestPageWaveFitsLongPaths(t *testing.T) {
 	page := render(t, baseInput(t))
 

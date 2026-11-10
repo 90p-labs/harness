@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	livecli "github.com/90p-labs/harness/internal/live/ui/cli"
 	planmodule "github.com/90p-labs/harness/internal/plan"
 	"github.com/90p-labs/harness/internal/plan/application/command/submitplan"
+	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	runmodule "github.com/90p-labs/harness/internal/run"
 	"github.com/90p-labs/harness/internal/run/application/command/recordapproval"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
@@ -32,6 +36,11 @@ import (
 	"github.com/90p-labs/harness/internal/shared/infrastructure/execplugin"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
+)
+
+const (
+	keptPlanFile = "approved-plan.md"
+	keptPlanMode = 0o644
 )
 
 func newRunCommand(flags *pflag.FlagSet) *cobra.Command {
@@ -194,6 +203,33 @@ func (g planGate) Hash(run domain.Run) (string, error) {
 	}
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+func (g planGate) Keep(run domain.Run) error {
+	content, err := os.ReadFile(planPath(g.worktree, run.ID))
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(keptPlanPath(g.worktree, run.ID), content, keptPlanMode)
+}
+
+func (g planGate) TreeOnly(run domain.Run, approvedHash string) (bool, error) {
+	kept, err := os.ReadFile(keptPlanPath(g.worktree, run.ID))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	current, err := os.ReadFile(planPath(g.worktree, run.ID))
+	if err != nil {
+		return false, err
+	}
+	return plandomain.TreeOnlyAmend(string(kept), approvedHash, string(current)), nil
+}
+
+func keptPlanPath(worktree, runID string) string {
+	return filepath.Join(filepath.Dir(planPath(worktree, runID)), keptPlanFile)
 }
 
 type approvalAdapter struct {

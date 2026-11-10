@@ -1,6 +1,8 @@
 package agents_test
 
 import (
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -21,12 +23,71 @@ const (
 	reReviewTitle = "## Re-review"
 	standardsRule = "does not report a rule that a gate checks"
 	reviewAnswer  = "Answer `closed` or `open` for the finding."
+	explorerFile  = "agents/explorer.md"
+	templateName  = "references/plan-template.md"
+	templateRoot  = "skills/harness/"
+	binaryName    = "harness"
+	helpFlag      = "--help"
 	workerFixLine = "For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test."
 )
 
 var (
-	reportLimit = regexp.MustCompile(`\b(?:under|at most) \d+ words\b`)
+	reportLimit    = regexp.MustCompile(`\b(?:under|at most) \d+ words\b`)
+	harnessCommand = regexp.MustCompile("`harness ([a-z]+(?: [a-z]+)?)[^`]*`")
+	helpCommand    = regexp.MustCompile(`(?m)^  ([a-z]+)\s`)
+	explorerSteps  = []string{templateName, "git log --format='%h %s' -- <path>", "read-only command", "checker code", "review risks", "threat model", "port or copy", "is also a review risk", "the other direction", "Put the checker conflicts first", "under 600 words"}
+	advisorSteps   = []string{templateName, "go test -list", "review risk", "threat model", "800 lines", "under 500 words"}
 )
+
+func harnessBinary(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), binaryName)
+	build := exec.Command("go", "build", "-o", bin, "./cmd/harness")
+	build.Dir = repository.Root(t)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	return bin
+}
+
+func subcommands(t *testing.T, bin string, parent ...string) []string {
+	t.Helper()
+	out, err := exec.Command(bin, append(parent, helpFlag)...).Output()
+	if err != nil {
+		t.Fatalf("%s %v: %v", binaryName, parent, err)
+	}
+	var names []string
+	for _, m := range helpCommand.FindAllStringSubmatch(string(out), -1) {
+		names = append(names, m[1])
+	}
+	return names
+}
+
+func checkBrief(t *testing.T, path string, steps []string) {
+	t.Helper()
+	raw := repository.Read(t, path)
+	for _, want := range steps {
+		if !strings.Contains(raw, want) {
+			t.Errorf("%s does not hold %q", path, want)
+		}
+	}
+	repository.Read(t, templateRoot+templateName)
+	bin := harnessBinary(t)
+	for _, m := range harnessCommand.FindAllStringSubmatch(raw, -1) {
+		words := strings.Fields(m[1])
+		if !slices.Contains(subcommands(t, bin), words[0]) {
+			t.Errorf("%s names the unknown command %q", path, m[0])
+			continue
+		}
+		if len(words) > 1 && !slices.Contains(subcommands(t, bin, words[0]), words[1]) {
+			t.Errorf("%s names the unknown command %q", path, m[0])
+		}
+	}
+}
+
+func TestExplorerBrief(t *testing.T) { checkBrief(t, explorerFile, explorerSteps) }
+
+func TestAdvisorBrief(t *testing.T) { checkBrief(t, advisorFile, advisorSteps) }
 
 func TestAgentFiles(t *testing.T) {
 	want := repository.FrontmatterKeys(t, reviewerAgent)

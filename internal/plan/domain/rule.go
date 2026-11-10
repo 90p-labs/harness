@@ -19,4 +19,7 @@ const (
 	RuleRunDepends       RuleID = "run-depends"
 	RuleRunOverlap       RuleID = "run-overlap"
 	RulePlanKind         RuleID = "plan-kind"
+	RuleRiskUnanchored   RuleID = "risk-unanchored"
+	RuleThreatModel      RuleID = "threat-model"
+	RulePlanSize         RuleID = "plan-size"
 )
