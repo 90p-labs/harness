@@ -5,6 +5,8 @@ import "context"
 type PlanGate interface {
 	Submit(ctx context.Context, run Run) (Submission, error)
 	Hash(run Run) (string, error)
+	Keep(run Run) error
+	TreeOnly(run Run, approvedHash string) (bool, error)
 }
 
 type RunTrace interface {

@@ -89,12 +89,16 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 		if cmd.Event == domain.EventSubmitPlan && submission.ApprovalWaived {
 			policy.ApprovalNeeded = false
 		}
+		if cmd.Event == domain.EventAmend && policy.ApprovalNeeded && run.Phase == domain.PhaseWorking && run.LiveRound == 0 && f.treeOnly(ctx, run) {
+			policy.ApprovalNeeded = false
+		}
 		if cmd.Event == domain.EventApprovePlan && submission.QuestionsOpen {
 			return domain.ErrOpenQuestions
 		}
 	}
+	var hash string
 	if cmd.Event == domain.EventApprovePlan {
-		if cmd, err = f.approved(ctx, run, cmd); err != nil {
+		if cmd, hash, err = f.approved(ctx, run, cmd); err != nil {
 			return err
 		}
 	}
@@ -107,6 +111,14 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 	}
 	if _, err := f.repo.Save(ctx, next); err != nil {
 		return err
+	}
+	if cmd.Event == domain.EventApprovePlan {
+		if err := f.approvals.Save(ctx, run.ID, hash, cmd.At); err != nil {
+			return err
+		}
+		if err := f.gate.Keep(run); err != nil {
+			return err
+		}
 	}
 	f.hooks.After(ctx, run, next)
 	if next.Phase == domain.PhaseDone || next.Phase == domain.PhaseAbandoned {
@@ -130,23 +142,32 @@ func reworkAttributes(cmd domain.Command) []attribute.KeyValue {
 	return attrs
 }
 
-func (f Flow) approved(ctx context.Context, run domain.Run, cmd domain.Command) (domain.Command, error) {
-	if cmd.By != "" {
-		cmd.Reason = fmt.Sprintf(byReasonFormat, cmd.By, cmd.Reason)
-		return cmd, nil
-	}
+func (f Flow) approved(ctx context.Context, run domain.Run, cmd domain.Command) (domain.Command, string, error) {
 	hash, err := f.gate.Hash(run)
 	if err != nil {
-		return cmd, err
+		return cmd, "", err
+	}
+	if cmd.By != "" {
+		cmd.Reason = fmt.Sprintf(byReasonFormat, cmd.By, cmd.Reason)
+		return cmd, hash, nil
 	}
 	recorded, err := f.approvals.Has(ctx, run.ID, hash)
 	if err != nil {
-		return cmd, err
+		return cmd, "", err
 	}
 	if !recorded {
-		return cmd, domain.ErrApprovalNotRecorded
+		return cmd, "", domain.ErrApprovalNotRecorded
 	}
-	return cmd, nil
+	return cmd, hash, nil
+}
+
+func (f Flow) treeOnly(ctx context.Context, run domain.Run) bool {
+	hash, ok, err := f.approvals.Latest(ctx, run.ID)
+	if err != nil || !ok {
+		return false
+	}
+	only, err := f.gate.TreeOnly(run, hash)
+	return err == nil && only
 }
 
 type Handler struct {

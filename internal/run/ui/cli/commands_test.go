@@ -54,6 +54,14 @@ func (passingGate) Submit(context.Context, domain.Run) (domain.Submission, error
 }
 func (passingGate) Hash(domain.Run) (string, error) { return "", nil }
 
+func (passingGate) Keep(domain.Run) error { return nil }
+
+func (passingGate) TreeOnly(domain.Run, string) (bool, error) { return false, nil }
+
+type noApprovals struct{ domain.ApprovalRepository }
+
+func (noApprovals) Save(context.Context, string, string, time.Time) error { return nil }
+
 type silentHooks struct{}
 
 func (silentHooks) Before(context.Context, domain.Run, domain.Command, domain.Phase) error {
@@ -83,7 +91,7 @@ func TestTransitionCommand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: tc.phase}}
 			connect := func(context.Context) (cli.Handlers, func() error, error) {
-				flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, nil, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"), noTrace{})
+				flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, noApprovals{}, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"), noTrace{})
 				return cli.Handlers{
 					Transition: transition.NewHandler(repo, flow),
 					Status:     status.NewHandler(repo),

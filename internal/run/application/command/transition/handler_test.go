@@ -27,6 +27,10 @@ const (
 	callGate   = "gate"
 	callHash   = "hash"
 	callHas    = "has"
+	callLatest = "latest"
+	callKeep   = "keep"
+	callTree   = "tree"
+	callRow    = "row"
 
 	spanName      = "run.transition"
 	attrRunID     = "harness.run.id"
@@ -125,10 +129,13 @@ func (f *fakeTrace) End(ctx context.Context, run domain.Run) {
 }
 
 type fakeGate struct {
-	journal    *journal
-	submission domain.Submission
-	err        error
-	runs       []domain.Run
+	journal     *journal
+	submission  domain.Submission
+	err         error
+	runs        []domain.Run
+	treeOnly    bool
+	treeOnlyErr error
+	treeHashes  []string
 }
 
 func (f *fakeGate) Submit(_ context.Context, run domain.Run) (domain.Submission, error) {
@@ -142,9 +149,24 @@ func (f *fakeGate) Hash(domain.Run) (string, error) {
 	return planHash, nil
 }
 
+func (f *fakeGate) Keep(domain.Run) error {
+	f.journal.calls = append(f.journal.calls, callKeep)
+	return nil
+}
+
+func (f *fakeGate) TreeOnly(_ domain.Run, hash string) (bool, error) {
+	f.journal.calls = append(f.journal.calls, callTree)
+	f.treeHashes = append(f.treeHashes, hash)
+	return f.treeOnly, f.treeOnlyErr
+}
+
 type fakeApprovals struct {
-	journal  *journal
-	recorded map[string]bool
+	journal   *journal
+	recorded  map[string]bool
+	saved     []string
+	latest    string
+	latestOK  bool
+	latestErr error
 }
 
 func (f *fakeApprovals) Has(_ context.Context, id, hash string) (bool, error) {
@@ -153,8 +175,15 @@ func (f *fakeApprovals) Has(_ context.Context, id, hash string) (bool, error) {
 }
 
 func (f *fakeApprovals) Save(_ context.Context, id, hash string, _ time.Time) error {
+	f.journal.calls = append(f.journal.calls, callRow)
 	f.recorded[id+hash] = true
+	f.saved = append(f.saved, hash)
 	return nil
+}
+
+func (f *fakeApprovals) Latest(context.Context, string) (string, bool, error) {
+	f.journal.calls = append(f.journal.calls, callLatest)
+	return f.latest, f.latestOK, f.latestErr
 }
 
 type fixture struct {
@@ -337,7 +366,7 @@ func TestApproveCommandNeedsTheRecord(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		assertCalls(t, f, callActive, callGate, callHash, callHas, callBefore, callSave, callAfter)
+		assertCalls(t, f, callActive, callGate, callHash, callHas, callBefore, callSave, callRow, callKeep, callAfter)
 		if got := f.repo.saved[0]; got.Phase != domain.PhaseWorking || got.Track != shareddomain.TrackFull {
 			t.Fatalf("phase = %s, track = %q, want %s and %q", got.Phase, got.Track, domain.PhaseWorking, shareddomain.TrackFull)
 		}
@@ -390,7 +419,7 @@ func TestApproveCommandByModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertCalls(t, f, callActive, callGate, callBefore, callSave, callAfter)
+	assertCalls(t, f, callActive, callGate, callHash, callBefore, callSave, callRow, callKeep, callAfter)
 	want := "approved by " + byModel + ": " + byReason
 	if got := f.repo.saved[0].Events()[0].Reason; got != want {
 		t.Fatalf("reason = %q, want %q", got, want)
@@ -650,4 +679,104 @@ func TestMoveTracesTheRun(t *testing.T) {
 			t.Fatalf("ended = %+v", f.trace.ended)
 		}
 	})
+}
+
+func TestApproveKeepsPlan(t *testing.T) {
+	recorded := transition.Command{Key: key, Event: domain.EventApprovePlan}
+	by := transition.Command{Key: key, Event: domain.EventApprovePlan, By: byModel, Reason: byReason}
+	cases := []struct {
+		name   string
+		cmd    transition.Command
+		veto   error
+		stale  error
+		record bool
+		want   []string
+	}{
+		{"a recorded approval saves the hash and keeps the plan after the save", recorded, nil, nil, true,
+			[]string{callActive, callGate, callHash, callHas, callBefore, callSave, callRow, callKeep, callAfter}},
+		{"a by approval saves the hash and keeps the plan after the save", by, nil, nil, false,
+			[]string{callActive, callGate, callHash, callBefore, callSave, callRow, callKeep, callAfter}},
+		{"a veto of a recorded approval writes neither", recorded, errors.New(vetoText), nil, true,
+			[]string{callActive, callGate, callHash, callHas, callBefore}},
+		{"a veto of a by approval writes neither", by, errors.New(vetoText), nil, false,
+			[]string{callActive, callGate, callHash, callBefore}},
+		{"a stale save of a by approval writes neither", by, nil, domain.ErrStaleRun, false,
+			[]string{callActive, callGate, callHash, callBefore, callSave}},
+		{"a stale save of a recorded approval writes neither", recorded, nil, domain.ErrStaleRun, true,
+			[]string{callActive, callGate, callHash, callHas, callBefore, callSave}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(awaitingRun())
+			f.approvals.recorded[runID+planHash] = tc.record
+			f.hooks.veto = tc.veto
+			f.repo.saveErr = tc.stale
+
+			_ = f.handler.Handle(context.Background(), tc.cmd)
+
+			assertCalls(t, f, tc.want...)
+			wroteHash := slices.Contains(tc.want, callRow)
+			if wroteHash && !slices.Equal(f.approvals.saved, []string{planHash}) {
+				t.Fatalf("saved hashes = %v, want [%s]", f.approvals.saved, planHash)
+			}
+		})
+	}
+}
+
+func TestAmendTreeOnly(t *testing.T) {
+	errRead := errors.New("read failed")
+	const approvedHash = "approved-hash"
+	reviewing := domain.Run{ID: runID, Key: key, Phase: domain.PhaseReviewing, Version: startedAt}
+	shipping := domain.Run{ID: runID, Key: key, Phase: domain.PhaseShipping, Version: startedAt}
+	live := workingRun()
+	live.LiveRound = 1
+	cases := []struct {
+		name      string
+		run       domain.Run
+		latestOK  bool
+		latestErr error
+		treeOnly  bool
+		treeErr   error
+		wantPhase domain.Phase
+		wantCalls []string
+	}{
+		{"a tree-only amend from working needs no approval", workingRun(), true, nil, true, nil, domain.PhaseWorking,
+			[]string{callActive, callGate, callLatest, callTree, callBefore, callSave, callAfter}},
+		{"a change outside the trees needs the approval", workingRun(), true, nil, false, nil, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callTree, callBefore, callSave, callAfter}},
+		{"a live round needs the approval", live, true, nil, true, nil, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}},
+		{"an amend from reviewing needs the approval", reviewing, true, nil, true, nil, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}},
+		{"an amend from shipping needs the approval", shipping, true, nil, true, nil, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}},
+		{"no latest row needs the approval", workingRun(), false, nil, true, nil, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callBefore, callSave, callAfter}},
+		{"a latest error needs the approval", workingRun(), false, errRead, true, nil, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callBefore, callSave, callAfter}},
+		{"a tree check error needs the approval", workingRun(), true, nil, true, errRead, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callTree, callBefore, callSave, callAfter}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixtureWith(tc.run, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3})
+			f.approvals.latest, f.approvals.latestOK, f.approvals.latestErr = approvedHash, tc.latestOK, tc.latestErr
+			f.gate.treeOnly, f.gate.treeOnlyErr = tc.treeOnly, tc.treeErr
+
+			if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: domain.EventAmend}); err != nil {
+				t.Fatal(err)
+			}
+
+			assertCalls(t, f, tc.wantCalls...)
+			if got := f.repo.saved[0].Phase; got != tc.wantPhase {
+				t.Fatalf("phase = %s, want %s", got, tc.wantPhase)
+			}
+			if slices.Contains(tc.wantCalls, callTree) && !slices.Equal(f.gate.treeHashes, []string{approvedHash}) {
+				t.Fatalf("tree hashes = %v, want [%s]", f.gate.treeHashes, approvedHash)
+			}
+			if slices.Contains(tc.wantCalls, callKeep) {
+				t.Fatal("a waived amend must not keep the plan")
+			}
+		})
+	}
 }

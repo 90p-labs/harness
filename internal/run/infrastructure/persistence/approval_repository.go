@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
@@ -9,7 +11,8 @@ import (
 
 const (
 	selectApproval = "SELECT EXISTS (SELECT 1 FROM plan_approvals WHERE run_id = ? AND plan_sha256 = ?)"
-	insertApproval = "INSERT INTO plan_approvals (run_id, plan_sha256, at) VALUES (?, ?, ?) ON CONFLICT (run_id, plan_sha256) DO NOTHING"
+	insertApproval = "INSERT INTO plan_approvals (run_id, plan_sha256, at) VALUES (?, ?, ?) ON CONFLICT (run_id, plan_sha256) DO UPDATE SET at = excluded.at"
+	selectLatest   = "SELECT plan_sha256 FROM plan_approvals WHERE run_id = ? ORDER BY at DESC, rowid DESC LIMIT 1"
 )
 
 type SQLApprovalRepository struct {
@@ -29,4 +32,13 @@ func (r SQLApprovalRepository) Has(ctx context.Context, runID, planHash string) 
 func (r SQLApprovalRepository) Save(ctx context.Context, runID, planHash string, at time.Time) error {
 	_, err := r.db.ExecContext(ctx, insertApproval, runID, planHash, at.UTC())
 	return err
+}
+
+func (r SQLApprovalRepository) Latest(ctx context.Context, runID string) (string, bool, error) {
+	var hash string
+	err := r.db.QueryRowContext(ctx, selectLatest, runID).Scan(&hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return hash, err == nil, err
 }
