@@ -135,7 +135,7 @@ The `setup` key of `.harness.yaml` holds one step, and the `gates` key holds thr
 
 `verify.parallel: 2` lets the harness run two gates at the same time.
 `py-typecheck` and `lint` need nothing, so they start together.
-`py-test` starts only after `py-typecheck` and `lint` are `PASS` or `CACHED`.
+`py-test` starts only after `py-typecheck` and `lint` pass or are cached.
 When one of them fails, the harness does not run `py-test`. It prints `SKIPPED py-test needs <gate>` and exits with code 1.
 `harness verify` runs the setup step before the first gate, and only when the hash of its `paths` changed since its last pass. A step that runs prints `setup py-install <duration>`. A step that does not run prints nothing.
 
@@ -219,18 +219,14 @@ Commit `.harness.yaml`, `compose.yaml`, `.importlinter`, `.gitignore`, `.harness
 ```console
 $ harness verify
 setup py-install 273ms
-PASS py-typecheck 749ms
-PASS lint 1.099s
-PASS py-test 1.12s
+PASS gates=3 cached=0
 $ harness verify
-CACHED py-typecheck 749ms
-CACHED lint 1.098s
-CACHED py-test 1.119s
+PASS gates=3 cached=3
 ```
 
 The first run starts with `setup py-install`, because the step never passed before. Then `py-typecheck` and `lint` run, two at a time, and `py-test` runs after the two.
 The gate `lint` passes, because the baseline holds the finding.
-The second run prints no `setup` line and prints `CACHED`, because no input changed.
+The second run prints no `setup` line and shows `cached=3`, because no input changed.
 
 ### 6. See the ratchet stop a new finding
 
@@ -238,23 +234,23 @@ The proof added `import json` and an empty line at the top of `tests/test_order.
 
 ```console
 $ harness verify
-CACHED py-typecheck 956ms
 FAIL lint 1.235s
 SKIPPED py-test needs lint
 
 lint:
 {"version":1,"findings":[{"rule":"python/ruff","severity":"error","file":"src/shop/order/domain/order.py","line":1,"message":"F401 `os` imported but unused"},{"rule":"python/ruff","severity":"error","file":"tests/test_order.py","line":1,"message":"F401 `json` imported but unused"}]}
 
+FAIL gates=3 failed=1
 error: gates failed
 $ echo $?
 1
 ```
 
 The gate `lint` fails on the finding in `tests/test_order.py`, because the baseline does not hold it.
-`py-typecheck` prints `CACHED`, because the proof ran the same change once before.
+`py-typecheck` passes and prints no line, because the harness prints a line only for a failed or skipped gate.
 `py-test` needs `lint`, so the harness does not run it. It prints `SKIPPED py-test needs lint`, and `harness verify` exits with code 1.
 The report also lists the finding in the baseline. The baseline key is the rule, the file and the message, not the line.
-The proof then removed the new import. The next `harness verify` printed `CACHED` for the three gates, because the files were the same as in step 5.
+The proof then removed the new import. The next `harness verify` printed `cached=3`, because the files were the same as in step 5.
 
 ### 7. Change a dependency
 
@@ -269,16 +265,12 @@ $ git diff --stat
  2 files changed, 15 insertions(+)
 $ harness verify
 setup py-install 435ms
-PASS py-typecheck 756ms
-PASS lint 1.125s
-PASS py-test 927ms
+PASS gates=3 cached=0
 $ docker compose run --rm -T python uv pip list --python /opt/venv/bin/python | grep timeout
 Using Python 3.14.10 environment at: /opt/venv
 pytest-timeout    2.4.0
 $ harness verify
-CACHED py-typecheck 756ms
-CACHED lint 1.124s
-CACHED py-test 927ms
+PASS gates=3 cached=3
 ```
 
 The first run prints `setup py-install` and installs `pytest-timeout` into the venv. The second run, with no change, prints no `setup` line.
@@ -289,16 +281,14 @@ $ docker compose run --rm -T python uv remove --no-sync --dev pytest-timeout
 Resolved 20 packages in 12ms
 $ harness verify
 setup py-install 288ms
-CACHED py-typecheck 749ms
-CACHED lint 1.15s
-CACHED py-test 1.119s
+PASS gates=3 cached=3
 $ docker compose run --rm -T python uv pip list --python /opt/venv/bin/python | grep -c timeout
 Using Python 3.14.10 environment at: /opt/venv
 0
 ```
 
 The setup step ran again, because the hash of `uv.lock` changed. It removed `pytest-timeout` from the venv, because `uv sync` removes each package that `uv.lock` does not hold.
-The gates are `CACHED`, because their input hash is the same as before the new dependency.
+The gates are cached, because their input hash is the same as before the new dependency.
 
 ### 8. Fix the old finding and shrink the baseline
 
@@ -319,7 +309,7 @@ Commit the fix and the baseline. `harness verify --commits` checks the commit in
 
 ```console
 $ harness verify --commits HEAD~1
-PASS 92342b2d8a44 fix
+PASS commits=1
 ```
 
 The setup step prints no line here, because the hash of its `paths` is the same as the hash of its last pass.
@@ -511,4 +501,4 @@ The harness writes its run state, `.harness/state.db`, into the git directory, s
 - The gate `lint` has no `paths`, so it hashes the full tree. A change to `pyproject.toml`, `.importlinter`, a pack or a plugin then runs it again.
 - `mypy src tests` reads the folders of your own code. Add a folder to the command when your code lives elsewhere.
 - On Linux with Docker Engine, read the root-user limit in the [examples index](../README.md#rules-for-every-example).
-- A file that a gate reads but that its `paths` do not match does not run the gate again. Then `harness verify` prints `CACHED` for a stale result.
+- A file that a gate reads but that its `paths` do not match does not run the gate again. Then `harness verify` counts a stale result in `cached`.

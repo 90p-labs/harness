@@ -114,7 +114,7 @@ run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=awaiting_appr
 $ harness run approve
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=working review_round=0 live_round=0
 $ harness verify
-PASS criterion-1 317ms
+PASS gates=1 cached=0
 $ harness run review
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=reviewing review_round=0 live_round=0
 $ harness run ship

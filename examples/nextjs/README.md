@@ -171,24 +171,18 @@ The second run prints no `setup` line, because the hash of the step `paths` did 
 ```console
 $ harness verify
 setup node-install 3.064s
-PASS node-typecheck 5.112s
-PASS node-lint 4.889s
-PASS lint 401ms
-PASS node-build 8.944s
+PASS gates=4 cached=0
 $ harness verify
-CACHED node-typecheck 5.111s
-CACHED node-lint 4.889s
-CACHED lint 400ms
-CACHED node-build 8.943s
+PASS gates=4 cached=4
 ```
 
 The three keys that shape this run:
 
 - `setup` holds the install step. The harness runs it before the gates, and prints `setup <id> <duration>` when it runs. A step runs only when the hash of its `paths` changed since its last pass, or when its `creates` file is missing.
 - `verify.parallel: 3` lets the harness run three gates at the same time. The gates `node-typecheck`, `node-lint` and `lint` start together.
-- `needs` on `node-build` makes the gate wait. `node-build` starts only after `node-typecheck`, `node-lint` and `lint` are `PASS` or `CACHED`.
+- `needs` on `node-build` makes the gate wait. `node-build` starts only after `node-typecheck`, `node-lint` and `lint` pass or are cached.
 
-The gates print in the order of the file.
+When no gate fails, the harness prints the setup line, if a step ran, and the summary line. When a gate fails, it prints the failed gates in the order of the file.
 
 ### 5. Change the lockfile
 
@@ -201,15 +195,9 @@ The second run changes nothing, so it prints no `setup` line.
 $ echo "# edit" >> pnpm-lock.yaml
 $ harness verify
 setup node-install 3.247s
-PASS node-typecheck 4.983s
-PASS node-lint 4.81s
-PASS lint 442ms
-PASS node-build 6.557s
+PASS gates=4 cached=0
 $ harness verify
-CACHED node-typecheck 4.982s
-CACHED node-lint 4.81s
-CACHED lint 441ms
-CACHED node-build 6.557s
+PASS gates=4 cached=4
 $ git checkout pnpm-lock.yaml
 ```
 
@@ -222,9 +210,7 @@ The proof exported `COMPOSE_PROJECT_NAME=nextproof`, so the container name start
 ```console
 $ harness verify; echo "exit $?"
 setup node-install 2.845s
-PASS node-typecheck 4.566s
 FAIL node-lint 4.389s
-PASS lint 579ms
 SKIPPED node-build needs node-lint
 
 node-lint:
@@ -242,7 +228,7 @@ node-lint:
 
  ELIFECYCLE  Command failed with exit code 1.
 
-
+FAIL gates=4 failed=1
 error: gates failed
 exit 1
 ```
@@ -254,10 +240,7 @@ Delete `src/components/bad-hook.tsx`. The next `harness verify` reads the cache 
 ```console
 $ rm src/components/bad-hook.tsx
 $ harness verify; echo "exit $?"
-CACHED node-typecheck 5.111s
-CACHED node-lint 4.889s
-CACHED lint 400ms
-CACHED node-build 8.943s
+PASS gates=4 cached=4
 exit 0
 ```
 
@@ -268,7 +251,7 @@ exit 0
 ```console
 $ git commit -q -m "feat: add the cart total"
 $ harness verify --commits HEAD~1
-PASS c2e66bbfdafd feat
+PASS commits=1
 ```
 
 ## Architecture rules with the built-in ddd pack
@@ -322,10 +305,7 @@ The finding goes away, and the gates pass:
 
 ```console
 $ harness verify
-CACHED node-typecheck 4.617s
-CACHED node-lint 4.535s
-PASS lint 350ms
-PASS node-build 5.954s
+PASS gates=4 cached=2
 ```
 
 ### Accept a finding
@@ -344,10 +324,7 @@ $ git diff --stat
  pnpm-lock.yaml              | 13 +++++++++++--
  4 files changed, 21 insertions(+), 2 deletions(-)
 $ harness verify
-PASS node-typecheck 4.625s
-PASS node-lint 4.25s
-PASS lint 383ms
-PASS node-build 5.993s
+PASS gates=4 cached=0
 ```
 
 The diff also holds the `date-fns` change and the `domain_allow` key of the two sections above, because the proof had not committed them yet.

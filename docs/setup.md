@@ -123,7 +123,7 @@ gates:
   - id: go-test
     run: go test ./...
     paths: ["**/*.go", go.mod, go.sum]   # a docs change does not run the gate again
-    needs: [go-fmt, go-vet, lint]        # starts only when each need is PASS or CACHED
+    needs: [go-fmt, go-vet, lint]        # starts only when each need passes or is cached
   - id: e2e
     run: make e2e
     needs: [go-test]
@@ -132,14 +132,14 @@ gates:
 `harness verify` runs `go-mod` before the gates, and only when `go.mod` or `go.sum` changed since its last pass. A setup step has no evidence and no `needs`, and a failed step stops `harness verify` before any gate. `go-fmt`, `go-vet` and `lint` run in parallel. When `lint` fails, `go-test` and `e2e` do not run, and `harness verify` exits 1:
 
 ```text
-PASS go-fmt 61ms
-PASS go-vet 1.4s
 FAIL lint 812ms
 SKIPPED go-test needs lint
 SKIPPED e2e needs go-test
 
 lint:
 <the last 4 KiB of the lint output>
+FAIL gates=5 failed=1
+error: gates failed
 ```
 
 [`docs/configuration.md`](configuration.md) explains every config key, its default and its env variable, with recipes. The [full configuration](configuration-full.md) page shows every key and one example for each case.

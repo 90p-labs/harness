@@ -69,7 +69,7 @@ Many projects already wrap each check in a Makefile target. A small exec plugin 
        events: [gates.detect]
    ```
 
-4. Run `harness gates init`. It writes the setup step and one gate for each marked target. Then `harness verify` runs the setup step and the gates. A second run with no change prints no setup line and `CACHED` for each gate:
+4. Run `harness gates init`. It writes the setup step and one gate for each marked target. Then `harness verify` runs the setup step and the gates. A second run with no change prints no setup line and a summary with `cached=4`:
 
    ```console
    $ harness gates init
@@ -80,15 +80,9 @@ Many projects already wrap each check in a Makefile target. A small exec plugin 
    make-test: make test
    $ harness verify
    setup make-install 2.755s
-   PASS make-cs 1.287s
-   PASS make-phpstan 3.858s
-   PASS make-lint-container 1.083s
-   PASS make-test 814ms
+   PASS gates=4 cached=0
    $ harness verify
-   CACHED make-cs 1.286s
-   CACHED make-phpstan 3.857s
-   CACHED make-lint-container 1.082s
-   CACHED make-test 814ms
+   PASS gates=4 cached=4
    ```
 
 Know these limits:

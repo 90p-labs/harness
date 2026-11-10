@@ -102,25 +102,19 @@ Add these lines to `.gitignore`. The first line ignores the run state of the har
 ## Step 3: run the gates two times
 
 Commit the files before you run `harness verify`. The first run executes the setup step `go-mod`, and then each gate in the container.
-The setup step prints `setup go-mod <duration>` before the gate lines. The second run changes no input. The setup step prints nothing, and each gate is `CACHED`:
+The setup step prints `setup go-mod <duration>` before the summary line. The second run changes no input. The setup step prints nothing, and the summary shows `cached=4`:
 
 ```text
 $ git add -A && git commit -q -m "chore: add the harness"
 $ harness verify
 setup go-mod 307ms
-PASS go-fmt 695ms
-PASS go-vet 739ms
-PASS go-test 1.002s
-PASS lint 1.664s
+PASS gates=4 cached=0
 $ harness verify
-CACHED go-fmt 694ms
-CACHED go-vet 738ms
-CACHED go-test 1.002s
-CACHED lint 1.664s
+PASS gates=4 cached=4
 ```
 
 `verify.parallel: 2` lets the harness run two gates at the same time. `go-fmt` and `go-vet` have no `needs`, so they start together.
-`go-test` has `needs: [go-fmt, go-vet]`. It starts only after both gates are `PASS` or `CACHED`.
+`go-test` has `needs: [go-fmt, go-vet]`. It starts only after both gates pass or are cached.
 
 ## A failed gate skips the gates that need it
 
@@ -129,34 +123,29 @@ Break the format of a file. This run uses `internal/order/application/place_orde
 ```text
 $ harness verify
 FAIL go-fmt 540ms
-PASS go-vet 559ms
 SKIPPED go-test needs go-fmt
-PASS lint 1.287s
 
 go-fmt:
  Container my-go-app-go-run-42b0a8c40957 Creating 
  Container my-go-app-go-run-42b0a8c40957 Created 
 internal/order/application/place_order/handler.go
 
-
+FAIL gates=4 failed=1
 error: gates failed
 $ echo $?
 1
 ```
 
-`go-fmt` fails and prints the name of the file. `go-vet` does not need `go-fmt`, so it runs and passes. `go-test` needs `go-fmt`, so the harness skips it. `lint` runs again, because it hashes all the files, and it passes. `harness verify` exits with code 1.
+`go-fmt` fails and prints the name of the file. `go-vet` does not need `go-fmt`, so it runs and passes. `go-test` needs `go-fmt`, so the harness skips it. `lint` runs again, because it hashes all the files, and it passes. The harness prints no line for a passed gate. `harness verify` exits with code 1.
 The setup step does not run, because no file of its `paths` changed.
 
-Restore the file. The inputs return to the state of the last pass, so each gate is `CACHED`:
+Restore the file. The inputs return to the state of the last pass, so each gate is cached:
 
 ```text
 $ git checkout internal/order/application/place_order/handler.go
 Updated 1 path from the index
 $ harness verify
-CACHED go-fmt 694ms
-CACHED go-vet 738ms
-CACHED go-test 1.002s
-CACHED lint 1.664s
+PASS gates=4 cached=4
 ```
 
 ## A new dependency runs the setup step again
@@ -174,15 +163,9 @@ $ git diff --stat
  1 file changed, 2 insertions(+)
 $ harness verify
 setup go-mod 313ms
-PASS go-fmt 691ms
-PASS go-vet 735ms
-PASS go-test 547ms
-PASS lint 1.385s
+PASS gates=4 cached=0
 $ harness verify
-CACHED go-fmt 690ms
-CACHED go-vet 735ms
-CACHED go-test 547ms
-CACHED lint 1.385s
+PASS gates=4 cached=4
 ```
 
 The next run prints no setup line. The step runs only when the hash of its `paths` changes.
@@ -192,7 +175,7 @@ The next run prints no setup line. The step runs only when the hash of its `path
 ```text
 $ git add -A && git commit -q -m "chore: add go-cmp"
 $ harness verify --commits HEAD~1
-PASS 2724ba442b85 chore
+PASS commits=1
 ```
 
 ## Architecture rules with go-arch-lint
@@ -360,7 +343,7 @@ The input hash of a gate covers the files that match its `paths`:
 
 The setup step `go-mod` has the `paths` `go.mod`, `go.sum` and `compose.yaml`. Its hash does not cover the `.go` files.
 
-A file that a gate reads but that its `paths` do not match does not run the gate again. Then `harness verify` prints `CACHED` for a stale result.
+A file that a gate reads but that its `paths` do not match does not run the gate again. Then `harness verify` counts a stale result in `cached`.
 
 The harness leaves out the files that `.gitignore` lists. Do not ignore a file that a gate needs. Add `.harness/` to `.gitignore`: it holds the run folders.
 

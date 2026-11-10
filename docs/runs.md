@@ -61,13 +61,19 @@ Write the test first. Each acceptance criterion of the plan is also a gate, `cri
 
 ```console
 $ harness verify
-PASS go-fmt 15ms
 FAIL go-vet 83ms
 FAIL go-test 89ms
 FAIL criterion-1 81ms
 FAIL criterion-2 87ms
+
+go-vet:
 ...
+
+go-test:
 order/cancel_test.go:16:15: o.Cancel undefined (type *Order has no field or method Cancel)
+...
+
+FAIL gates=5 failed=4
 error: gates failed
 ```
 
@@ -75,13 +81,9 @@ Write the code, commit, and verify again. `verify --commits` checks each commit 
 
 ```console
 $ harness verify
-PASS go-fmt 9ms
-PASS go-vet 270ms
-PASS go-test 614ms
-PASS criterion-1 317ms
-PASS criterion-2 314ms
+PASS gates=5 cached=0
 $ harness verify --commits main
-PASS c46c4071e27f feat
+PASS commits=1
 ```
 
 Submit the change for review. A plugin checks the branch against the plan first: the file trees, the commits, the owned files of each task, the tests and the proofs.

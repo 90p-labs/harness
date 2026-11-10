@@ -463,9 +463,9 @@ The [setup page](setup.md#step-by-step) gives the step by step setup without `ha
 ### A gate with paths and needs
 
 1. Add the gate to `gates` with an `id` and a `run` command.
-2. Set `paths` to the files that the gate reads, so a change in other files gives `CACHED`.
+2. Set `paths` to the files that the gate reads, so a change in other files does not run the gate again.
 3. Set `needs` to the gates that must pass first.
-4. Run `harness verify` and read the result line of each gate.
+4. Run `harness verify` and read the summary line. The `cached` count shows the gates that did not run again.
 
 ```yaml
 gates:
