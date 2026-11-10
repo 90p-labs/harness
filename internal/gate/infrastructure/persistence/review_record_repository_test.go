@@ -85,3 +85,50 @@ func TestReviewRecord(t *testing.T) {
 		}
 	})
 }
+
+func TestLastReviewedByAll(t *testing.T) {
+	ctx := context.Background()
+	repo := persistence.NewSQLReviewRecordRepository(openDB(t))
+	files := []string{"a.go"}
+	save := func(head, model, run string, read []string, at time.Time) {
+		t.Helper()
+		if err := repo.Save(ctx, domain.ReviewRecord{Repo: repoName, HeadSHA: head, Model: model, RunID: run, FilesRead: read, At: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	both := []string{"haiku", "sonnet"}
+	last := func(run string, models []string) string {
+		t.Helper()
+		got, err := repo.LastReviewedByAll(ctx, repoName, run, models)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := last("run-1", both); got != "" {
+		t.Fatalf("no records: head = %q, want none", got)
+	}
+	save("h1", "haiku", "run-1", files, clock)
+	save("h1", "sonnet", "run-1", files, clock)
+	save("h2", "haiku", "run-1", files, clock.Add(time.Minute))
+	save("h2", "sonnet", "run-1", nil, clock.Add(time.Minute))
+	save("h3", "haiku", "run-2", files, clock.Add(2*time.Minute))
+	save("h3", "sonnet", "run-2", files, clock.Add(2*time.Minute))
+	if got := last("run-1", both); got != "h1" {
+		t.Errorf("head = %q, want h1 (h2 has an unread record)", got)
+	}
+	save("h4", "sonnet", "run-1", files, clock.Add(3*time.Minute))
+	save("h4", "haiku", "run-1", files, clock.Add(4*time.Minute))
+	if got := last("run-1", both); got != "h4" {
+		t.Errorf("head = %q, want the latest head h4", got)
+	}
+	if got := last("run-1", []string{"haiku", "opus"}); got != "" {
+		t.Errorf("head = %q, want none for a model that never reviewed", got)
+	}
+	if got := last("", both); got != "" {
+		t.Errorf("head = %q, want none without a run", got)
+	}
+	if got := last("run-1", nil); got != "" {
+		t.Errorf("head = %q, want none without models", got)
+	}
+}

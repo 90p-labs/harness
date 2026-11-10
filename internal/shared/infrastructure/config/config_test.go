@@ -63,7 +63,7 @@ func TestLoadDefaults(t *testing.T) {
 	if got.State.DSN != "sqlite:.harness/state.db" {
 		t.Errorf("state.dsn = %q", got.State.DSN)
 	}
-	wantRun := config.Run{Approval: true, GoLive: false, MaxReviewRounds: 3, MaxLiveRounds: 3, MaxStopBlocks: 3}
+	wantRun := config.Run{Approval: true, GoLive: false, MaxReviewRounds: 3, MaxLiveRounds: 3, MaxStopBlocks: 3, PanelFixupLines: 80}
 	if got.Run != wantRun {
 		t.Errorf("run = %+v, want %+v", got.Run, wantRun)
 	}
@@ -588,6 +588,28 @@ func TestStrictMinor(t *testing.T) {
 	got, err = load(t, "")
 	if err != nil || !got.Run.StrictMinor {
 		t.Fatalf("env: got %v, %v, want true", got.Run.StrictMinor, err)
+	}
+}
+
+func TestPanelFixupLines(t *testing.T) {
+	got, err := load(t, "")
+	if err != nil || got.Run.PanelFixupLines != 80 {
+		t.Fatalf("default: got %v, %v, want 80", got.Run.PanelFixupLines, err)
+	}
+
+	got, err = load(t, "run:\n  panel_fixup_lines: 40\n")
+	if err != nil || got.Run.PanelFixupLines != 40 {
+		t.Fatalf("file: got %v, %v, want 40", got.Run.PanelFixupLines, err)
+	}
+
+	if _, err = load(t, "run:\n  panel_fixup_lines: 0\n"); err == nil {
+		t.Fatal("zero: want an error")
+	}
+
+	t.Setenv("HARNESS_RUN_PANEL_FIXUP_LINES", "120")
+	got, err = load(t, "")
+	if err != nil || got.Run.PanelFixupLines != 120 {
+		t.Fatalf("env: got %v, %v, want 120", got.Run.PanelFixupLines, err)
 	}
 }
 

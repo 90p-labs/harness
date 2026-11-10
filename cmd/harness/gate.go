@@ -21,6 +21,7 @@ import (
 	gatedomain "github.com/90p-labs/harness/internal/gate/domain"
 	"github.com/90p-labs/harness/internal/gate/infrastructure/toolchain"
 	gatecli "github.com/90p-labs/harness/internal/gate/ui/cli"
+	"github.com/90p-labs/harness/internal/guard/application/guardplugin"
 	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
 	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
@@ -256,4 +257,34 @@ func (a reviewRecordAdapter) open(ctx context.Context, dir string) (head, repo s
 	}
 	db, err = openState(ctx, a.cfg, commonDir)
 	return head, repo, db, err
+}
+
+// panelSource gives the guard and `harness review panel` the facts of the final review panel.
+func panelSource(cfg config.Config) guardplugin.PanelSource {
+	adapter := reviewRecordAdapter{cfg: cfg}
+	return guardplugin.PanelSource{
+		LastRework:    adapter.LastRework,
+		ReviewedByAll: adapter.ReviewedByAll,
+		FixupLines:    git.DiffLines,
+		Limit:         cfg.Run.PanelFixupLines,
+	}
+}
+
+func (a reviewRecordAdapter) LastRework(ctx context.Context, dir, runID string) (last guarddomain.ReworkEvent, err error) {
+	_, _, db, err := a.open(ctx, dir)
+	if err != nil {
+		return last, err
+	}
+	defer func() { err = errors.Join(err, db.Close()) }()
+	event, reason, err := runmodule.NewReworkLog(db, time.Now).LastReworkEvent(ctx, runID)
+	return guarddomain.ReworkEvent{Name: string(event), Reason: reason}, err
+}
+
+func (a reviewRecordAdapter) ReviewedByAll(ctx context.Context, dir, runID string, models []string) (head string, err error) {
+	_, repo, db, err := a.open(ctx, dir)
+	if err != nil {
+		return "", err
+	}
+	defer func() { err = errors.Join(err, db.Close()) }()
+	return gatemodule.NewReviewRecords(db).LastReviewedByAll(ctx, repo, runID, models)
 }

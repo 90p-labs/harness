@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -17,6 +19,11 @@ const (
 	upsertReviewRecord = "INSERT INTO review_records (repo, head_sha, model, patch_id, files_read, run_id, at) VALUES (?, ?, ?, ?, ?, ?, ?)" +
 		" ON CONFLICT (repo, head_sha, model) DO UPDATE SET patch_id = excluded.patch_id, files_read = excluded.files_read," +
 		" run_id = excluded.run_id, at = excluded.at WHERE excluded.files_read <> '' OR review_records.files_read = ''"
+)
+
+const (
+	selectReviewedByAllHead = "SELECT head_sha FROM review_records WHERE repo = ? AND run_id = ? AND files_read <> '' AND model IN ("
+	selectReviewedByAllTail = ") GROUP BY head_sha HAVING count(DISTINCT model) = ? ORDER BY max(at) DESC, head_sha LIMIT 1"
 )
 
 type SQLReviewRecordRepository struct {
@@ -55,4 +62,22 @@ func (r SQLReviewRecordRepository) Matching(ctx context.Context, scope domain.Re
 		records = append(records, record)
 	}
 	return records, rows.Err()
+}
+
+func (r SQLReviewRecordRepository) LastReviewedByAll(ctx context.Context, repo, runID string, models []string) (string, error) {
+	if len(models) == 0 || runID == "" {
+		return "", nil
+	}
+	args := []any{repo, runID}
+	for _, model := range models {
+		args = append(args, model)
+	}
+	args = append(args, len(models))
+	query := selectReviewedByAllHead + strings.TrimSuffix(strings.Repeat("?, ", len(models)), ", ") + selectReviewedByAllTail
+	var head string
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&head)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return head, err
 }

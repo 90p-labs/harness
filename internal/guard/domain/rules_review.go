@@ -51,7 +51,7 @@ func ReviewedModels(reviews []Review) (counted, unread []string) {
 }
 
 func DenyReviewModels(models, unread []string, listed map[shareddomain.Host][]string) (string, bool) {
-	host, list := fullestList(models, listed)
+	host, list := FullestList(models, listed)
 	found := noModel
 	if len(models) > 0 {
 		found = strings.Join(models, modelSeparator)
@@ -93,7 +93,8 @@ func unreadNote(unread []string) string {
 	return fmt.Sprintf("; %s read no changed file, so the review does not count", strings.Join(unread, modelSeparator))
 }
 
-func fullestList(models []string, listed map[shareddomain.Host][]string) (shareddomain.Host, []string) {
+// FullestList picks the host list with the most recorded models, the list the review-models rule checks.
+func FullestList(models []string, listed map[shareddomain.Host][]string) (shareddomain.Host, []string) {
 	hosts := slices.Sorted(maps.Keys(listed))
 	var best shareddomain.Host
 	var bestList []string

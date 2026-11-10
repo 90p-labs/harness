@@ -120,10 +120,20 @@ func (p reviewShip) Handle(ctx context.Context, envelope shareddomain.Envelope) 
 			listed[host] = slices.Compact(list)
 		}
 	}
+	host, list, panel, panelReason := FinalPanel(ctx, p.deps, envelope.Run.ID, counted)
+	if len(list) > 0 && len(panel) < len(list) {
+		panel = slices.Clone(panel)
+		slices.Sort(panel)
+		listed[host] = panel
+	}
+	// Check only the host FinalPanel chose, so a shrunk panel cannot hand the check to another host.
+	if len(list) > 0 {
+		listed = map[shareddomain.Host][]string{host: listed[host]}
+	}
 	reason, denied := domain.DenyReviewModels(counted, unread, listed)
 	if !denied {
 		return shareddomain.Verdict{Kind: shareddomain.VerdictAllow}, nil
 	}
 	countDeny(ctx, p.denies, domain.RuleReviewModels)
-	return deny(reason), nil
+	return deny(reason + " (" + panelReason + ")"), nil
 }

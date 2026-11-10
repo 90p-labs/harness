@@ -321,3 +321,113 @@ func TestReviewModelsShipOneListedModel(t *testing.T) {
 		t.Fatalf("verdict = %+v, want a deny that asks to widen the role or turn the rule off", v)
 	}
 }
+
+func TestReviewShipPanel(t *testing.T) {
+	const (
+		withModel = "| ID | Severity | Verdict | Status | Model |\n|---|---|---|---|---|\n| F1 | blocker | real | closed | gpt-6.1-sol |\n"
+		noModel   = "| ID | Severity | Verdict | Status |\n|---|---|---|---|\n| F1 | blocker | real | closed |\n"
+	)
+	// Role order: haiku, sonnet, opus. The small panel is haiku and sonnet, plus the model of F1.
+	listed := []string{modelHaiku, modelSonnet, modelOpus}
+	cases := []struct {
+		name     string
+		table    string
+		last     domain.ReworkEvent
+		lines    int
+		reviewed []string
+		deny     bool
+	}{
+		{"panel reviewed", strings.Replace(withModel, "gpt-6.1-sol", modelOpus, 1), domain.ReworkEvent{Name: shareddomain.TransitionRequestRework, Reason: "fix F1"}, 10, []string{modelHaiku, modelSonnet, modelOpus}, false},
+		{"small panel reviewed", strings.Replace(withModel, "gpt-6.1-sol", modelSonnet, 1), domain.ReworkEvent{Name: shareddomain.TransitionRequestRework, Reason: "fix F1"}, 10, []string{modelHaiku, modelSonnet}, false},
+		{"small panel missing the reworked model", strings.Replace(withModel, "gpt-6.1-sol", modelOpus, 1), domain.ReworkEvent{Name: shareddomain.TransitionRequestRework, Reason: "fix F1"}, 10, []string{modelHaiku, modelSonnet}, true},
+		{"no rework", withModel, domain.ReworkEvent{}, 10, []string{modelHaiku, modelSonnet}, true},
+		{"large fixup", strings.Replace(withModel, "gpt-6.1-sol", modelSonnet, 1), domain.ReworkEvent{Name: shareddomain.TransitionRequestRework, Reason: "fix F1"}, 81, []string{modelHaiku, modelSonnet}, true},
+		{"no Model column", noModel, domain.ReworkEvent{Name: shareddomain.TransitionRequestRework, Reason: "fix F1"}, 10, []string{modelHaiku, modelSonnet}, true},
+		{"amend after the rework", strings.Replace(withModel, "gpt-6.1-sol", modelSonnet, 1), domain.ReworkEvent{Name: shareddomain.TransitionAmend, Reason: "fix F1"}, 10, []string{modelHaiku, modelSonnet}, true},
+		{"regress after the rework", strings.Replace(withModel, "gpt-6.1-sol", modelSonnet, 1), domain.ReworkEvent{Name: shareddomain.TransitionRegress, Reason: "fix F1"}, 10, []string{modelHaiku, modelSonnet}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := &reviewStore{models: c.reviewed}
+			d := recorderDeps(store, "")
+			d.Models = map[shareddomain.Host]map[string][]string{
+				shareddomain.HostClaude: {string(shareddomain.RoleReviewer): listed},
+			}
+			d.ReadFile = func(string) ([]byte, error) { return []byte(c.table), nil }
+			d.ReworkReasons = func(context.Context, string, string) ([]string, error) { return []string{"fix F1"}, nil }
+			d.Panel = guardplugin.PanelSource{
+				LastRework:    func(context.Context, string, string) (domain.ReworkEvent, error) { return c.last, nil },
+				ReviewedByAll: func(context.Context, string, string, []string) (string, error) { return "abc123", nil },
+				FixupLines:    func(context.Context, string, string) (int, error) { return c.lines, nil },
+				Limit:         80,
+			}
+			env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+			env.Run = shareddomain.RunRef{ID: "r1"}
+			v := dispatch(t, newBus(build(t, nil, d)), env)
+			if (v.Kind == shareddomain.VerdictDeny) != c.deny {
+				t.Fatalf("verdict = %+v, want deny=%v", v, c.deny)
+			}
+		})
+	}
+	// The host is chosen before the panel shrinks. A shrunk panel must not hand the check to another host.
+	t.Run("two hosts keep the chosen host", func(t *testing.T) {
+		store := &reviewStore{models: []string{"fable", modelOpus, "gpt-a", "gpt-b"}}
+		d := recorderDeps(store, "")
+		d.Models = map[shareddomain.Host]map[string][]string{
+			shareddomain.HostClaude: {string(shareddomain.RoleReviewer): {modelHaiku, modelSonnet, modelOpus, "fable"}},
+			shareddomain.HostCodex:  {string(shareddomain.RoleReviewer): {"gpt-a", "gpt-b"}},
+		}
+		d.ReadFile = func(string) ([]byte, error) {
+			return []byte(strings.Replace(withModel, "gpt-6.1-sol", modelSonnet, 1)), nil
+		}
+		d.ReworkReasons = func(context.Context, string, string) ([]string, error) { return []string{"fix F1"}, nil }
+		d.Panel = guardplugin.PanelSource{
+			LastRework: func(context.Context, string, string) (domain.ReworkEvent, error) {
+				return domain.ReworkEvent{Name: shareddomain.TransitionRequestRework, Reason: "fix F1"}, nil
+			},
+			ReviewedByAll: func(context.Context, string, string, []string) (string, error) { return "abc123", nil },
+			FixupLines:    func(context.Context, string, string) (int, error) { return 10, nil },
+			Limit:         80,
+		}
+		env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+		env.Run = shareddomain.RunRef{ID: "r1"}
+		if v := dispatch(t, newBus(build(t, nil, d)), env); v.Kind != shareddomain.VerdictDeny {
+			t.Fatalf("verdict = %+v, want deny: no model of the claude panel reviewed", v)
+		}
+	})
+	// A missing fact gives the full panel, so the small panel alone is denied.
+	fallbacks := []struct {
+		name     string
+		head     string
+		linesErr error
+	}{
+		{"no HEAD reviewed by every model", "", nil},
+		{"unreadable fixup size", "abc123", errors.New("git failed")},
+	}
+	for _, c := range fallbacks {
+		t.Run(c.name, func(t *testing.T) {
+			store := &reviewStore{models: []string{modelHaiku, modelSonnet}}
+			d := recorderDeps(store, "")
+			d.Models = map[shareddomain.Host]map[string][]string{
+				shareddomain.HostClaude: {string(shareddomain.RoleReviewer): listed},
+			}
+			d.ReadFile = func(string) ([]byte, error) {
+				return []byte(strings.Replace(withModel, "gpt-6.1-sol", modelSonnet, 1)), nil
+			}
+			d.ReworkReasons = func(context.Context, string, string) ([]string, error) { return []string{"fix F1"}, nil }
+			d.Panel = guardplugin.PanelSource{
+				LastRework: func(context.Context, string, string) (domain.ReworkEvent, error) {
+					return domain.ReworkEvent{Name: shareddomain.TransitionRequestRework, Reason: "fix F1"}, nil
+				},
+				ReviewedByAll: func(context.Context, string, string, []string) (string, error) { return c.head, nil },
+				FixupLines:    func(context.Context, string, string) (int, error) { return 10, c.linesErr },
+				Limit:         80,
+			}
+			env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+			env.Run = shareddomain.RunRef{ID: "r1"}
+			if v := dispatch(t, newBus(build(t, nil, d)), env); v.Kind != shareddomain.VerdictDeny {
+				t.Fatalf("verdict = %+v, want deny: the full panel applies", v)
+			}
+		})
+	}
+}

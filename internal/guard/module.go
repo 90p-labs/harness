@@ -25,6 +25,7 @@ func NewPlugins(
 	reviews func(ctx context.Context, dir string, scope domain.ReviewScope) ([]domain.Review, error),
 	reworkReasons func(ctx context.Context, dir, runID string) ([]string, error),
 	strictMinor bool,
+	panel guardplugin.PanelSource,
 ) ([]shareddomain.Plugin, error) {
 	resolve := git.DefaultBranch
 	if defaultBranch != "" {
@@ -43,6 +44,7 @@ func NewPlugins(
 		Models:        models,
 		Worktree:      worktree,
 		StrictMinor:   strictMinor,
+		Panel:         panel,
 		Meter:         otel.Meter(instrumentationName),
 	})
 }

@@ -23,6 +23,9 @@ type TransitionLog interface {
 type ReworkLog interface {
 	LastReworkAt(ctx context.Context, runID string) (time.Time, error)
 	ReworkReasons(ctx context.Context, runID string) ([]string, error)
+	// LastReworkEvent returns the last request-rework, rework-minor, amend or regress of the run and its reason.
+	// It returns an empty event when the run has none.
+	LastReworkEvent(ctx context.Context, runID string) (event Event, reason string, err error)
 }
 
 type RunRepository interface {

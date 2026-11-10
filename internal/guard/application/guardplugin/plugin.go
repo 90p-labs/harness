@@ -33,6 +33,7 @@ type Deps struct {
 	Models        map[shareddomain.Host]map[string][]string
 	Worktree      string
 	StrictMinor   bool
+	Panel         PanelSource
 	Meter         metric.Meter
 }
 

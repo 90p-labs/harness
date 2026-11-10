@@ -39,6 +39,7 @@ type runView struct {
 	MaxLiveRounds   int  `yaml:"max_live_rounds"`
 	MaxStopBlocks   int  `yaml:"max_stop_blocks"`
 	StrictMinor     bool `yaml:"strict_minor"`
+	PanelFixupLines int  `yaml:"panel_fixup_lines"`
 }
 
 type pluginView struct {
@@ -85,6 +86,7 @@ func viewOf(cfg config.Config) configView {
 			MaxLiveRounds:   cfg.Run.MaxLiveRounds,
 			MaxStopBlocks:   cfg.Run.MaxStopBlocks,
 			StrictMinor:     cfg.Run.StrictMinor,
+			PanelFixupLines: cfg.Run.PanelFixupLines,
 		},
 		Plugins: []pluginView{},
 		Roles:   map[string]map[string][]string{},

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +30,7 @@ const (
 	originRemotePrefix   = "origin/"
 	fallbackBranch       = "main"
 	nulSeparator         = "\x00"
+	numstatMinColumns    = 3
 )
 
 func DefaultBranch(ctx context.Context, dir string) (string, error) {
@@ -192,4 +194,31 @@ func run(ctx context.Context, dir string, env []string, stdin string, args ...st
 		return "", fmt.Errorf("git %s in %s: %w", args[0], dir, err)
 	}
 	return string(out), nil
+}
+
+// DiffLines returns the added plus deleted lines of `git diff --numstat` from a commit to HEAD.
+// A binary file has no line count, so it is an error and the caller treats the size as unknown.
+func DiffLines(ctx context.Context, dir, from string) (int, error) {
+	out, err := Run(ctx, dir, nil, "diff", "--numstat", from, "HEAD")
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < numstatMinColumns {
+			return 0, fmt.Errorf("git diff --numstat: unexpected line %q", line)
+		}
+		for _, field := range fields[:2] {
+			count, err := strconv.Atoi(field)
+			if err != nil {
+				return 0, fmt.Errorf("git diff --numstat: no line count in %q", line)
+			}
+			total += count
+		}
+	}
+	return total, nil
 }

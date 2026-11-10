@@ -51,4 +51,7 @@ type ReviewScope struct {
 type ReviewRecordRepository interface {
 	Save(ctx context.Context, record ReviewRecord) error
 	Matching(ctx context.Context, scope ReviewScope) ([]ReviewRecord, error)
+	// LastReviewedByAll returns the latest head of the run that every model reviewed with a changed file read.
+	// It returns an empty head when no head qualifies.
+	LastReviewedByAll(ctx context.Context, repo, runID string, models []string) (string, error)
 }

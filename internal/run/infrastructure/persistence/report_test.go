@@ -272,3 +272,34 @@ func TestReportTransitionsOfARun(t *testing.T) {
 		})
 	}
 }
+
+func TestLastReworkEvent(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			save(t, s, newRun(t, "r1", domain.EventStart))
+			if event, reason, err := s.repo.LastReworkEvent(ctx, "r1"); err != nil || event != "" || reason != "" {
+				t.Fatalf("no rework: got %q, %q, %v, want none", event, reason, err)
+			}
+			for i, row := range []struct {
+				event  domain.Event
+				reason string
+			}{
+				{domain.EventRequestRework, "fix F1"},
+				{domain.EventApproveReview, "ignored"},
+				{domain.EventReworkMinor, "polish"},
+				{domain.EventAmend, "amend it"},
+			} {
+				if _, err := s.db.Exec("INSERT INTO run_transitions (run_id, at, from_phase, event, to_phase, reason, rework_class) VALUES (?, ?, ?, ?, ?, ?, ?)",
+					"r1", clock.Add(time.Duration(i)*time.Minute).UTC(), domain.PhaseReviewing, row.event, domain.PhaseWorking, row.reason, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			event, reason, err := s.repo.LastReworkEvent(ctx, "r1")
+			if err != nil || event != domain.EventAmend || reason != "amend it" {
+				t.Fatalf("got %q, %q, %v, want amend and its reason", event, reason, err)
+			}
+		})
+	}
+}
