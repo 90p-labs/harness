@@ -221,3 +221,25 @@ func TestMultiRunPlanExample(t *testing.T) {
 		t.Errorf("%s has no Multi-run plan heading", designFile)
 	}
 }
+
+func TestHandoffDocs(t *testing.T) {
+	wants := []string{
+		"handoff.md",
+		fmt.Sprintf("%d byte", rundomain.HandoffLimit),
+		"## Next",
+		"## Open findings",
+		"## Unreviewed commits",
+		"## Decisions",
+		"handoff_step",
+		"no pane restart",
+		"next prompt continues the same session",
+	}
+	for _, file := range []string{designFile, configDocFile} {
+		doc := repository.Read(t, file)
+		for _, want := range wants {
+			if !strings.Contains(doc, want) {
+				t.Errorf("%s does not name %q", file, want)
+			}
+		}
+	}
+}

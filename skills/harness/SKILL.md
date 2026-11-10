@@ -32,17 +32,21 @@ Start: run harness version ("Binary")
 
 ## Route the arguments
 
-- `status` or empty: run `harness run status` and continue the open run.
+- `status` or empty: run `harness run status`. When the run folder has a `handoff.md`, read it. Continue the open run from both.
 - `approve`: ask the `Plan` question (phase 3 below). A plain reply in the chat records nothing.
 - `abandon`: run `harness run abandon` and report.
 - Any other text with no active run: run `harness run start "<text>"`.
 
-Each `run` command prints the phase and a `next:` line. Do the `next:` step.
+Each `run` command prints the phase and a `next:` line. Do the `next:` step. When a `handoff:` line asks for it, write `handoff.md` in the run folder as the line says, then end the turn. The next session resumes from `harness run status` and `handoff.md`.
 
 ## Phases
 
 1. `planning`: start the `explorer` agent. Set the `model` field of the agent call to the model of the `explorer` role in `.harness.yaml`. Give it the prompt. It reads `CONTEXT.md`, `docs/adr/` and the code that the change touches, and returns the facts and the open decisions.
-2. `planning`: on Claude, compare the session model with the model of the `lead` role (`harness config`). When they differ, tell the user to run `/model` to switch, and continue: it is guidance, not a deny. Then write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`. Run `harness plan check`. Then start the `advisor` agent, with the `model` field set to the model of the `advisor` role. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept. Then run `harness run plan`.
+2. `planning`: on Claude, compare the session model with the model of the `lead` role (`harness config`). When they differ, tell the user to run `/model` to switch, and continue: it is guidance, not a deny. Then write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`.
+   - Run `harness plan check`. It prints an advisor line from the plan complexity.
+   - On `advisor: on`, start the `advisor` agent, with the `model` field set to the model of the `advisor` role. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept.
+   - On `advisor: off`, start no advisor. Decide each open point yourself and record each decision under `## Decisions` in `plan.md`.
+   - Then run `harness run plan`.
 3. `awaiting_approval`: show the plan (`harness plan view` gives the page). Grill the open questions in rounds with the question tool of the host: `references/grill.md`. When `## Open questions` holds only `- none`, ask the `Plan` question with the options `Approve` (first) and `Change the plan`. Stop until the user answers.
    - On `Approve`, the hook records the approval for the current `plan.md`. Run `harness run approve`.
    - On `Change the plan`, ask what to change, edit `plan.md`, and ask the `Plan` question again.

@@ -146,7 +146,8 @@ The Go types are in `internal/run/domain`:
 | `transition.go` | `Transition{From, Event, Guard, To}`, `Transitions()` returns a copy of the table |
 | `rework_round.go` | `ReworkEvent(findings, policy)` picks `request-rework` or `rework-minor`, and the `FindingsReader` port |
 | `run.go` | `Run`, `Run.Apply(cmd, policy) (Run, error)` |
-| `stop.go` | `StopVerdict{Block, Reason}`, `DecideStop(run, policy, agentRunning)` |
+| `stop.go` | `StopVerdict{Block, Handoff, Reason}`, `DecideStop(run, policy, agentRunning, handoff error)` |
+| `handoff.go` | `HandoffLimit`, the `HandoffReader` port, `CheckHandoff(run, raw)` |
 | `errors.go` | `ErrIllegalTransition`, wrapped with the phase and the event |
 
 The caller gives `Run.ID`. A new run is `Run{ID: id}` in the phase none, and `start` moves it to `planning`.
@@ -161,6 +162,21 @@ The caller gives `Run.ID`. A new run is `Run{ID: id}` in the phase none, and `st
 
 When it blocks, it returns the run with `StopBlocks` plus 1. The reason names the phase.
 
+The lead writes `handoff.md` in the run folder after a phase change. The file has the lines `Phase: <phase>` and `Step: <n>`. It has these 4 sections, and each section has at least one `- ` line:
+
+1. `## Next`
+2. `## Open findings`
+3. `## Unreviewed commits`
+4. `## Decisions`
+
+`CheckHandoff` refuses a file over 4096 bytes. It also refuses a wrong phase, a wrong step, a missing header and a missing or empty section. `Step` is the count of the run transitions.
+
+`DecideStop` runs the three facts first. Then it allows one stop when `CheckHandoff` passes and `HandoffStep` differs from `Step`. It sets `HandoffStep` to `Step`, and the handler saves the run. A second stop at the same step blocks. A missing or refused file keeps the block, and the reason names the refusal.
+
+The run stores the step in the column `handoff_step` (migration 0007). A resumed session at the same step meets the normal stop rule.
+
+A Codex host has no pane restart. The handoff stop ends the turn, and the next prompt continues the same session in the same context.
+
 ```mermaid
 classDiagram
     class Run {
@@ -169,6 +185,8 @@ classDiagram
         +ReviewRound int
         +LiveRound int
         +StopBlocks int
+        +Step int
+        +HandoffStep int
         +BlockedFrom Phase
         +Reason string
         +Apply(cmd Command, policy Policy) Run, error
@@ -197,6 +215,7 @@ classDiagram
     }
     class StopVerdict {
         +Block bool
+        +Handoff bool
         +Reason string
     }
     Run ..> Command : takes
@@ -501,6 +520,7 @@ erDiagram
         INTEGER review_round
         INTEGER live_round
         INTEGER stop_blocks
+        INTEGER handoff_step
         TEXT blocked_from
         TEXT reason
         INTEGER version
