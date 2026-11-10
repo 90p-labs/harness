@@ -16,6 +16,7 @@ func TestAgentRole(t *testing.T) {
 		{"90p:worker", shareddomain.RoleWorker},
 		{"90p:general-purpose", shareddomain.RoleWorker},
 		{"Explore", shareddomain.RoleExplorer},
+		{"90p:verifier", shareddomain.RoleExplorer},
 		{"CLAUDE", shareddomain.RoleWorker},
 		{"kodify:Code-Reviewer", shareddomain.RoleReviewer},
 		{"Plan", ""},
