@@ -70,4 +70,4 @@ The grill is done only when both conditions are true:
 1. `## Open questions` holds only `- none`.
 2. The user confirms that no decision is left.
 
-Then ask the approval: the question with the header `Plan` and the options `Approve` and `Change the plan`.
+Then run `harness plan view --open`, so the user reviews the page in the browser. Then ask the approval: the question with the header `Plan` and the options `Approve` and `Change the plan`.

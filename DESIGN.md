@@ -717,13 +717,13 @@ A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. 
 - Without `--file` and with no active run, it exits 2 and prints the usage.
 - The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.
 
-`harness plan view [--file path] [--out path]` writes the plan as one self-contained HTML page, `plan.html` beside the plan by default. It works in every phase, prints the page path relative to the repository top, and writes the page also for a plan with problems.
+`harness plan view [--file path] [--out path] [--open]` writes the plan as one self-contained HTML page, `plan.html` beside the plan by default. It works in every phase, prints the page path relative to the repository top, and writes the page also for a plan with problems.
 
 - Without `--file`, it reads the plan of the active run, with its branch and its proofs. With no active run, it needs `--file`, else it exits 2 and prints the usage. With `--file`, it reads no proof, so each proof shows `not run`.
 - The view plugin reads the live round of the active run, so the page lists the same problems as `harness plan check`.
 - The branch base is the `## PR sequence` base of this run, else the default branch. A branch or proof read error gives no evidence and one page problem. The page still renders.
 - The page embeds mermaid, the fonts and rough.js. The renderer draws each Excalidraw sketch to SVG in Go.
-- A view plugin on `run.transition.after` writes the page when the new phase is `awaiting_approval`. A render error never denies.
+- A view plugin on `run.transition.after` writes the page when the new phase is `awaiting_approval`. A render error never denies. The same move opens the page in the browser, with `open` on macOS and `xdg-open` elsewhere. `harness plan view --open` opens it on demand. Set `HARNESS_NO_BROWSER` to any value to turn the open off, as tests and headless hosts do. An open error never denies.
 - The rule `diagram-required` refuses a plan with a missing diagram or sketch file.
 - The render records the span `plan.view` with `harness.plan.problems` and `harness.view.bytes`.
 
@@ -1308,6 +1308,8 @@ Capabilities and fallback:
 - `harness host capabilities --host H` prints each event and `yes` or `no`, so a user sees a gap before a run.
 
 The tool kind in the payload is `shell`, `edit`, `write`, `read`, `search`, `agent`, `question` or `other`. Both hosts send `Bash`, which is `shell`. `Edit`, `MultiEdit` and the Codex `apply_patch` are `edit`. `Write` is `write`, `Read` is `read`, `Grep` and `Glob` are `search`, and `Agent` is `agent`. The question tool of each host is `question`. One `ToolKindOf` in the host domain serves both hosts.
+
+A host may give a tool an MCP name, such as `mcp__server__life_Bash`. The harness takes the last `__` segment. When that segment is a known tool, it uses it. Otherwise it drops one lowercase word and its `_`, and uses the rest when that is a known tool. `apply_patch` stays exact, and an unknown MCP tool stays `other`.
 
 `QuestionTools` in `internal/shared/domain` gives the question tool of each host and its limits:
 
