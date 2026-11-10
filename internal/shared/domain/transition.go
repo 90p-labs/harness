@@ -33,6 +33,7 @@ const (
 	runsFolder        = ".harness/runs"
 	planFileName      = "plan.md"
 	findingsFileName  = "findings.md"
+	handoffFileName   = "handoff.md"
 	selfCheckFileName = "self-check.md"
 )
 
@@ -61,6 +62,10 @@ func RunPlanFile(runID string) string {
 
 func RunFindingsFile(runID string) string {
 	return path.Join(runsFolder, runID, findingsFileName)
+}
+
+func RunHandoffFile(runID string) string {
+	return path.Join(runsFolder, runID, handoffFileName)
 }
 
 func RunSelfCheckFile(runID string) string {

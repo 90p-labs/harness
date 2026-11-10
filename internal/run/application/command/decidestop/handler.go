@@ -50,8 +50,8 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (result Result, err er
 	if err != nil {
 		return Result{}, err
 	}
-	verdict, next := domain.DecideStop(run, h.policy, cmd.AgentRunning)
-	if !verdict.Block {
+	verdict, next := domain.DecideStop(run, h.policy, cmd.AgentRunning, domain.ErrHandoffMissing)
+	if !verdict.Block && !verdict.Handoff {
 		return verdict, nil
 	}
 	if _, err := h.repo.Save(ctx, next); err != nil {
