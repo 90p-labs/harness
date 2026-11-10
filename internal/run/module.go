@@ -8,6 +8,7 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/command/recordapproval"
 	"github.com/90p-labs/harness/internal/run/application/command/start"
 	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/query/report"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
@@ -66,5 +67,6 @@ func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, gate domain.PlanGate, c
 		Start:      start.NewHandler(repo, flow, now),
 		Transition: transition.NewHandler(repo, flow),
 		Status:     status.NewHandler(repo),
+		Report:     report.NewHandler(repo, repo, now, telemetry.TraceIDOf, tracer),
 	}
 }

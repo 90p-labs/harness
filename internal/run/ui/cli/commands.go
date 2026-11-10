@@ -11,6 +11,7 @@ import (
 
 	"github.com/90p-labs/harness/internal/run/application/command/start"
 	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/query/report"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
@@ -67,6 +68,7 @@ type Handlers struct {
 	Start      start.Handler
 	Transition transition.Handler
 	Status     status.Handler
+	Report     report.Handler
 }
 
 type Connect func(ctx context.Context) (Handlers, func() error, error)
@@ -93,7 +95,7 @@ var transitionSpecs = []transitionSpec{
 
 func NewCommand(connect Connect) *cobra.Command {
 	cmd := &cobra.Command{Use: commandRun, Short: "Drive the active run"}
-	cmd.AddCommand(startCommand(connect), statusCommand(connect))
+	cmd.AddCommand(startCommand(connect), statusCommand(connect), reportCommand(connect))
 	for _, spec := range transitionSpecs {
 		cmd.AddCommand(transitionCommand(connect, spec))
 	}
@@ -125,7 +127,10 @@ func startCommand(connect Connect) *cobra.Command {
 				if err := h.Start.Handle(ctx, start.Command{Key: h.Key, Prompt: args[0]}); err != nil {
 					return err
 				}
-				return printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key})
+				if err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}); err != nil {
+					return err
+				}
+				return printRepeatClasses(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), h)
 			})
 		},
 	}
