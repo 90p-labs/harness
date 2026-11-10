@@ -14,6 +14,8 @@ var AllEvents = []shareddomain.EventName{
 	shareddomain.EventTurnStopping,
 	shareddomain.EventSubagentStarted,
 	shareddomain.EventSubagentStopped,
+	shareddomain.EventToolFailed,
+	shareddomain.EventSessionEnded,
 }
 
 func MissingEvents(c Codec) []shareddomain.EventName {

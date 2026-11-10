@@ -6,6 +6,8 @@
     "PostToolUse": [{"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/harness\" hook --host claude post-tool-use"}]}],
     "Stop": [{"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/harness\" hook --host claude stop"}]}],
     "SubagentStart": [{"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/harness\" hook --host claude subagent-start"}]}],
-    "SubagentStop": [{"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/harness\" hook --host claude subagent-stop"}]}]
+    "SubagentStop": [{"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/harness\" hook --host claude subagent-stop"}]}],
+    "PostToolUseFailure": [{"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/harness\" hook --host claude post-tool-use-failure"}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/harness\" hook --host claude session-end"}]}]
   }
 }

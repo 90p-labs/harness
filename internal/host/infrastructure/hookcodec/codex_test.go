@@ -34,9 +34,9 @@ func TestCodexDecode(t *testing.T) {
 	}{
 		{"session start", hostdomain.HookSessionStart, codexSessionStartInput, shareddomain.EventSessionStarted, `{"source":"resume","missing_events":[]}`},
 		{"user prompt", hostdomain.HookUserPrompt, codexUserPromptInput, shareddomain.EventPromptSubmitted, `{"prompt":"fix the build"}`},
-		{"pre tool shell", hostdomain.HookPreToolUse, codexPreShellInput, shareddomain.EventToolBefore, `{"tool":"Bash","kind":"shell","input":{"command":"go test ./..."}}`},
-		{"pre tool edit", hostdomain.HookPreToolUse, codexPrePatchInput, shareddomain.EventToolBefore, `{"tool":"apply_patch","kind":"edit","input":{"command":"*** Begin Patch\n*** End Patch"}}`},
-		{"post tool", hostdomain.HookPostToolUse, codexPostToolInput, shareddomain.EventToolAfter, `{"tool":"Bash","kind":"shell","input":{"command":"ls"},"response":{"output":"a.go"}}`},
+		{"pre tool shell", hostdomain.HookPreToolUse, codexPreShellInput, shareddomain.EventToolBefore, `{"tool":"Bash","kind":"shell","input":{"command":"go test ./..."},"call_id":"u1"}`},
+		{"pre tool edit", hostdomain.HookPreToolUse, codexPrePatchInput, shareddomain.EventToolBefore, `{"tool":"apply_patch","kind":"edit","input":{"command":"*** Begin Patch\n*** End Patch"},"call_id":"u2"}`},
+		{"post tool", hostdomain.HookPostToolUse, codexPostToolInput, shareddomain.EventToolAfter, `{"tool":"Bash","kind":"shell","input":{"command":"ls"},"response":{"output":"a.go"},"call_id":"u1"}`},
 		{"stop", hostdomain.HookStop, codexStopInput, shareddomain.EventTurnStopping, `{"stop_hook_active":true,"background_agents":0}`},
 		{"stop with tasks", hostdomain.HookStop, codexStopTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":2}`},
 		{"subagent start", hostdomain.HookSubagentStart, codexSubagentStartIn, shareddomain.EventSubagentStarted, `{"agent_id":"a1","agent_type":"explorer"}`},
@@ -78,8 +78,21 @@ func TestCodexDecode(t *testing.T) {
 		if codec.Host() != shareddomain.HostCodex {
 			t.Fatalf("Host = %q", codec.Host())
 		}
-		if !slices.Equal(codec.Capabilities(), hostdomain.AllEvents) {
+		want := []shareddomain.EventName{
+			shareddomain.EventSessionStarted,
+			shareddomain.EventPromptSubmitted,
+			shareddomain.EventToolBefore,
+			shareddomain.EventToolAfter,
+			shareddomain.EventTurnStopping,
+			shareddomain.EventSubagentStarted,
+			shareddomain.EventSubagentStopped,
+		}
+		if !slices.Equal(codec.Capabilities(), want) {
 			t.Fatalf("Capabilities = %v", codec.Capabilities())
+		}
+		wantMissing := []shareddomain.EventName{shareddomain.EventToolFailed, shareddomain.EventSessionEnded}
+		if !slices.Equal(hostdomain.MissingEvents(codec), wantMissing) {
+			t.Fatalf("MissingEvents = %v", hostdomain.MissingEvents(codec))
 		}
 	})
 }

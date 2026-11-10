@@ -19,6 +19,8 @@ const (
 	eventSubagentStart = "SubagentStart"
 	eventStop          = "Stop"
 	eventSubagentStop  = "SubagentStop"
+	eventToolFailure   = "PostToolUseFailure"
+	eventSessionEnd    = "SessionEnd"
 
 	decisionBlock      = "block"
 	permissionDecision = "deny"
@@ -34,6 +36,14 @@ var eventNames = map[domain.HookName]string{
 	domain.HookSubagentStart: eventSubagentStart,
 	domain.HookStop:          eventStop,
 	domain.HookSubagentStop:  eventSubagentStop,
+
+	domain.HookPostToolUseFailure: eventToolFailure,
+	domain.HookSessionEnd:         eventSessionEnd,
+}
+
+var claudeOnlyEvents = []shareddomain.EventName{
+	shareddomain.EventToolFailed,
+	shareddomain.EventSessionEnded,
 }
 
 var ErrNoToolName = errors.New("no tool name")
@@ -62,13 +72,23 @@ type hookInput struct {
 	BackgroundTask []struct {
 		Type string `json:"type"`
 	} `json:"background_tasks"`
-	AgentID   string `json:"agent_id"`
-	AgentType string `json:"agent_type"`
+	AgentID     string `json:"agent_id"`
+	AgentType   string `json:"agent_type"`
+	ToolUseID   string `json:"tool_use_id"`
+	IsInterrupt bool   `json:"is_interrupt"`
+	Reason      string `json:"reason"`
 }
 
 func (c Codec) Host() shareddomain.Host { return c.host }
 
-func (Codec) Capabilities() []shareddomain.EventName { return slices.Clone(domain.AllEvents) }
+func (c Codec) Capabilities() []shareddomain.EventName {
+	if c.host == shareddomain.HostClaude {
+		return slices.Clone(domain.AllEvents)
+	}
+	return slices.DeleteFunc(slices.Clone(domain.AllEvents), func(event shareddomain.EventName) bool {
+		return slices.Contains(claudeOnlyEvents, event)
+	})
+}
 
 func (c Codec) Decode(hook domain.HookName, raw []byte) (shareddomain.Envelope, error) {
 	event, ok := domain.EventOf(hook)
@@ -79,10 +99,10 @@ func (c Codec) Decode(hook domain.HookName, raw []byte) (shareddomain.Envelope, 
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return shareddomain.Envelope{}, fmt.Errorf("decode %s input: %w", hook, err)
 	}
-	if (hook == domain.HookPreToolUse || hook == domain.HookPostToolUse) && in.ToolName == "" {
+	if (hook == domain.HookPreToolUse || hook == domain.HookPostToolUse || hook == domain.HookPostToolUseFailure) && in.ToolName == "" {
 		return shareddomain.Envelope{}, fmt.Errorf("%w: %s", ErrNoToolName, hook)
 	}
-	payload, err := json.Marshal(payloadOf(hook, in))
+	payload, err := json.Marshal(c.payloadOf(hook, in))
 	if err != nil {
 		return shareddomain.Envelope{}, fmt.Errorf("encode %s payload: %w", hook, err)
 	}
@@ -96,7 +116,7 @@ func (c Codec) Decode(hook domain.HookName, raw []byte) (shareddomain.Envelope, 
 	}, nil
 }
 
-func payloadOf(hook domain.HookName, in hookInput) any {
+func (c Codec) payloadOf(hook domain.HookName, in hookInput) any {
 	switch hook {
 	case domain.HookSessionStart:
 		return shareddomain.SessionPayload{Source: in.Source}
@@ -106,11 +126,23 @@ func payloadOf(hook domain.HookName, in hookInput) any {
 		return toolPayload(in)
 	case domain.HookPostToolUse:
 		payload := toolPayload(in)
+		if c.host == shareddomain.HostClaude {
+			payload.Outcome = shareddomain.ToolOutcomeSucceeded
+		}
 		payload.Response = in.ToolResponse
 		if payload.Kind == shareddomain.ToolKindQuestion {
 			payload.Answers = answersOf(in.ToolInput, in.ToolResponse)
 		}
 		return payload
+	case domain.HookPostToolUseFailure:
+		payload := toolPayload(in)
+		payload.Outcome = shareddomain.ToolOutcomeFailed
+		if in.IsInterrupt {
+			payload.Outcome = shareddomain.ToolOutcomeInterrupted
+		}
+		return payload
+	case domain.HookSessionEnd:
+		return shareddomain.SessionEndPayload{Reason: in.Reason}
 	case domain.HookStop:
 		agents := 0
 		for _, task := range in.BackgroundTask {
@@ -126,9 +158,10 @@ func payloadOf(hook domain.HookName, in hookInput) any {
 
 func toolPayload(in hookInput) shareddomain.ToolPayload {
 	return shareddomain.ToolPayload{
-		Tool:  in.ToolName,
-		Kind:  domain.ToolKindOf(in.ToolName),
-		Input: in.ToolInput,
+		Tool:   in.ToolName,
+		Kind:   domain.ToolKindOf(in.ToolName),
+		Input:  in.ToolInput,
+		CallID: in.ToolUseID,
 	}
 }
 

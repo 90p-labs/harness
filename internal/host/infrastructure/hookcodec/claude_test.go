@@ -1,6 +1,7 @@
 package hookcodec_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -19,6 +20,10 @@ const (
 	stopInput         = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"Stop","stop_hook_active":true,"last_assistant_message":"done","background_tasks":[{"id":"task-001","type":"shell","status":"running"},{"id":"task-002","type":"subagent","status":"running","agent_type":"Explore"}],"session_crons":[]}`
 	stopNoTasksInput  = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","hook_event_name":"Stop","stop_hook_active":false}`
 	subagentStart     = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","hook_event_name":"SubagentStart","agent_id":"agent-7","agent_type":"Explore"}`
+	toolFailureInput  = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"npm test"},"tool_use_id":"toolu_01ABC","error":"Command exited with non-zero status code 1","is_interrupt":false}`
+	toolAbortInput    = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"npm test"},"tool_use_id":"toolu_01ABC","error":"Command exited with non-zero status code 1","is_interrupt":true}`
+	sessionEndInput   = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","hook_event_name":"SessionEnd","reason":"other"}`
+	errorText         = "non-zero status"
 	subagentStop      = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_id":"agent-7","agent_type":"Explore","agent_transcript_path":"/a.jsonl","last_assistant_message":"found it"}`
 )
 
@@ -32,8 +37,11 @@ func TestClaudeDecode(t *testing.T) {
 	}{
 		{"session start", domain.HookSessionStart, sessionStartInput, shareddomain.EventSessionStarted, `{"source":"resume","missing_events":[]}`},
 		{"user prompt", domain.HookUserPrompt, userPromptInput, shareddomain.EventPromptSubmitted, `{"prompt":"fix the flaky test"}`},
-		{"pre tool use", domain.HookPreToolUse, preToolUseInput, shareddomain.EventToolBefore, `{"tool":"Bash","kind":"shell","input":{"command":"go test ./...","description":"run tests"}}`},
-		{"post tool use", domain.HookPostToolUse, postToolUseInput, shareddomain.EventToolAfter, `{"tool":"Write","kind":"write","input":{"file_path":"/work/a.go","content":"package a"},"response":{"filePath":"/work/a.go","success":true}}`},
+		{"pre tool use", domain.HookPreToolUse, preToolUseInput, shareddomain.EventToolBefore, `{"tool":"Bash","kind":"shell","input":{"command":"go test ./...","description":"run tests"},"call_id":"toolu_01"}`},
+		{"post tool use", domain.HookPostToolUse, postToolUseInput, shareddomain.EventToolAfter, `{"tool":"Write","kind":"write","input":{"file_path":"/work/a.go","content":"package a"},"response":{"filePath":"/work/a.go","success":true},"call_id":"toolu_02","outcome":"succeeded"}`},
+		{"tool failure", domain.HookPostToolUseFailure, toolFailureInput, shareddomain.EventToolFailed, `{"tool":"Bash","kind":"shell","input":{"command":"npm test"},"call_id":"toolu_01ABC","outcome":"failed"}`},
+		{"tool interrupt", domain.HookPostToolUseFailure, toolAbortInput, shareddomain.EventToolFailed, `{"tool":"Bash","kind":"shell","input":{"command":"npm test"},"call_id":"toolu_01ABC","outcome":"interrupted"}`},
+		{"session end", domain.HookSessionEnd, sessionEndInput, shareddomain.EventSessionEnded, `{"reason":"other"}`},
 		{"stop with tasks", domain.HookStop, stopInput, shareddomain.EventTurnStopping, `{"stop_hook_active":true,"background_agents":2}`},
 		{"stop without tasks", domain.HookStop, stopNoTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":0}`},
 		{"subagent start", domain.HookSubagentStart, subagentStart, shareddomain.EventSubagentStarted, `{"agent_id":"agent-7","agent_type":"Explore"}`},
@@ -50,6 +58,9 @@ func TestClaudeDecode(t *testing.T) {
 			}
 			if string(got.Payload) != c.payload {
 				t.Fatalf("payload = %s, want %s", got.Payload, c.payload)
+			}
+			if bytes.Contains(got.Payload, []byte(errorText)) {
+				t.Fatalf("payload carries the error text: %s", got.Payload)
 			}
 		})
 	}

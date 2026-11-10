@@ -112,6 +112,8 @@ func TestHostCommand(t *testing.T) {
 			string(shareddomain.EventTurnStopping) + " yes",
 			string(shareddomain.EventSubagentStarted) + " no",
 			string(shareddomain.EventSubagentStopped) + " no",
+			string(shareddomain.EventToolFailed) + " no",
+			string(shareddomain.EventSessionEnded) + " no",
 		}
 		lines := strings.Split(strings.TrimSpace(out), "\n")
 		if len(lines) != len(want) {

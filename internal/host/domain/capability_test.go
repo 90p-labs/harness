@@ -39,6 +39,8 @@ func TestCapabilities(t *testing.T) {
 			{domain.HookStop, shareddomain.EventTurnStopping},
 			{domain.HookSubagentStart, shareddomain.EventSubagentStarted},
 			{domain.HookSubagentStop, shareddomain.EventSubagentStopped},
+			{domain.HookPostToolUseFailure, shareddomain.EventToolFailed},
+			{domain.HookSessionEnd, shareddomain.EventSessionEnded},
 		}
 		for _, c := range cases {
 			got, ok := domain.EventOf(c.hook)
@@ -70,6 +72,8 @@ func TestCapabilities(t *testing.T) {
 			shareddomain.EventTurnStopping,
 			shareddomain.EventSubagentStarted,
 			shareddomain.EventSubagentStopped,
+			shareddomain.EventToolFailed,
+			shareddomain.EventSessionEnded,
 		}
 		if !slices.Equal(domain.AllEvents, want) {
 			t.Fatalf("AllEvents = %v, want %v", domain.AllEvents, want)
@@ -92,6 +96,8 @@ func TestCapabilities(t *testing.T) {
 			shareddomain.EventToolAfter,
 			shareddomain.EventSubagentStarted,
 			shareddomain.EventSubagentStopped,
+			shareddomain.EventToolFailed,
+			shareddomain.EventSessionEnded,
 		}
 		if got := domain.MissingEvents(partial); !slices.Equal(got, want) {
 			t.Fatalf("MissingEvents = %v, want %v", got, want)
@@ -158,6 +164,20 @@ func TestCapabilities(t *testing.T) {
 		}
 		if want := `{"tool":"Bash","kind":"shell","input":{"command":"ls"}}`; string(tool) != want {
 			t.Fatalf("tool payload = %s, want %s", tool, want)
+		}
+
+		failed, err := json.Marshal(shareddomain.ToolPayload{
+			Tool:    "Bash",
+			Kind:    shareddomain.ToolKindShell,
+			Input:   json.RawMessage(`{}`),
+			CallID:  "toolu_01",
+			Outcome: shareddomain.ToolOutcomeFailed,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := `{"tool":"Bash","kind":"shell","input":{},"call_id":"toolu_01","outcome":"failed"}`; string(failed) != want {
+			t.Fatalf("failed tool payload = %s, want %s", failed, want)
 		}
 
 		stop, err := json.Marshal(shareddomain.StopPayload{BackgroundAgents: 2})

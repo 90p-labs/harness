@@ -17,6 +17,9 @@ const (
 	HookStop          HookName = "stop"
 	HookSubagentStart HookName = "subagent-start"
 	HookSubagentStop  HookName = "subagent-stop"
+
+	HookPostToolUseFailure HookName = "post-tool-use-failure"
+	HookSessionEnd         HookName = "session-end"
 )
 
 var ErrUnknownHook = errors.New("unknown hook")
@@ -29,6 +32,9 @@ var hookEvents = map[HookName]shareddomain.EventName{
 	HookStop:          shareddomain.EventTurnStopping,
 	HookSubagentStart: shareddomain.EventSubagentStarted,
 	HookSubagentStop:  shareddomain.EventSubagentStopped,
+
+	HookPostToolUseFailure: shareddomain.EventToolFailed,
+	HookSessionEnd:         shareddomain.EventSessionEnded,
 }
 
 func EventOf(hook HookName) (shareddomain.EventName, bool) {

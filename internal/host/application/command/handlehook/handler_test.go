@@ -219,6 +219,7 @@ func TestMissingEventFallback(t *testing.T) {
 	}
 	wantMissing := []shareddomain.EventName{
 		shareddomain.EventToolAfter, shareddomain.EventSubagentStarted, shareddomain.EventSubagentStopped,
+		shareddomain.EventToolFailed, shareddomain.EventSessionEnded,
 	}
 	if !slices.Equal(payload.MissingEvents, wantMissing) {
 		t.Fatalf("missing_events = %v, want %v", payload.MissingEvents, wantMissing)
@@ -240,6 +241,8 @@ func TestMissingEventFallback(t *testing.T) {
 		"tool.after: this host does not send it",
 		"subagent.started: this host does not send it",
 		"subagent.stopped: this host does not send it",
+		"tool.failed: this host does not send it",
+		"session.ended: this host does not send it",
 	}
 	if !slices.Equal(fallback, want) {
 		t.Fatalf("fallback lines = %q, want %q", fallback, want)
