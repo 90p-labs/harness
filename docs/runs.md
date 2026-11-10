@@ -118,7 +118,7 @@ The guard acts on each tool call of the agent. For example, a merge goes to `har
 
 ## Plan view
 
-`harness plan view` writes the plan as one self-contained HTML page, with the diagrams, the file trees, the tasks and the state of each proof. The run also writes it when the plan waits for approval.
+`harness plan view` writes the plan as one self-contained HTML page, with the diagrams, the file trees, the tasks and the state of each proof. The run also rewrites it on every phase change. In `awaiting_approval` the page holds a reply box: Approve copies a reply for the agent, and you paste it into the chat.
 
 ![The plan summary with the acceptance criteria and their proof state](images/plan-view-summary.png)
 

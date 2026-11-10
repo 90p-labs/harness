@@ -723,7 +723,9 @@ A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. 
 - The view plugin reads the live round of the active run, so the page lists the same problems as `harness plan check`.
 - The branch base is the `## PR sequence` base of this run, else the default branch. A branch or proof read error gives no evidence and one page problem. The page still renders.
 - The page embeds mermaid, the fonts and rough.js. The renderer draws each Excalidraw sketch to SVG in Go.
-- A view plugin on `run.transition.after` writes the page when the new phase is `awaiting_approval`. A render error never denies. The same move opens the page in the browser, with `open` on macOS and `xdg-open` elsewhere. `harness plan view --open` opens it on demand. Set `HARNESS_NO_BROWSER` to any value to turn the open off, as tests and headless hosts do. An open error never denies.
+- A view plugin on `run.transition.after` writes the page after every transition, in every phase. A render error never denies. ADR 0021 records this.
+- When the new phase is `awaiting_approval`, the same move opens the page in the browser, with `open` on macOS and `xdg-open` elsewhere. `harness plan view --open` opens it on demand. Set `HARNESS_NO_BROWSER` to any value to turn the open off, as tests and headless hosts do. An open error never denies.
+- In `awaiting_approval` the page holds a reply box for the chat. Approve copies a reply for the agent, and Send corrections copies the corrections. The page runs no command.
 - The rule `diagram-required` refuses a plan with a missing diagram or sketch file.
 - The render records the span `plan.view` with `harness.plan.problems` and `harness.view.bytes`.
 
@@ -1412,5 +1414,5 @@ These kodify issues are fixed in the new design. `ROADMAP.md` names the pull req
 | K12 | One tracer provider for each span, no metrics, no telemetry API for modules | One provider for each process, a meter, and the API in application code |
 | K13 | A plan that changed in `awaiting_approval` cannot be checked before the approval | `harness plan check` checks a plan in any phase |
 | K14 | State in JSON files under a file lock, on one machine | A DBAL with embedded SQLite, and remote engines can follow |
-| K15 | `plan.html` loads mermaid from a CDN and links no criterion to its tasks, specs, tests or files | The page is self-contained and links them all |
+| K15 | `plan.html` links no criterion to its tasks, specs, tests or files | The page is self-contained and links them all |
 | K16 | The review checks only the final trees | The review verifies every link of the trace: proofs, tree marks, commits, owned files and tests |
