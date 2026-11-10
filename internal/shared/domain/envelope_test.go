@@ -109,6 +109,8 @@ func TestKindOf(t *testing.T) {
 		domain.EventGateBefore:          domain.KindVeto,
 		domain.EventGateAfter:           domain.KindObserve,
 		domain.EventSignalsCheck:        domain.KindCollect,
+		domain.EventToolFailed:          domain.KindObserve,
+		domain.EventSessionEnded:        domain.KindObserve,
 	}
 	for name, want := range cases {
 		got, ok := domain.KindOf(name)

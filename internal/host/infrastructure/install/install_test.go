@@ -18,8 +18,12 @@ const (
 	auditCommand  = "harness hooks-audit"
 	harnessPrefix = "harness hook "
 	userFileMode  = 0o600
-	hookEvents    = 7
 )
+
+var hookEvents = map[shareddomain.Host]int{
+	shareddomain.HostClaude: 9,
+	shareddomain.HostCodex:  7,
+}
 
 type settings struct {
 	Hooks map[string][]struct {
@@ -84,8 +88,8 @@ func checkInstall(t *testing.T, host shareddomain.Host, relPath string) {
 		if info.Mode().Perm() != 0o644 {
 			t.Fatalf("file mode = %v, want 0644", info.Mode().Perm())
 		}
-		if len(s.Hooks) != hookEvents {
-			t.Fatalf("events = %d, want %d", len(s.Hooks), hookEvents)
+		if len(s.Hooks) != hookEvents[host] {
+			t.Fatalf("events = %d, want %d", len(s.Hooks), hookEvents[host])
 		}
 		if !bytes.HasSuffix(raw, []byte("\n")) || !bytes.Contains(raw, []byte("\n  \"hooks\"")) {
 			t.Fatalf("file is not indented by 2 with a trailing newline:\n%s", raw)
@@ -160,8 +164,8 @@ func checkInstall(t *testing.T, host shareddomain.Host, relPath string) {
 		if !strings.Contains(string(s.Permissions), "Bash(ls)") {
 			t.Fatalf("permissions lost: %s", s.Permissions)
 		}
-		if len(s.Hooks) != hookEvents+1 {
-			t.Fatalf("events = %d, want %d", len(s.Hooks), hookEvents+1)
+		if len(s.Hooks) != hookEvents[host]+1 {
+			t.Fatalf("events = %d, want %d", len(s.Hooks), hookEvents[host]+1)
 		}
 
 		if _, err := install.Install(worktree, host); err != nil {

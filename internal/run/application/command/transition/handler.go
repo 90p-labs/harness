@@ -22,6 +22,10 @@ const (
 	attrEvent     = attribute.Key("harness.event")
 	attrPhaseFrom = attribute.Key("harness.phase.from")
 	attrPhaseTo   = attribute.Key("harness.phase.to")
+
+	attrReviewRound    = attribute.Key("harness.review.round")
+	attrReworkClass    = attribute.Key("harness.rework.class")
+	attrReworkSeverity = attribute.Key("harness.rework.severity")
 )
 
 var gatedEvents = map[domain.Event]bool{
@@ -36,6 +40,7 @@ type Command struct {
 	Reason  string
 	By      string
 	PRURL   string
+	Class   domain.ReworkClass
 	RunID   string
 	Version int
 }
@@ -107,8 +112,22 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 	if next.Phase == domain.PhaseDone || next.Phase == domain.PhaseAbandoned {
 		f.runTrace.End(ctx, next)
 	}
-	span.SetAttributes(attrPhaseTo.String(string(next.Phase)))
+	span.SetAttributes(attrPhaseTo.String(string(next.Phase)), attrReviewRound.Int(next.ReviewRound))
+	if cmd.Event == domain.EventRequestRework {
+		span.SetAttributes(reworkAttributes(cmd)...)
+	}
 	return nil
+}
+
+func reworkAttributes(cmd domain.Command) []attribute.KeyValue {
+	var attrs []attribute.KeyValue
+	if cmd.Class != "" {
+		attrs = append(attrs, attrReworkClass.String(string(cmd.Class)))
+	}
+	if severity := domain.HighestSeverity(cmd.Reason); severity != "" {
+		attrs = append(attrs, attrReworkSeverity.String(string(severity)))
+	}
+	return attrs
 }
 
 func (f Flow) approved(ctx context.Context, run domain.Run, cmd domain.Command) (domain.Command, error) {
@@ -144,7 +163,7 @@ func (h Handler) Handle(ctx context.Context, cmd Command) error {
 	if err != nil {
 		return err
 	}
-	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, By: cmd.By, PRURL: cmd.PRURL})
+	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, By: cmd.By, PRURL: cmd.PRURL, Class: cmd.Class})
 }
 
 func (h Handler) load(ctx context.Context, cmd Command) (domain.Run, error) {

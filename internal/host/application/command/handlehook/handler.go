@@ -38,6 +38,12 @@ const (
 	attrTurnEnd        = attribute.Key("harness.turn.end")
 	attrAgentID        = attribute.Key("harness.agent.id")
 	attrAgentType      = attribute.Key("harness.agent.type")
+	attrTool           = attribute.Key("harness.tool")
+	attrToolKind       = attribute.Key("harness.tool.kind")
+	attrToolOutcome    = attribute.Key("harness.tool.outcome")
+	attrRule           = attribute.Key("harness.rule")
+	ruleSeparator      = ","
+	spanToolCall       = "tool.call"
 	spanTurn           = "agent.turn"
 	spanSubagent       = "agent.subagent"
 	turnEndStop        = "stop"
@@ -88,7 +94,7 @@ func (h Handler) Handle(ctx context.Context, c Command) Output {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		out = h.failClosed(c, isVeto(c.Hook) && !isRetriedStop(c.Hook, raw), err)
-	} else if markErr := h.applyMarks(runCtx, c.Hook, envelope, verdict.Kind); markErr != nil {
+	} else if markErr := h.applyMarks(runCtx, c.Host, c.Hook, envelope, verdict.Kind); markErr != nil {
 		span.RecordError(markErr)
 	}
 	attrs := []attribute.KeyValue{
@@ -117,6 +123,12 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.E
 	if envelope.SessionID != "" {
 		trace.SpanFromContext(ctx).SetAttributes(attrSessionID.String(envelope.SessionID))
 	}
+	if isToolHook(c.Hook) {
+		var tool shareddomain.ToolPayload
+		if json.Unmarshal(envelope.Payload, &tool) == nil {
+			trace.SpanFromContext(ctx).SetAttributes(attrTool.String(tool.Tool))
+		}
+	}
 	missing := hostdomain.MissingEvents(codec)
 	if envelope.Event == shareddomain.EventSessionStarted && len(missing) > 0 {
 		if envelope.Payload, err = withMissingEvents(envelope.Payload, missing); err != nil {
@@ -132,6 +144,9 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.E
 		return Output{}, envelope, shareddomain.Verdict{}, raw, err
 	}
 	verdict := result.Verdict
+	if verdict.Kind == shareddomain.VerdictDeny && len(result.DeniedBy) > 0 {
+		trace.SpanFromContext(ctx).SetAttributes(attrRule.String(strings.Join(result.DeniedBy, ruleSeparator)))
+	}
 	var stderr strings.Builder
 	if len(result.Failures) > 0 && isRetriedStop(c.Hook, raw) {
 		verdict = shareddomain.Verdict{Kind: shareddomain.VerdictAllow}
@@ -149,10 +164,55 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.E
 	return Output{Stdout: stdout, Stderr: stderr.String()}, envelope, verdict, raw, nil
 }
 
-func (h Handler) applyMarks(ctx context.Context, hook hostdomain.HookName, envelope shareddomain.Envelope, verdict shareddomain.VerdictKind) error {
-	step, ok := hostdomain.MarkStepOf(hook, verdict)
+func isToolHook(hook hostdomain.HookName) bool {
+	return hook == hostdomain.HookPreToolUse || hook == hostdomain.HookPostToolUse || hook == hostdomain.HookPostToolUseFailure
+}
+
+func (h Handler) applyToolMarks(ctx context.Context, step hostdomain.MarkStep, envelope shareddomain.Envelope) error {
+	if step.Session {
+		if envelope.SessionID == "" {
+			return nil
+		}
+		marks, err := h.marks.CloseSession(ctx, envelope.SessionID)
+		for _, mark := range marks {
+			h.exportToolSpan(ctx, mark.SessionID, mark.Tool, hostdomain.ToolKindOf(mark.Tool), shareddomain.ToolOutcomeInterrupted, mark.StartedAt)
+		}
+		return err
+	}
+	var tool shareddomain.ToolPayload
+	if err := json.Unmarshal(envelope.Payload, &tool); err != nil {
+		return err
+	}
+	if tool.CallID == "" {
+		return nil
+	}
+	if step.Open {
+		return h.marks.OpenTool(ctx, hostdomain.ToolMark{ID: tool.CallID, SessionID: envelope.SessionID, Tool: tool.Tool, StartedAt: h.now()})
+	}
+	start, found, err := h.marks.Close(ctx, hostdomain.MarkTool, tool.CallID)
+	if found {
+		h.exportToolSpan(ctx, envelope.SessionID, tool.Tool, tool.Kind, tool.Outcome, start)
+	}
+	return err
+}
+
+func (h Handler) exportToolSpan(ctx context.Context, sessionID, tool string, kind shareddomain.ToolKind, outcome shareddomain.ToolOutcome, start time.Time) {
+	_, span := h.tracer.Start(ctx, spanToolCall, trace.WithTimestamp(start), trace.WithAttributes(
+		attrTool.String(tool),
+		attrToolKind.String(string(kind)),
+		attrToolOutcome.String(string(outcome)),
+		attrSessionID.String(sessionID),
+	))
+	span.End(trace.WithTimestamp(h.now()))
+}
+
+func (h Handler) applyMarks(ctx context.Context, host shareddomain.Host, hook hostdomain.HookName, envelope shareddomain.Envelope, verdict shareddomain.VerdictKind) error {
+	step, ok := hostdomain.MarkStepOf(host, hook, verdict)
 	if !ok {
 		return nil
+	}
+	if step.Kind == hostdomain.MarkTool {
+		return h.applyToolMarks(ctx, step, envelope)
 	}
 	var agent shareddomain.SubagentPayload
 	id := envelope.SessionID

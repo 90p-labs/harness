@@ -219,6 +219,7 @@ func TestMissingEventFallback(t *testing.T) {
 	}
 	wantMissing := []shareddomain.EventName{
 		shareddomain.EventToolAfter, shareddomain.EventSubagentStarted, shareddomain.EventSubagentStopped,
+		shareddomain.EventToolFailed, shareddomain.EventSessionEnded,
 	}
 	if !slices.Equal(payload.MissingEvents, wantMissing) {
 		t.Fatalf("missing_events = %v, want %v", payload.MissingEvents, wantMissing)
@@ -240,6 +241,8 @@ func TestMissingEventFallback(t *testing.T) {
 		"tool.after: this host does not send it",
 		"subagent.started: this host does not send it",
 		"subagent.stopped: this host does not send it",
+		"tool.failed: this host does not send it",
+		"session.ended: this host does not send it",
 	}
 	if !slices.Equal(fallback, want) {
 		t.Fatalf("fallback lines = %q, want %q", fallback, want)
@@ -381,11 +384,39 @@ type markKey struct {
 }
 
 type fakeMarks struct {
-	open map[markKey]time.Time
-	err  error
+	open  map[markKey]time.Time
+	tools map[string]hostdomain.ToolMark
+	err   error
 }
 
-func newFakeMarks() *fakeMarks { return &fakeMarks{open: map[markKey]time.Time{}} }
+func newFakeMarks() *fakeMarks {
+	return &fakeMarks{open: map[markKey]time.Time{}, tools: map[string]hostdomain.ToolMark{}}
+}
+
+func (f *fakeMarks) OpenTool(_ context.Context, mark hostdomain.ToolMark) error {
+	if f.err != nil {
+		return f.err
+	}
+	if _, ok := f.tools[mark.ID]; !ok {
+		f.tools[mark.ID] = mark
+	}
+	return nil
+}
+
+func (f *fakeMarks) CloseSession(_ context.Context, sessionID string) ([]hostdomain.ToolMark, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	var closed []hostdomain.ToolMark
+	for id, mark := range f.tools {
+		if mark.SessionID == sessionID {
+			closed = append(closed, mark)
+			delete(f.tools, id)
+		}
+	}
+	slices.SortFunc(closed, func(a, b hostdomain.ToolMark) int { return strings.Compare(a.ID, b.ID) })
+	return closed, nil
+}
 
 func (f *fakeMarks) Open(_ context.Context, kind hostdomain.MarkKind, id string, at time.Time) error {
 	if f.err != nil {
@@ -400,6 +431,11 @@ func (f *fakeMarks) Open(_ context.Context, kind hostdomain.MarkKind, id string,
 func (f *fakeMarks) Close(_ context.Context, kind hostdomain.MarkKind, id string) (time.Time, bool, error) {
 	if f.err != nil {
 		return time.Time{}, false, f.err
+	}
+	if kind == hostdomain.MarkTool {
+		mark, ok := f.tools[id]
+		delete(f.tools, id)
+		return mark.StartedAt, ok, nil
 	}
 	at, ok := f.open[markKey{kind, id}]
 	delete(f.open, markKey{kind, id})
@@ -584,4 +620,209 @@ func TestAgentMarksError(t *testing.T) {
 	if !recorded {
 		t.Fatal("the hook.handle span has no exception event")
 	}
+}
+
+const (
+	toolCallSpan       = "tool.call"
+	toolAttr           = "harness.tool"
+	toolKindAttr       = "harness.tool.kind"
+	toolResultAttr     = "harness.tool.outcome"
+	ruleAttr           = "harness.rule"
+	toolInputAttr      = "harness.tool.input"
+	secretCommand      = "echo secret-value"
+	preToolCall1       = `{` + claudeSession + `,"tool_name":"Bash","tool_input":{"command":"` + secretCommand + `"},"tool_use_id":"c1"}`
+	postToolCall1      = `{` + claudeSession + `,"tool_name":"Bash","tool_input":{"command":"` + secretCommand + `"},"tool_response":{"stdout":"secret-value"},"tool_use_id":"c1"}`
+	failToolCall1      = `{` + claudeSession + `,"tool_name":"Bash","tool_input":{"command":"x"},"tool_use_id":"c1","error":"secret-error","is_interrupt":false}`
+	interruptToolCall1 = `{` + claudeSession + `,"tool_name":"Bash","tool_input":{"command":"x"},"tool_use_id":"c1","error":"secret-error","is_interrupt":true}`
+	preToolCall2       = `{"session_id":"s2","cwd":"/work","tool_name":"Read","tool_input":{},"tool_use_id":"c2"}`
+	sessionEndS1       = `{` + claudeSession + `,"reason":"logout"}`
+)
+
+func denyBy(plugins ...string) shareddomain.Dispatcher {
+	return dispatcherFunc(func(context.Context, shareddomain.Envelope) (shareddomain.DispatchResult, error) {
+		return shareddomain.DispatchResult{
+			Verdict:  shareddomain.Verdict{Kind: shareddomain.VerdictDeny, Reason: "no"},
+			DeniedBy: plugins,
+		}, nil
+	})
+}
+
+func hookSpan(t *testing.T, f *agentFixture) sdktrace.ReadOnlySpan {
+	t.Helper()
+	for _, span := range f.recorder.Ended() {
+		if span.Name() == hookHandleSpan {
+			return span
+		}
+	}
+	t.Fatal("no hook.handle span")
+	return nil
+}
+
+func hasAttr(span sdktrace.ReadOnlySpan, key string) bool {
+	for _, kv := range span.Attributes() {
+		if string(kv.Key) == key {
+			return true
+		}
+	}
+	return false
+}
+
+func TestHookSpanToolAndRule(t *testing.T) {
+	cases := []struct {
+		name     string
+		hook     hostdomain.HookName
+		input    string
+		d        shareddomain.Dispatcher
+		wantTool string
+		wantRule string
+	}{
+		{"pre tool use", hostdomain.HookPreToolUse, preToolCall1, allowAll(), "Bash", ""},
+		{"post tool use", hostdomain.HookPostToolUse, postToolCall1, allowAll(), "Bash", ""},
+		{"post tool use failure", hostdomain.HookPostToolUseFailure, failToolCall1, allowAll(), "Bash", ""},
+		{"deny by two plugins", hostdomain.HookPreToolUse, preToolCall1, denyBy("guard.no-rm", "guard.no-push"), "Bash", "guard.no-rm,guard.no-push"},
+		{"prompt has no tool", hostdomain.HookUserPrompt, promptInput, allowAll(), "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newAgentFixture(c.d)
+			f.fire(time.Second, c.hook, c.input)
+
+			span := hookSpan(t, f)
+			if got := attrOf(span, toolAttr); got != c.wantTool {
+				t.Errorf("%s = %q, want %q", toolAttr, got, c.wantTool)
+			}
+			if got := attrOf(span, ruleAttr); got != c.wantRule {
+				t.Errorf("%s = %q, want %q", ruleAttr, got, c.wantRule)
+			}
+			if c.wantTool == "" && hasAttr(span, toolAttr) {
+				t.Errorf("%s set on a hook without a tool", toolAttr)
+			}
+			if c.wantRule == "" && hasAttr(span, ruleAttr) {
+				t.Errorf("%s set without a deny", ruleAttr)
+			}
+			for _, kv := range span.Attributes() {
+				if strings.Contains(kv.Value.Emit(), "secret") {
+					t.Errorf("attribute %s carries tool data: %q", kv.Key, kv.Value.Emit())
+				}
+			}
+		})
+	}
+}
+
+func toolSpans(f *agentFixture) []sdktrace.ReadOnlySpan {
+	var spans []sdktrace.ReadOnlySpan
+	for _, span := range f.agentSpans() {
+		if span.Name() == toolCallSpan {
+			spans = append(spans, span)
+		}
+	}
+	return spans
+}
+
+func assertToolSpan(t *testing.T, span sdktrace.ReadOnlySpan, tool, kind, outcome string, start, end time.Time) {
+	t.Helper()
+	want := map[string]string{
+		toolAttr: tool, toolKindAttr: kind, toolResultAttr: outcome, sessionIDAttr: "s1",
+	}
+	for key, value := range want {
+		if got := attrOf(span, key); got != value {
+			t.Errorf("%s = %q, want %q", key, got, value)
+		}
+	}
+	if hasAttr(span, toolInputAttr) || len(span.Attributes()) != len(want) {
+		t.Errorf("attributes = %v, want only %v", span.Attributes(), want)
+	}
+	if !span.StartTime().Equal(start) || !span.EndTime().Equal(end) {
+		t.Errorf("span runs %v to %v, want %v to %v", span.StartTime(), span.EndTime(), start, end)
+	}
+}
+
+func TestToolCallSpan(t *testing.T) {
+	t.Run("succeeded", func(t *testing.T) {
+		f := newAgentFixture(allowAll())
+		f.fire(time.Second, hostdomain.HookPreToolUse, preToolCall1)
+		f.fire(4*time.Second, hostdomain.HookPostToolUse, postToolCall1)
+
+		spans := toolSpans(f)
+		if len(spans) != 1 {
+			t.Fatalf("tool spans = %d, want 1", len(spans))
+		}
+		assertToolSpan(t, spans[0], "Bash", string(shareddomain.ToolKindShell), string(shareddomain.ToolOutcomeSucceeded),
+			clockBase.Add(time.Second), clockBase.Add(4*time.Second))
+	})
+
+	t.Run("failed", func(t *testing.T) {
+		f := newAgentFixture(allowAll())
+		f.fire(time.Second, hostdomain.HookPreToolUse, preToolCall1)
+		f.fire(2*time.Second, hostdomain.HookPostToolUseFailure, failToolCall1)
+
+		spans := toolSpans(f)
+		if len(spans) != 1 {
+			t.Fatalf("tool spans = %d, want 1", len(spans))
+		}
+		assertToolSpan(t, spans[0], "Bash", string(shareddomain.ToolKindShell), string(shareddomain.ToolOutcomeFailed),
+			clockBase.Add(time.Second), clockBase.Add(2*time.Second))
+	})
+
+	t.Run("interrupted", func(t *testing.T) {
+		f := newAgentFixture(allowAll())
+		f.fire(time.Second, hostdomain.HookPreToolUse, preToolCall1)
+		f.fire(2*time.Second, hostdomain.HookPostToolUseFailure, interruptToolCall1)
+
+		spans := toolSpans(f)
+		if len(spans) != 1 || attrOf(spans[0], toolResultAttr) != string(shareddomain.ToolOutcomeInterrupted) {
+			t.Fatalf("tool spans = %v, want one interrupted", spans)
+		}
+	})
+
+	t.Run("session end closes its own session only", func(t *testing.T) {
+		f := newAgentFixture(allowAll())
+		f.fire(time.Second, hostdomain.HookPreToolUse, preToolCall1)
+		f.fire(2*time.Second, hostdomain.HookPreToolUse, preToolCall2)
+		f.fire(5*time.Second, hostdomain.HookSessionEnd, sessionEndS1)
+
+		spans := toolSpans(f)
+		if len(spans) != 1 {
+			t.Fatalf("tool spans = %d, want 1", len(spans))
+		}
+		assertToolSpan(t, spans[0], "Bash", string(shareddomain.ToolKindShell), string(shareddomain.ToolOutcomeInterrupted),
+			clockBase.Add(time.Second), clockBase.Add(5*time.Second))
+		if _, open := f.marks.tools["c2"]; !open || len(f.marks.tools) != 1 {
+			t.Fatalf("open tool marks = %v, want only c2", f.marks.tools)
+		}
+	})
+
+	t.Run("close without an open mark", func(t *testing.T) {
+		f := newAgentFixture(allowAll())
+		f.fire(time.Second, hostdomain.HookPostToolUse, postToolCall1)
+		f.fire(2*time.Second, hostdomain.HookSessionEnd, sessionEndS1)
+
+		if spans := toolSpans(f); len(spans) != 0 {
+			t.Fatalf("tool spans = %d, want 0", len(spans))
+		}
+	})
+
+	t.Run("denied pre tool use opens no mark", func(t *testing.T) {
+		f := newAgentFixture(denyBy("guard.x"))
+		f.fire(time.Second, hostdomain.HookPreToolUse, preToolCall1)
+
+		if len(f.marks.tools) != 0 {
+			t.Fatalf("open tool marks = %v, want none", f.marks.tools)
+		}
+	})
+
+	t.Run("codex opens no mark", func(t *testing.T) {
+		f := newAgentFixture(allowAll())
+		f.handler = handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewCodex()}, connectTo(allowAll()),
+			sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(f.recorder)).Tracer("test"),
+			sdkmetric.NewMeterProvider().Meter("test"), f.marks, time.Now)
+
+		f.handler.Handle(context.Background(), handlehook.Command{
+			Host: shareddomain.HostCodex, Hook: hostdomain.HookPreToolUse, Input: strings.NewReader(preToolCall1),
+		})
+
+		if len(f.marks.tools) != 0 {
+			t.Fatalf("open tool marks = %v, want none", f.marks.tools)
+		}
+	})
 }

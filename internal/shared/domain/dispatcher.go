@@ -14,4 +14,12 @@ type DispatchFailure struct {
 type DispatchResult struct {
 	Verdict  Verdict
 	Failures []DispatchFailure
+	DeniedBy []string
 }
+
+type TraceDetail string
+
+const (
+	TraceDetailCompact TraceDetail = "compact"
+	TraceDetailFull    TraceDetail = "full"
+)

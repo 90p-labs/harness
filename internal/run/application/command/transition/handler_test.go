@@ -34,6 +34,10 @@ const (
 	attrPhaseFrom = "harness.phase.from"
 	attrPhaseTo   = "harness.phase.to"
 
+	attrReviewRound    = "harness.review.round"
+	attrReworkClass    = "harness.rework.class"
+	attrReworkSeverity = "harness.rework.severity"
+
 	runID     = "20261108-011805-add-login"
 	vetoText  = "tests are red"
 	planHash  = "0fcc61abbe1c"
@@ -490,10 +494,11 @@ func TestTransitionSpan(t *testing.T) {
 			t.Errorf("span %q status %v", ended[0].Name(), ended[0].Status())
 		}
 		want := map[string]string{
-			attrRunID:     runID,
-			attrEvent:     string(domain.EventSubmitForReview),
-			attrPhaseFrom: string(domain.PhaseWorking),
-			attrPhaseTo:   string(domain.PhaseReviewing),
+			attrRunID:       runID,
+			attrEvent:       string(domain.EventSubmitForReview),
+			attrPhaseFrom:   string(domain.PhaseWorking),
+			attrPhaseTo:     string(domain.PhaseReviewing),
+			attrReviewRound: "0",
 		}
 		if got := stringAttributes(ended[0]); !reflect.DeepEqual(got, want) {
 			t.Errorf("attributes = %v, want %v", got, want)
@@ -521,9 +526,70 @@ func TestTransitionSpan(t *testing.T) {
 func stringAttributes(span sdktrace.ReadOnlySpan) map[string]string {
 	out := map[string]string{}
 	for _, kv := range span.Attributes() {
-		out[string(kv.Key)] = kv.Value.AsString()
+		out[string(kv.Key)] = kv.Value.Emit()
 	}
 	return out
+}
+
+func TestTransitionSpanAttributes(t *testing.T) {
+	reviewing := domain.Run{ID: runID, Key: key, Phase: domain.PhaseReviewing, ReviewRound: 1, Version: startedAt}
+	rework := func(reason string, class domain.ReworkClass) transition.Command {
+		return transition.Command{Key: key, Event: domain.EventRequestRework, Reason: reason, Class: class}
+	}
+
+	t.Run("every transition carries the review round", func(t *testing.T) {
+		f := newFixture(workingRun())
+
+		if err := f.handler.Handle(context.Background(), submitForReview()); err != nil {
+			t.Fatal(err)
+		}
+
+		got := stringAttributes(f.spans.Ended()[0])
+		if got[attrReviewRound] != "0" {
+			t.Errorf("review round = %q, want 0", got[attrReviewRound])
+		}
+		if _, ok := got[attrReworkClass]; ok {
+			t.Errorf("a non-rework span has %s", attrReworkClass)
+		}
+		if _, ok := got[attrReworkSeverity]; ok {
+			t.Errorf("a non-rework span has %s", attrReworkSeverity)
+		}
+	})
+
+	t.Run("a rework carries the round, the class and the highest severity but not the reason", func(t *testing.T) {
+		const reason = "F1, major, a.go:12 secret detail; F2 blocker b.go:3"
+		f := newFixture(reviewing)
+
+		if err := f.handler.Handle(context.Background(), rework(reason, domain.ReworkSpecGap)); err != nil {
+			t.Fatal(err)
+		}
+
+		got := stringAttributes(f.spans.Ended()[0])
+		if got[attrReviewRound] != "2" || got[attrReworkClass] != string(domain.ReworkSpecGap) || got[attrReworkSeverity] != string(domain.SeverityBlocker) {
+			t.Errorf("attributes = %v", got)
+		}
+		for key, value := range got {
+			if strings.Contains(value, "secret detail") {
+				t.Errorf("attribute %s holds the reason text", key)
+			}
+		}
+	})
+
+	t.Run("a rework without class or severity omits both", func(t *testing.T) {
+		f := newFixture(reviewing)
+
+		if err := f.handler.Handle(context.Background(), rework("broken", "")); err != nil {
+			t.Fatal(err)
+		}
+
+		got := stringAttributes(f.spans.Ended()[0])
+		if _, ok := got[attrReworkClass]; ok {
+			t.Errorf("attributes = %v, want no class", got)
+		}
+		if _, ok := got[attrReworkSeverity]; ok {
+			t.Errorf("attributes = %v, want no severity", got)
+		}
+	})
 }
 
 func TestMoveTracesTheRun(t *testing.T) {

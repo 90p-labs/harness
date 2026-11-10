@@ -12,5 +12,6 @@ func DecideStop(run Run, policy Policy, agentRunning bool) (StopVerdict, Run) {
 		return StopVerdict{}, run
 	}
 	run.StopBlocks++
-	return StopVerdict{Block: true, Reason: fmt.Sprintf("the run is in phase %s and is not finished", run.Phase)}, run
+	run.StopBlocksTotal++
+	return StopVerdict{Block: true, Reason: fmt.Sprintf("the run is in phase %s and is not finished; the hook sees no background agent or shell task. Run a long command in the background, then stop", run.Phase)}, run
 }

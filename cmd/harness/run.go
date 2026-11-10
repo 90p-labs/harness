@@ -14,6 +14,7 @@ import (
 
 	"github.com/90p-labs/harness/internal/deploy"
 	"github.com/90p-labs/harness/internal/guard"
+	hostmodule "github.com/90p-labs/harness/internal/host"
 	livemodule "github.com/90p-labs/harness/internal/live"
 	livecli "github.com/90p-labs/harness/internal/live/ui/cli"
 	planmodule "github.com/90p-labs/harness/internal/plan"
@@ -72,7 +73,7 @@ func resolveActiveRun(ctx context.Context, flags *pflag.FlagSet, cwd string, key
 	if err != nil || !dbal.FileExists(cfg.State.DSN, commonDir) {
 		return shareddomain.RunRef{}
 	}
-	db, err := openState(ctx, cfg, commonDir)
+	db, err := openStateDB(ctx, cfg, commonDir)
 	if err != nil {
 		return shareddomain.RunRef{}
 	}
@@ -89,6 +90,7 @@ type environment struct {
 	commonDir string
 	cfg       config.Config
 	bus       eventbus.Bus
+	state     *stateHolder
 
 	proofs        proofAdapter
 	defaultBranch planmodule.DefaultBranch
@@ -120,8 +122,9 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 		return environment{}, err
 	}
 	key := domain.RunKey{Repo: repo, Worktree: worktree}
+	state := newStateHolder(cfg, commonDir)
 	guards, err := guard.NewPlugins(cfg.Guard.Disabled, cfg.Git.DefaultBranch, modelsByHost(cfg.Roles), worktree,
-		stopAdapter{cfg: cfg, commonDir: commonDir, key: key},
+		stopAdapter{cfg: cfg, state: state, key: key},
 		commitCheckAdapter{cfg: cfg}.Passed,
 		reviewRecordAdapter{cfg: cfg}.Save,
 		reviewRecordAdapter{cfg: cfg}.Models)
@@ -142,12 +145,12 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	})
 	var bus eventbus.Bus
 	session := livemodule.NewSessionPlugin(func(ctx context.Context) ([]string, error) {
-		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus})
+		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, state: state})
 		return livecli.Lines(results), err
 	})
 	approval := approvalplugin.New(approvalAdapter{cfg: cfg, commonDir: commonDir, worktree: worktree}.Record)
-	bus = eventbus.NewBus(slices.Concat(plugins, guards, deployPlugins, []shareddomain.Plugin{review, planView, session, approval}), otel.GetTracerProvider(), otel.GetMeterProvider())
-	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, proofs: proofs, defaultBranch: defaultBranch}, nil
+	bus = eventbus.NewBus(slices.Concat(plugins, guards, deployPlugins, []shareddomain.Plugin{review, planView, session, approval, hostmodule.NewMarksPlugin(state.DB)}), otel.GetTracerProvider(), otel.GetMeterProvider()).WithTraceDetail(telemetry.TraceDetailFromEnv())
+	return environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, state: state, proofs: proofs, defaultBranch: defaultBranch}, nil
 }
 
 func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() error, error) {
@@ -155,15 +158,15 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
-	handlers, db, err := openRun(ctx, env)
+	handlers, _, err := openRun(ctx, env)
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
-	return handlers, db.Close, nil
+	return handlers, env.state.Close, nil
 }
 
 func openRun(ctx context.Context, env environment) (cli.Handlers, *dbal.DB, error) {
-	db, err := openState(ctx, env.cfg, env.commonDir)
+	db, err := env.state.DB(ctx)
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}

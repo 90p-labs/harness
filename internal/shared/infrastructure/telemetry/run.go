@@ -36,6 +36,10 @@ func runSpanContext(runID string) trace.SpanContext {
 	})
 }
 
+func TraceIDOf(runID string) string {
+	return runSpanContext(runID).TraceID().String()
+}
+
 func UnderRun(ctx context.Context, runID string) context.Context {
 	if runID == "" {
 		return ctx

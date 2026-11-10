@@ -12,11 +12,13 @@ type MarkKind string
 const (
 	MarkTurn     MarkKind = "turn"
 	MarkSubagent MarkKind = "subagent"
+	MarkTool     MarkKind = "tool"
 )
 
+// Session closes every open mark of the session, not one by id.
 type MarkStep struct {
-	Kind        MarkKind
-	Close, Open bool
+	Kind                 MarkKind
+	Close, Open, Session bool
 }
 
 var markSteps = map[HookName]MarkStep{
@@ -26,12 +28,30 @@ var markSteps = map[HookName]MarkStep{
 	HookSubagentStop:  {Kind: MarkSubagent, Close: true},
 }
 
-func MarkStepOf(hook HookName, verdict shareddomain.VerdictKind) (MarkStep, bool) {
+var claudeToolSteps = map[HookName]MarkStep{
+	HookPreToolUse:         {Kind: MarkTool, Open: true},
+	HookPostToolUse:        {Kind: MarkTool, Close: true},
+	HookPostToolUseFailure: {Kind: MarkTool, Close: true},
+	HookSessionEnd:         {Kind: MarkTool, Close: true, Session: true},
+}
+
+func MarkStepOf(host shareddomain.Host, hook HookName, verdict shareddomain.VerdictKind) (MarkStep, bool) {
 	if verdict == shareddomain.VerdictDeny {
 		return MarkStep{}, false
 	}
-	step, ok := markSteps[hook]
+	if step, ok := markSteps[hook]; ok {
+		return step, true
+	}
+	if host != shareddomain.HostClaude {
+		return MarkStep{}, false
+	}
+	step, ok := claudeToolSteps[hook]
 	return step, ok
+}
+
+type ToolMark struct {
+	ID, SessionID, Tool string
+	StartedAt           time.Time
 }
 
 // Open keeps the first time of an open mark. Close returns the start time and
@@ -39,4 +59,6 @@ func MarkStepOf(hook HookName, verdict shareddomain.VerdictKind) (MarkStep, bool
 type AgentMarks interface {
 	Open(ctx context.Context, kind MarkKind, id string, at time.Time) error
 	Close(ctx context.Context, kind MarkKind, id string) (time.Time, bool, error)
+	OpenTool(ctx context.Context, mark ToolMark) error
+	CloseSession(ctx context.Context, sessionID string) ([]ToolMark, error)
 }

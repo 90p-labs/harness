@@ -19,6 +19,8 @@ const (
 	EventTurnStopping        EventName = "turn.stopping"
 	EventSubagentStarted     EventName = "subagent.started"
 	EventSubagentStopped     EventName = "subagent.stopped"
+	EventToolFailed          EventName = "tool.failed"
+	EventSessionEnded        EventName = "session.ended"
 	EventRunTransitionBefore EventName = "run.transition.before"
 	EventRunTransitionAfter  EventName = "run.transition.after"
 	EventPlanSubmitted       EventName = "plan.submitted"
@@ -39,6 +41,8 @@ var catalogue = map[EventName]Kind{
 	EventTurnStopping:        KindVeto,
 	EventSubagentStarted:     KindContext,
 	EventSubagentStopped:     KindObserve,
+	EventToolFailed:          KindObserve,
+	EventSessionEnded:        KindObserve,
 	EventRunTransitionBefore: KindVeto,
 	EventRunTransitionAfter:  KindObserve,
 	EventPlanSubmitted:       KindCollect,

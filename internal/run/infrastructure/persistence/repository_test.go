@@ -127,6 +127,46 @@ func TestListByPhase(t *testing.T) {
 	}
 }
 
+func TestStopBlocksTotal(t *testing.T) {
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			run := newRun(t, "r1", domain.EventStart)
+			run.StopBlocksTotal = 3
+			saved := save(t, s, run)
+
+			saved.StopBlocksTotal = 5
+			save(t, s, saved)
+
+			if got := get(t, s, "r1").StopBlocksTotal; got != 5 {
+				t.Errorf("stop blocks total = %d, want 5", got)
+			}
+		})
+	}
+}
+
+func TestReworkClassRoundTrip(t *testing.T) {
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			run := newRun(t, "r1", domain.EventStart, domain.EventSubmitPlan, domain.EventSubmitForReview)
+			rework, err := run.Apply(domain.Command{Event: domain.EventRequestRework, Reason: "F1", Class: domain.ReworkSpecGap, At: clock}, domain.Policy{MaxReviewRounds: 3})
+			if err != nil {
+				t.Fatal(err)
+			}
+			save(t, s, rework)
+
+			var class string
+			if err := s.db.QueryRow("SELECT rework_class FROM run_transitions WHERE run_id = ? AND event = ?", "r1", domain.EventRequestRework).Scan(&class); err != nil {
+				t.Fatal(err)
+			}
+			if class != string(domain.ReworkSpecGap) {
+				t.Errorf("rework class = %q, want %q", class, domain.ReworkSpecGap)
+			}
+		})
+	}
+}
+
 func TestRunRepositoryContract(t *testing.T) {
 	ctx := context.Background()
 	for _, c := range dialectCases {

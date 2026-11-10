@@ -19,6 +19,7 @@ const (
 )
 
 const (
+	TaskTypeShell        = "shell"
 	TaskTypeSubagent     = "subagent"
 	TaskTypeWorkflow     = "workflow"
 	TaskTypeTeammate     = "teammate"
@@ -26,6 +27,7 @@ const (
 )
 
 var backgroundAgentTypes = []string{
+	TaskTypeShell,
 	TaskTypeSubagent,
 	TaskTypeWorkflow,
 	TaskTypeTeammate,
@@ -53,12 +55,26 @@ type PromptPayload struct {
 	Prompt string `json:"prompt"`
 }
 
+type ToolOutcome string
+
+const (
+	ToolOutcomeSucceeded   ToolOutcome = "succeeded"
+	ToolOutcomeFailed      ToolOutcome = "failed"
+	ToolOutcomeInterrupted ToolOutcome = "interrupted"
+)
+
 type ToolPayload struct {
 	Tool     string          `json:"tool"`
 	Kind     ToolKind        `json:"kind"`
 	Input    json.RawMessage `json:"input"`
 	Response json.RawMessage `json:"response,omitempty"`
 	Answers  []Answer        `json:"answers,omitempty"`
+	CallID   string          `json:"call_id,omitempty"`
+	Outcome  ToolOutcome     `json:"outcome,omitempty"`
+}
+
+type SessionEndPayload struct {
+	Reason string `json:"reason"`
 }
 
 type StopPayload struct {
