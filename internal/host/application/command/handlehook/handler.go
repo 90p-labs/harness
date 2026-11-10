@@ -35,6 +35,13 @@ const (
 	attrHook           = attribute.Key("harness.hook")
 	attrVerdict        = attribute.Key("harness.verdict")
 	attrSessionID      = attribute.Key("harness.session.id")
+	attrTurnEnd        = attribute.Key("harness.turn.end")
+	attrAgentID        = attribute.Key("harness.agent.id")
+	attrAgentType      = attribute.Key("harness.agent.type")
+	spanTurn           = "agent.turn"
+	spanSubagent       = "agent.subagent"
+	turnEndStop        = "stop"
+	turnEndPrompt      = "prompt"
 )
 
 type Connect func(ctx context.Context) (shareddomain.Dispatcher, error)
@@ -55,29 +62,34 @@ type Handler struct {
 	connect  Connect
 	tracer   trace.Tracer
 	duration metric.Float64Histogram
+	marks    hostdomain.AgentMarks
+	now      func() time.Time
 }
 
-func NewHandler(codecs []hostdomain.Codec, connect Connect, tracer trace.Tracer, meter metric.Meter) Handler {
+func NewHandler(codecs []hostdomain.Codec, connect Connect, tracer trace.Tracer, meter metric.Meter, marks hostdomain.AgentMarks, now func() time.Time) Handler {
 	duration, _ := meter.Float64Histogram(
 		metricHookSeconds,
 		metric.WithUnit(metricUnitSeconds),
 		metric.WithExplicitBucketBoundaries(eventbus.DurationBuckets()...),
 	)
-	return Handler{codecs: codecs, connect: connect, tracer: tracer, duration: duration}
+	return Handler{codecs: codecs, connect: connect, tracer: tracer, duration: duration, marks: marks, now: now}
 }
 
 func (h Handler) Handle(ctx context.Context, c Command) Output {
+	runCtx := ctx
 	ctx, span := h.tracer.Start(ctx, spanName)
 	defer span.End()
 	start := time.Now()
 
-	out, verdict, raw, err := h.process(ctx, c)
+	out, envelope, verdict, raw, err := h.process(ctx, c)
 	outcome := string(verdict.Kind)
 	if err != nil {
 		outcome = outcomeError
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		out = h.failClosed(c, isVeto(c.Hook) && !isRetriedStop(c.Hook, raw), err)
+	} else if markErr := h.applyMarks(runCtx, c.Hook, envelope, verdict.Kind); markErr != nil {
+		span.RecordError(markErr)
 	}
 	attrs := []attribute.KeyValue{
 		attrHost.String(string(c.Host)),
@@ -89,18 +101,18 @@ func (h Handler) Handle(ctx context.Context, c Command) Output {
 	return out
 }
 
-func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.Verdict, []byte, error) {
+func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.Envelope, shareddomain.Verdict, []byte, error) {
 	codec, err := h.codecOf(c.Host)
 	if err != nil {
-		return Output{}, shareddomain.Verdict{}, nil, err
+		return Output{}, shareddomain.Envelope{}, shareddomain.Verdict{}, nil, err
 	}
 	raw, err := readLimited(c.Input)
 	if err != nil {
-		return Output{}, shareddomain.Verdict{}, nil, err
+		return Output{}, shareddomain.Envelope{}, shareddomain.Verdict{}, nil, err
 	}
 	envelope, err := codec.Decode(c.Hook, raw)
 	if err != nil {
-		return Output{}, shareddomain.Verdict{}, raw, err
+		return Output{}, envelope, shareddomain.Verdict{}, raw, err
 	}
 	if envelope.SessionID != "" {
 		trace.SpanFromContext(ctx).SetAttributes(attrSessionID.String(envelope.SessionID))
@@ -108,16 +120,16 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.V
 	missing := hostdomain.MissingEvents(codec)
 	if envelope.Event == shareddomain.EventSessionStarted && len(missing) > 0 {
 		if envelope.Payload, err = withMissingEvents(envelope.Payload, missing); err != nil {
-			return Output{}, shareddomain.Verdict{}, raw, err
+			return Output{}, envelope, shareddomain.Verdict{}, raw, err
 		}
 	}
 	dispatcher, err := h.connect(ctx)
 	if err != nil {
-		return Output{}, shareddomain.Verdict{}, raw, err
+		return Output{}, envelope, shareddomain.Verdict{}, raw, err
 	}
 	result, err := dispatcher.Dispatch(ctx, envelope)
 	if err != nil {
-		return Output{}, shareddomain.Verdict{}, raw, err
+		return Output{}, envelope, shareddomain.Verdict{}, raw, err
 	}
 	verdict := result.Verdict
 	var stderr strings.Builder
@@ -132,9 +144,56 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.V
 	}
 	stdout, err := codec.Encode(c.Hook, verdict)
 	if err != nil {
-		return Output{}, shareddomain.Verdict{}, raw, err
+		return Output{}, envelope, shareddomain.Verdict{}, raw, err
 	}
-	return Output{Stdout: stdout, Stderr: stderr.String()}, verdict, raw, nil
+	return Output{Stdout: stdout, Stderr: stderr.String()}, envelope, verdict, raw, nil
+}
+
+func (h Handler) applyMarks(ctx context.Context, hook hostdomain.HookName, envelope shareddomain.Envelope, verdict shareddomain.VerdictKind) error {
+	step, ok := hostdomain.MarkStepOf(hook, verdict)
+	if !ok {
+		return nil
+	}
+	var agent shareddomain.SubagentPayload
+	id := envelope.SessionID
+	if step.Kind == hostdomain.MarkSubagent {
+		if err := json.Unmarshal(envelope.Payload, &agent); err != nil {
+			return err
+		}
+		id = agent.AgentID
+	}
+	if id == "" {
+		return nil
+	}
+	if step.Close {
+		start, found, err := h.marks.Close(ctx, step.Kind, id)
+		if err != nil {
+			return err
+		}
+		if found {
+			h.exportAgentSpan(ctx, hook, envelope.SessionID, agent, start)
+		}
+	}
+	if step.Open {
+		return h.marks.Open(ctx, step.Kind, id, h.now())
+	}
+	return nil
+}
+
+func (h Handler) exportAgentSpan(ctx context.Context, hook hostdomain.HookName, sessionID string, agent shareddomain.SubagentPayload, start time.Time) {
+	name := spanTurn
+	attrs := []attribute.KeyValue{attrSessionID.String(sessionID)}
+	switch hook {
+	case hostdomain.HookStop:
+		attrs = append(attrs, attrTurnEnd.String(turnEndStop))
+	case hostdomain.HookUserPrompt:
+		attrs = append(attrs, attrTurnEnd.String(turnEndPrompt))
+	case hostdomain.HookSubagentStop:
+		name = spanSubagent
+		attrs = append(attrs, attrAgentID.String(agent.AgentID), attrAgentType.String(agent.AgentType))
+	}
+	_, span := h.tracer.Start(ctx, name, trace.WithTimestamp(start), trace.WithAttributes(attrs...))
+	span.End(trace.WithTimestamp(h.now()))
 }
 
 func (h Handler) failClosed(c Command, block bool, cause error) Output {

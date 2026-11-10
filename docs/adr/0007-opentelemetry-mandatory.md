@@ -21,11 +21,13 @@ Kodify builds one tracer provider for each span, has no metrics and gives the mo
 - Each run has one trace. The harness derives the trace ID and the ID of the root span `run` from the run ID.
 - A process of an active run is a child of the root span. A `TRACEPARENT` in the same trace stays the parent. A parent in another trace is replaced by the root span.
 - The harness exports the root span when the run reaches done or abandoned, for example through `harness run done`, `harness run abandon` or the live check.
+- The harness exports an `agent.turn` span for each agent turn and an `agent.subagent` span for each subagent. It builds them from the hook events. The start time is stored in the state database.
 
 ## Consequences
 
 - Application code uses the telemetry API and imports no SDK. A test checks it.
 - The verify run is one trace tree. The `lint.run` span sits under `gate.run`, and each `lint.engine` span under `lint.run`.
 - The whole run is one trace tree under the root span `run`. The root span appears only after the run reaches done or abandoned. Until then, or if that export fails, the trace has no root span.
+- A gap between hook spans, for example model time or a server tool call, sits inside an `agent.turn` or `agent.subagent` span.
 - A user sees no network traffic from telemetry unless the user sets an endpoint.
 - A dead collector delays the exit by at most 2 seconds.

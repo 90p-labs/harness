@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"os"
+	"time"
 
 	"go.opentelemetry.io/otel"
 
@@ -20,8 +21,8 @@ func codecs() []hostdomain.Codec {
 	return []hostdomain.Codec{hookcodec.NewClaude(), hookcodec.NewCodex()}
 }
 
-func NewHookHandler(connect handlehook.Connect) handlehook.Handler {
-	return handlehook.NewHandler(codecs(), connect, otel.Tracer(instrumentationName), otel.Meter(instrumentationName))
+func NewHookHandler(connect handlehook.Connect, marks hostdomain.AgentMarks) handlehook.Handler {
+	return handlehook.NewHandler(codecs(), connect, otel.Tracer(instrumentationName), otel.Meter(instrumentationName), marks, time.Now)
 }
 
 func NewHostConnect(worktree func(ctx context.Context) (string, error)) cli.HostConnect {

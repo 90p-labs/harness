@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
@@ -42,6 +43,8 @@ func runHook(t *testing.T, stdin string, args ...string) (stdout, stderr string,
 		func(context.Context) (shareddomain.Dispatcher, error) { return denyDispatcher{}, nil },
 		tracenoop.NewTracerProvider().Tracer("test"),
 		noop.NewMeterProvider().Meter("test"),
+		nil,
+		time.Now,
 	)
 	cmd := cli.NewHookCommand(handler)
 	var out, errOut bytes.Buffer

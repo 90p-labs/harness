@@ -82,12 +82,24 @@ Each run has one trace. The harness derives the trace ID and the ID of the root 
 - A `TRACEPARENT` in another trace is replaced by the root span of the run.
 - A process with no active run starts its own trace. The exception is `harness run start`. Its `run.transition` span joins the trace of the new run.
 - The harness exports the root span `run` when the run reaches the phase done or abandoned. For example, `harness run done`, `harness run abandon` or the live check does it. The span starts at the start time of the run and ends now. It has `harness.run.id`, `harness.worktree` and `harness.run.phase`.
+- `agent.turn`: one span for each turn of an agent session in an active run. It starts at a prompt (`UserPromptSubmit`). It ends at the next stop that the harness allows, or at the next prompt. It has `harness.session.id` and `harness.turn.end` (`stop` or `prompt`).
+- `agent.subagent`: one span for each subagent. It starts at `SubagentStart` and ends at `SubagentStop`. It has `harness.session.id`, `harness.agent.id` and `harness.agent.type`.
+- Both agent spans are children of the root span `run`. The harness exports each span at its closing hook. It uses the start time that it stores in the state database.
+
+A hook cannot see model time or a server tool call. A gap between hook spans sits inside a turn or subagent span. The agent spans have these limits:
+
+- A denied stop keeps the turn open.
+- Queued task notifications come as prompts. A prompt closes the open turn and opens a new one.
+- A user interrupt fires no stop. The turn then ends at the next prompt and holds the idle time.
+- With no active run, the harness stores no mark. The first turn of a run has no span.
+- A turn or subagent with no closing hook has no span.
+- There is no tool span.
 
 The root span appears only after the run reaches done or abandoned. Until then, the trace in the backend has no root span. If that export fails, the trace has no root span.
 
 ## `state`
 
-The run state database. It holds the runs, the plan approvals, the gate results and the commit checks.
+The run state database. It holds the runs, the plan approvals, the gate results, the commit checks and the agent marks (the open turns and subagents of a run).
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|

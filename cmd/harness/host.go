@@ -3,24 +3,80 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/90p-labs/harness/internal/host"
 	hostdomain "github.com/90p-labs/harness/internal/host/domain"
+	hostpersistence "github.com/90p-labs/harness/internal/host/infrastructure/persistence"
 	hostcli "github.com/90p-labs/harness/internal/host/ui/cli"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 func newHookCommand(flags *pflag.FlagSet) *cobra.Command {
 	handler := host.NewHookHandler(func(ctx context.Context) (shareddomain.Dispatcher, error) {
 		env, err := newEnvironment(ctx, flags)
 		return runDispatcher{next: env.bus}, err
-	})
+	}, runMarks{flags: flags})
 	cmd := hostcli.NewHookCommand(handler)
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return err })
 	return cmd
+}
+
+type runMarks struct {
+	flags *pflag.FlagSet
+}
+
+func (m runMarks) Open(ctx context.Context, kind hostdomain.MarkKind, id string, at time.Time) error {
+	runID := runRefFrom(ctx).ID
+	if runID == "" {
+		return nil
+	}
+	return m.withMarks(ctx, func(marks hostpersistence.SQLAgentMarks) error {
+		return marks.Open(ctx, runID, kind, id, at)
+	})
+}
+
+func (m runMarks) Close(ctx context.Context, kind hostdomain.MarkKind, id string) (started time.Time, found bool, err error) {
+	runID := runRefFrom(ctx).ID
+	if runID == "" {
+		return time.Time{}, false, nil
+	}
+	err = m.withMarks(ctx, func(marks hostpersistence.SQLAgentMarks) (closeErr error) {
+		started, found, closeErr = marks.Close(ctx, runID, kind, id)
+		return closeErr
+	})
+	return started, found, err
+}
+
+func (m runMarks) withMarks(ctx context.Context, use func(hostpersistence.SQLAgentMarks) error) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	_, worktree, err := git.RepoKey(ctx, cwd)
+	if err != nil {
+		return err
+	}
+	commonDir, err := git.CommonDir(ctx, cwd)
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load(m.flags, worktree)
+	if err != nil {
+		return err
+	}
+	db, err := openState(ctx, cfg, commonDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	return use(hostpersistence.NewSQLAgentMarks(db))
 }
 
 func newHostCommand(flags *pflag.FlagSet) *cobra.Command {
