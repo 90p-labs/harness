@@ -21,6 +21,8 @@ type Status struct {
 	Worktree    string
 	PRURL       string
 	Version     int
+	Step        int
+	HandoffStep int
 }
 
 type Handler struct {
@@ -62,5 +64,6 @@ func toStatus(run domain.Run) Status {
 		ID: run.ID, Phase: run.Phase, ReviewRound: run.ReviewRound,
 		LiveRound: run.LiveRound, Reason: run.Reason, Prompt: run.Prompt,
 		Worktree: run.Key.Worktree, PRURL: run.PRURL, Version: run.Version,
+		Step: run.Step, HandoffStep: run.HandoffStep,
 	}
 }

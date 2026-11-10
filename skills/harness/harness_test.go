@@ -30,6 +30,14 @@ const (
 	ruleSourceGlob    = "internal/plan/domain/*.go"
 	threatModelADR    = "ADR 0019"
 	reviewRisksHead   = "## Review risks"
+	planningItem      = "2. `planning`"
+	approvalItem      = "3. `awaiting_approval`"
+	advisorOnLine     = "advisor: on"
+	advisorOffLine    = "advisor: off"
+	decisionsHead     = "## Decisions"
+	handoffFile       = "handoff.md"
+	statusRouteStart  = "- `status` or empty"
+	endTurnPhrase     = "end the turn"
 )
 
 var (
@@ -134,5 +142,29 @@ func TestPlanTemplate(t *testing.T) {
 		if !strings.Contains(template, want) {
 			t.Errorf("%s does not name %q", templateFile, want)
 		}
+	}
+}
+
+func TestHarnessSkillHandoff(t *testing.T) {
+	skill := repository.Read(t, skillFile)
+	_, planning, found := strings.Cut(skill, planningItem)
+	if !found {
+		t.Fatalf("%s has no item %q", skillFile, planningItem)
+	}
+	planning, _, _ = strings.Cut(planning, approvalItem)
+	for _, want := range []string{advisorOnLine, advisorOffLine, decisionsHead} {
+		if !strings.Contains(planning, want) {
+			t.Errorf("%s: the item %q does not name %q", skillFile, planningItem, want)
+		}
+	}
+	for _, want := range []string{handoffFile, endTurnPhrase} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("%s does not name %q", skillFile, want)
+		}
+	}
+	_, route, _ := strings.Cut(skill, statusRouteStart)
+	route, _, _ = strings.Cut(route, "\n")
+	if !strings.Contains(route, handoffFile) {
+		t.Errorf("%s: the status route does not name %q", skillFile, handoffFile)
 	}
 }

@@ -51,3 +51,30 @@ func TestClassifyTrack(t *testing.T) {
 		}
 	})
 }
+
+func TestNeedsAdvisor(t *testing.T) {
+	cases := []struct {
+		name     string
+		declared string
+		files    []string
+		want     bool
+	}{
+		{"full track", "full", []string{"cmd/main.go"}, true},
+		{"domain folder", "", []string{"internal/ping/domain/pong.go"}, true},
+		{"guard folder", "", []string{"internal/guard/rules.go"}, true},
+		{"security folder", "", []string{"internal/security/key.go"}, true},
+		{"hooks folder", "", []string{"internal/hooks/pre.go"}, true},
+		{"pluginhooks folder", "", []string{"plugin/pluginhooks/pre.sh"}, true},
+		{"hooks as a file name", "", []string{"internal/ping/hooks.go"}, false},
+		{"hooks in a folder name", "", []string{"internal/webhooks/pre.go"}, false},
+		{"light track", "", []string{"cmd/main.go"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			doc := domain.Document{Track: c.declared, CodeTree: treeOf(c.files...)}
+			if got := domain.NeedsAdvisor(doc); got != c.want {
+				t.Errorf("NeedsAdvisor = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

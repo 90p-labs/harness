@@ -88,10 +88,12 @@ func TestTransitionCommand(t *testing.T) {
 		wantErr   error
 		wantSaved int
 		wantOut   string
+		wantLine  bool
 	}{
-		{"approve by a model moves the run", domain.PhaseAwaitingApproval,
-			[]string{"approve", "--by", "fable", "--reason", "the user approved all plans"}, nil, 1, "phase=working"},
-		{"plan in the wrong phase is illegal", domain.PhaseAwaitingApproval, []string{"plan"}, domain.ErrIllegalTransition, 0, ""},
+		{"approve by a model moves the run and asks for the handoff", domain.PhaseAwaitingApproval,
+			[]string{"approve", "--by", "fable", "--reason", "the user approved all plans"}, nil, 1, "phase=working", true},
+		{"plan moves the run to a phase that releases the turn", domain.PhasePlanning, []string{"plan"}, nil, 1, "phase=awaiting_approval", false},
+		{"plan in the wrong phase is illegal", domain.PhaseAwaitingApproval, []string{"plan"}, domain.ErrIllegalTransition, 0, "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,6 +117,9 @@ func TestTransitionCommand(t *testing.T) {
 			}
 			if len(repo.saved) != tc.wantSaved || !strings.Contains(out.String(), tc.wantOut) {
 				t.Errorf("saves = %d, output = %q, want %d and %q", len(repo.saved), out.String(), tc.wantSaved, tc.wantOut)
+			}
+			if got := strings.Contains(out.String(), "handoff: write"); got != tc.wantLine {
+				t.Errorf("output = %q, handoff write line present = %v, want %v", out.String(), got, tc.wantLine)
 			}
 		})
 	}
@@ -268,4 +273,39 @@ func TestStatusLinesHintForEachPhase(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandoffLines(t *testing.T) {
+	ready := status.Status{ID: "r1", Phase: domain.PhaseWorking, Step: 3, HandoffStep: 3}
+	stale := ready
+	stale.HandoffStep = 2
+	fresh := status.Status{ID: "r1", Phase: domain.PhasePlanning}
+
+	cases := []struct {
+		name string
+		in   status.Status
+		want bool
+	}{
+		{"ready", ready, true},
+		{"stale", stale, false},
+		{"step zero", fresh, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Contains(strings.Join(cli.Lines(tc.in), "\n"), "handoff: ready (step 3)")
+			if got != tc.want {
+				t.Errorf("ready line present = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("write line", func(t *testing.T) {
+		want := "handoff: write .harness/runs/r1/handoff.md with Phase: working and Step: 3, then end the turn"
+		if got := cli.HandoffWriteLine(ready); got != want {
+			t.Errorf("line = %q, want %q", got, want)
+		}
+		if got := cli.HandoffWriteLine(status.Status{ID: "r1", Phase: domain.PhaseAwaitingApproval, Step: 3}); got != "" {
+			t.Errorf("line = %q, want none for a phase that releases the turn", got)
+		}
+	})
 }

@@ -67,7 +67,7 @@ func TestDecideStop(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			spans := tracetest.NewSpanRecorder()
 			tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)).Tracer("test")
-			handler := decidestop.NewHandler(tc.repo, domain.Policy{MaxStopBlocks: maxStopBlocks}, tracer)
+			handler := decidestop.NewHandler(tc.repo, &fakeHandoff{}, domain.Policy{MaxStopBlocks: maxStopBlocks}, tracer)
 
 			result, err := handler.Handle(context.Background(), decidestop.Command{Key: key, AgentRunning: tc.agentRunning})
 
@@ -98,6 +98,65 @@ func TestDecideStop(t *testing.T) {
 	}
 }
 
+type fakeHandoff struct {
+	raw      []byte
+	err      error
+	worktree string
+	runID    string
+}
+
+func (f *fakeHandoff) ReadHandoff(_ context.Context, worktree, runID string) ([]byte, error) {
+	f.worktree, f.runID = worktree, runID
+	return f.raw, f.err
+}
+
+func TestHandleHandoff(t *testing.T) {
+	const step = 2
+	ready := []byte("Phase: working\nStep: 2\n## Next\n- a\n## Open findings\n- none\n## Unreviewed commits\n- none\n## Decisions\n- none\n")
+	errRead := errors.New("handoff.md is a symlink")
+	cases := []struct {
+		name      string
+		reader    *fakeHandoff
+		wantBlock bool
+		wantStop  bool
+		wantSaved int
+	}{
+		{"a ready file allows one stop and saves the handoff step", &fakeHandoff{raw: ready}, false, true, 1},
+		{"a reader error blocks and keeps the block", &fakeHandoff{err: errRead}, true, false, 1},
+		{"a missing file blocks", &fakeHandoff{}, true, false, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			run := storedRun(domain.PhaseWorking, 0)
+			run.Step = step
+			repo := &fakeRepository{stored: run}
+			tracer := sdktrace.NewTracerProvider().Tracer("test")
+			handler := decidestop.NewHandler(repo, tc.reader, domain.Policy{MaxStopBlocks: maxStopBlocks}, tracer)
+
+			result, err := handler.Handle(context.Background(), decidestop.Command{Key: key})
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Block != tc.wantBlock || result.Handoff != tc.wantStop {
+				t.Fatalf("result = %+v, want block %v handoff %v", result, tc.wantBlock, tc.wantStop)
+			}
+			if tc.reader.runID != run.ID || tc.reader.worktree != run.Key.Worktree {
+				t.Errorf("read handoff of run %q in %q, want run %q in %q", tc.reader.runID, tc.reader.worktree, run.ID, run.Key.Worktree)
+			}
+			if len(repo.saved) != tc.wantSaved {
+				t.Fatalf("saved = %+v, want %d", repo.saved, tc.wantSaved)
+			}
+			if tc.wantStop && repo.saved[0].HandoffStep != step {
+				t.Errorf("saved handoff step = %d, want %d", repo.saved[0].HandoffStep, step)
+			}
+			if tc.wantBlock && repo.saved[0].StopBlocks != 1 {
+				t.Errorf("saved stop blocks = %d, want 1", repo.saved[0].StopBlocks)
+			}
+		})
+	}
+}
+
 func TestDecideStopRepositoryErrors(t *testing.T) {
 	errStore := errors.New("store down")
 	cases := []struct {
@@ -111,7 +170,7 @@ func TestDecideStopRepositoryErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			spans := tracetest.NewSpanRecorder()
 			tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)).Tracer("test")
-			handler := decidestop.NewHandler(tc.repo, domain.Policy{MaxStopBlocks: maxStopBlocks}, tracer)
+			handler := decidestop.NewHandler(tc.repo, &fakeHandoff{}, domain.Policy{MaxStopBlocks: maxStopBlocks}, tracer)
 
 			result, err := handler.Handle(context.Background(), decidestop.Command{Key: key})
 

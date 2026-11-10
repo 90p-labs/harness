@@ -18,6 +18,8 @@ type Run struct {
 	LiveRound       int
 	StopBlocks      int
 	StopBlocksTotal int
+	Step            int
+	HandoffStep     int
 	BlockedFrom     Phase
 	Reason          string
 	PRURL           string

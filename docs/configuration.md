@@ -149,6 +149,15 @@ The policy of the run loop. `harness run` reads it on each transition.
 
 A plan with only `docs` commits and no open question skips the approval, also with `approval: true`.
 
+The guard also allows one stop for each phase change when `handoff.md` is ready. The lead writes `handoff.md` in the run folder after a transition. The file has the lines `Phase: <phase>` and `Step: <n>`. It has these 4 sections:
+
+- `## Next`
+- `## Open findings`
+- `## Unreviewed commits`
+- `## Decisions`
+
+The file has at most 4096 bytes, and `harness run status` prints `handoff: ready (step <n>)` after the stop. The run stores the step in the column `handoff_step`. A second stop at the same step blocks, as `max_stop_blocks` says. A Codex host has no pane restart. The handoff stop ends the turn, and the next prompt continues the same session.
+
 ```yaml
 run:
   approval: true

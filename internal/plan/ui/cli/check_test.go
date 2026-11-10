@@ -94,6 +94,62 @@ func TestPlanHelpProgram(t *testing.T) {
 	}
 }
 
+func TestCheckPrintsAdvisor(t *testing.T) {
+	const programPlan = "../../domain/testdata/program.md"
+	broken := filepath.Join(t.TempDir(), "plan.md")
+	if err := os.WriteFile(broken, []byte(brokenPlan), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("a full track plan", func(t *testing.T) {
+		out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, validPlan)
+
+		if err != nil || out != "advisor: on (full track)\n" {
+			t.Fatalf("err = %v, out = %q, want the full track line", err, out)
+		}
+	})
+
+	lightPlan := func(folder string) string {
+		raw, err := os.ReadFile(validPlan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		file := filepath.Join(t.TempDir(), "plan.md")
+		light := strings.NewReplacer("Track: full", "Track: light", "domain/", folder, "application/query/pingquery/", "service/pingq/pingquery/",
+			"└── application/", "└── service/", "└── query/", "└── pingq/").Replace(string(raw))
+		if err := os.WriteFile(file, []byte(light), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return file
+	}
+
+	t.Run("a light plan with a hook folder", func(t *testing.T) {
+		out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, lightPlan("hooks/"))
+
+		if err != nil || out != "advisor: on (guard, security or hook path)\n" {
+			t.Fatalf("err = %v, out = %q, want the path line", err, out)
+		}
+	})
+
+	t.Run("a light plan with no risky path", func(t *testing.T) {
+		out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, lightPlan("model/"))
+
+		if err != nil || out != "advisor: off (light track)\n" {
+			t.Fatalf("err = %v, out = %q, want the light track line", err, out)
+		}
+	})
+
+	t.Run("a multi-run plan and a plan with a problem print no advisor line", func(t *testing.T) {
+		for _, file := range []string{programPlan, broken} {
+			out, _ := execute(t, connect(nil, new(bool)), subCommand, flagFile, file)
+
+			if strings.Contains(out, "advisor:") {
+				t.Errorf("%s: out = %q, want no advisor line", file, out)
+			}
+		}
+	})
+}
+
 func TestPlanCheckCommand(t *testing.T) {
 	broken := filepath.Join(t.TempDir(), "plan.md")
 	if err := os.WriteFile(broken, []byte(brokenPlan), 0o600); err != nil {
@@ -109,8 +165,8 @@ func TestPlanCheckCommand(t *testing.T) {
 
 		out, err := execute(t, connect(failDefault, &closed), subCommand, flagFile, validPlan)
 
-		if err != nil || out != "" {
-			t.Fatalf("err = %v, out = %q, want nil and empty", err, out)
+		if err != nil || strings.Contains(out, "plan.md:") {
+			t.Fatalf("err = %v, out = %q, want nil and no problem", err, out)
 		}
 		if !closed {
 			t.Error("the store was not closed")
@@ -139,8 +195,8 @@ func TestPlanCheckCommand(t *testing.T) {
 
 		out, err := execute(t, connect(defaultPlan, &closed), subCommand)
 
-		if err != nil || out != "" {
-			t.Fatalf("err = %v, out = %q, want nil and empty", err, out)
+		if err != nil || strings.Contains(out, "plan.md:") {
+			t.Fatalf("err = %v, out = %q, want nil and no problem", err, out)
 		}
 	})
 

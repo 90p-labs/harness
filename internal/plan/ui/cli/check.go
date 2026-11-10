@@ -19,6 +19,10 @@ const (
 	commandPlan  = "plan"
 	commandCheck = "check"
 	flagFile     = "file"
+
+	advisorFull = "advisor: on (full track)"
+	advisorPath = "advisor: on (guard, security or hook path)"
+	advisorOff  = "advisor: off (light track)"
 )
 
 var ErrNoPlanFile = errors.New("no plan file: give --file or start a run")
@@ -105,11 +109,25 @@ func checkCommand(connect Connect) *cobra.Command {
 			if len(report.Problems) > 0 {
 				return domain.ErrPlanHasProblems
 			}
+			if report.Program == nil {
+				fmt.Fprintln(cmd.OutOrStdout(), advisorLine(report))
+			}
 			return nil
 		},
 	}
 	cmd.Flags().String(flagFile, "", "the plan file, default the plan of the active run")
 	return cmd
+}
+
+func advisorLine(report domain.Report) string {
+	switch {
+	case report.Track == shareddomain.TrackFull:
+		return advisorFull
+	case domain.NeedsAdvisor(report.Doc):
+		return advisorPath
+	default:
+		return advisorOff
+	}
 }
 
 func queryFor(cmd *cobra.Command, handlers Handlers) (checkplan.Query, error) {

@@ -23,13 +23,14 @@ type Command struct {
 type Result = domain.StopVerdict
 
 type Handler struct {
-	repo   domain.RunRepository
-	policy domain.Policy
-	tracer trace.Tracer
+	repo     domain.RunRepository
+	handoffs domain.HandoffReader
+	policy   domain.Policy
+	tracer   trace.Tracer
 }
 
-func NewHandler(repo domain.RunRepository, policy domain.Policy, tracer trace.Tracer) Handler {
-	return Handler{repo: repo, policy: policy, tracer: tracer}
+func NewHandler(repo domain.RunRepository, handoffs domain.HandoffReader, policy domain.Policy, tracer trace.Tracer) Handler {
+	return Handler{repo: repo, handoffs: handoffs, policy: policy, tracer: tracer}
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) (result Result, err error) {
@@ -50,8 +51,12 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (result Result, err er
 	if err != nil {
 		return Result{}, err
 	}
-	verdict, next := domain.DecideStop(run, h.policy, cmd.AgentRunning)
-	if !verdict.Block {
+	raw, refusal := h.handoffs.ReadHandoff(ctx, cmd.Key.Worktree, run.ID)
+	if refusal == nil {
+		refusal = domain.CheckHandoff(run, raw)
+	}
+	verdict, next := domain.DecideStop(run, h.policy, cmd.AgentRunning, refusal)
+	if !verdict.Block && !verdict.Handoff {
 		return verdict, nil
 	}
 	if _, err := h.repo.Save(ctx, next); err != nil {
