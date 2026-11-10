@@ -127,6 +127,34 @@ func TestListByPhase(t *testing.T) {
 	}
 }
 
+func TestRunStepAndHandoffStep(t *testing.T) {
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			saved := save(t, s, newRun(t, "r1", domain.EventStart))
+			if got := get(t, s, "r1"); got.Step != 1 || got.HandoffStep != 0 {
+				t.Fatalf("after start: step %d, handoff step %d, want 1 and 0", got.Step, got.HandoffStep)
+			}
+
+			next, err := saved.Apply(domain.Command{Event: domain.EventSubmitPlan, Reason: "plan", At: clock}, domain.Policy{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			next.HandoffStep = 1
+			save(t, s, next)
+
+			got := get(t, s, "r1")
+			if got.Step != 2 || got.HandoffStep != 1 {
+				t.Fatalf("after a transition: step %d, handoff step %d, want 2 and 1", got.Step, got.HandoffStep)
+			}
+			active, err := s.repo.Active(context.Background(), key)
+			if err != nil || active.Step != 2 || active.HandoffStep != 1 {
+				t.Fatalf("active = %+v, %v, want step 2 and handoff step 1", active, err)
+			}
+		})
+	}
+}
+
 func TestStopBlocksTotal(t *testing.T) {
 	for _, c := range dialectCases {
 		t.Run(c.name, func(t *testing.T) {

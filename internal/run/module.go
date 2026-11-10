@@ -12,6 +12,7 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/run/infrastructure/findings"
+	"github.com/90p-labs/harness/internal/run/infrastructure/handoff"
 	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
 	"github.com/90p-labs/harness/internal/run/infrastructure/pluginhooks"
 	"github.com/90p-labs/harness/internal/run/ui/cli"
@@ -48,7 +49,7 @@ func policyOf(cfg config.Run) domain.Policy {
 }
 
 func NewStopDecider(db *dbal.DB, cfg config.Run, now func() time.Time) decidestop.Handler {
-	return decidestop.NewHandler(persistence.NewSQLRunRepository(db, now), policyOf(cfg), otel.Tracer(tracerName))
+	return decidestop.NewHandler(persistence.NewSQLRunRepository(db, now), handoff.File{}, policyOf(cfg), otel.Tracer(tracerName))
 }
 
 func NewApprovalRecorder(db *dbal.DB, gate domain.PlanGate, now func() time.Time) recordapproval.Handler {
