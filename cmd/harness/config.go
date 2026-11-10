@@ -18,6 +18,11 @@ type configView struct {
 	Roles   map[string]map[string][]string `yaml:"roles"`
 	Guard   guardView                      `yaml:"guard"`
 	Git     gitView                        `yaml:"git"`
+	Hooks   hooksView                      `yaml:"hooks"`
+}
+
+type hooksView struct {
+	Matched bool `yaml:"matched"`
 }
 
 type guardView struct {
@@ -92,6 +97,7 @@ func viewOf(cfg config.Config) configView {
 		Roles:   map[string]map[string][]string{},
 		Guard:   guardView{Disabled: append([]string{}, cfg.Guard.Disabled...)},
 		Git:     gitView{DefaultBranch: cfg.Git.DefaultBranch},
+		Hooks:   hooksView{Matched: cfg.Hooks.Matched},
 	}
 	for _, p := range cfg.Plugins {
 		view.Plugins = append(view.Plugins, pluginView{Name: p.Name, Command: p.Command, Events: p.Events, Timeout: p.Timeout.String()})

@@ -89,9 +89,9 @@ func (m runMarks) withMarks(ctx context.Context, use func(hostpersistence.SQLAge
 }
 
 func newHostCommand(flags *pflag.FlagSet) *cobra.Command {
-	cmd := hostcli.NewHostCommand(host.NewHostConnect(func(ctx context.Context) (string, error) {
+	cmd := hostcli.NewHostCommand(host.NewHostConnect(func(ctx context.Context) (string, bool, error) {
 		env, err := newEnvironment(ctx, flags)
-		return env.key.Worktree, err
+		return env.key.Worktree, env.cfg.Hooks.Matched, err
 	}))
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
 	for _, sub := range cmd.Commands() {

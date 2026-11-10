@@ -622,3 +622,21 @@ func TestLoadRejectsFilterOnOtherEvent(t *testing.T) {
 		t.Fatalf("err = %v, want one that names the plugin", err)
 	}
 }
+
+func TestHooksMatched(t *testing.T) {
+	got, err := load(t, "")
+	if err != nil || !got.Hooks.Matched {
+		t.Fatalf("default: got %v, %v, want true", got.Hooks.Matched, err)
+	}
+
+	got, err = load(t, "hooks:\n  matched: false\n")
+	if err != nil || got.Hooks.Matched {
+		t.Fatalf("file: got %v, %v, want false", got.Hooks.Matched, err)
+	}
+
+	t.Setenv("HARNESS_HOOKS_MATCHED", "false")
+	got, err = load(t, "")
+	if err != nil || got.Hooks.Matched {
+		t.Fatalf("env: got %v, %v, want false", got.Hooks.Matched, err)
+	}
+}

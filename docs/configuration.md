@@ -21,6 +21,7 @@ What do you need?
 ├── the architecture rules → `lint`
 ├── the deploy plugins (helm, promtool) → `deploy`
 ├── your own command on an event → `plugins`
+├── the tools that the Claude hooks fire for → `hooks`
 ├── the push target of the guard → `git`
 ├── the state database → `state`
 └── see every key and one example for each case → docs/configuration-full.md
@@ -163,6 +164,19 @@ The file has at most 4096 bytes, and `harness run status` prints `handoff: ready
 run:
   approval: true
   max_review_rounds: 5
+```
+
+## `hooks`
+
+| Key | Type | Default | Env | Effect |
+|---|---|---|---|---|
+| `matched` | bool | `true` | `HARNESS_HOOKS_MATCHED` | `true` gives the Claude `PreToolUse` and `PostToolUse` hooks a matcher. They fire only for the tools that a guard rule reads. These are `Bash`, `Edit`, `MultiEdit`, `Write`, `Read`, `Grep`, `Glob`, `Agent` and `AskUserQuestion`, also with a host prefix such as `mcp__server__life_Bash`. `false` writes the hooks with no matcher, so they fire for every tool. The plugin file `hooks/hooks.json` is always matched. Codex hooks have no matcher |
+
+A matched hook never sees another tool, so an exec plugin on `tool.before` or `tool.after` does not run for it. To keep such a plugin working, set `matched: false` and run `harness host install` again.
+
+```yaml
+hooks:
+  matched: false
 ```
 
 ## `plugins`

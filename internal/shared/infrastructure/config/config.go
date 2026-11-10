@@ -39,6 +39,7 @@ const (
 	keyStrictMinor      = "run.strict_minor"
 	keyPanelFixupLines  = "run.panel_fixup_lines"
 	keyPlugins          = "plugins"
+	keyHooksMatched     = "hooks.matched"
 	keyRoles            = "roles"
 	keyGuardDisabled    = "guard.disabled"
 	keyDeployDisabled   = "deploy.disabled"
@@ -82,6 +83,11 @@ type Config struct {
 	Verify  Verify              `mapstructure:"verify"`
 	Lint    Lint                `mapstructure:"lint"`
 	Live    Live                `mapstructure:"live"`
+	Hooks   Hooks               `mapstructure:"hooks"`
+}
+
+type Hooks struct {
+	Matched bool `mapstructure:"matched"`
 }
 
 type Live struct {
@@ -259,6 +265,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyStrictMinor, false)
 	v.SetDefault(keyPanelFixupLines, defaultPanelFixupLines)
 	v.SetDefault(keyPlugins, []any{})
+	v.SetDefault(keyHooksMatched, true)
 	v.SetDefault(keyGuardDisabled, []any{})
 	v.SetDefault(keyDeployDisabled, []any{})
 	v.SetDefault(keyGitBranch, "")

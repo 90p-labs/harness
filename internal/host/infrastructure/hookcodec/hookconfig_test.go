@@ -36,6 +36,7 @@ func TestHookConfigsMatchCodec(t *testing.T) {
 		{pluginHooksDir + "hooks.json", NewClaude(), pluginLauncher},
 		{pluginHooksDir + "codex.json", NewCodex(), pluginLauncher},
 		{installDir + "claude.json", NewClaude(), pathLauncher},
+		{installDir + "claude_all.json", NewClaude(), pathLauncher},
 		{installDir + "codex.json", NewCodex(), pathLauncher},
 	}
 	for _, tc := range cases {
