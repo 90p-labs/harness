@@ -19,12 +19,15 @@ const (
 	commandVerify = "verify"
 	flagCommits   = "commits"
 
-	lineFormat     = "%s %s %s\n"
-	skipFormat     = "%s %s needs %s\n"
-	setupFormat    = "setup %s %s\n"
-	tailFormat     = "\n%s:\n%s\n"
-	noGateMessage  = "no gate is set\n"
-	shortSHALength = 12
+	lineFormat        = "%s %s %s\n"
+	skipFormat        = "%s %s needs %s\n"
+	setupFormat       = "setup %s %s\n"
+	tailFormat        = "\n%s:\n%s\n"
+	noGateMessage     = "no gate is set\n"
+	passGatesFormat   = "%s gates=%d cached=%d\n"
+	failGatesFormat   = "%s gates=%d failed=%d\n"
+	passCommitsFormat = "%s commits=%d\n"
+	shortSHALength    = 12
 )
 
 var ErrGatesFailed = errors.New("gates failed")
@@ -70,11 +73,16 @@ func verifyGates(ctx context.Context, out io.Writer, h Handlers) error {
 		_, err = fmt.Fprint(out, noGateMessage)
 		return err
 	}
+	failed, cached := 0, 0
 	for _, line := range result.Lines {
 		var err error
-		if line.Status == domain.StatusSkipped {
+		switch {
+		case line.Status == domain.StatusCached:
+			cached++
+		case line.Status == domain.StatusSkipped:
 			_, err = fmt.Fprintf(out, skipFormat, line.Status, line.Gate, line.Need)
-		} else {
+		case isFailedStatus(line.Status):
+			failed++
 			_, err = fmt.Fprintf(out, lineFormat, line.Status, line.Gate, line.Duration.Round(time.Millisecond))
 		}
 		if err != nil {
@@ -82,12 +90,20 @@ func verifyGates(ctx context.Context, out io.Writer, h Handlers) error {
 		}
 	}
 	for _, line := range result.Lines {
-		if line.Status != domain.StatusFail && line.Status != domain.StatusVetoed {
+		if !isFailedStatus(line.Status) {
 			continue
 		}
 		if _, err := fmt.Fprintf(out, tailFormat, line.Gate, line.Tail); err != nil {
 			return err
 		}
+	}
+	if !result.Failed {
+		_, err = fmt.Fprintf(out, passGatesFormat, domain.StatusPass, len(result.Lines), cached)
+	} else {
+		_, err = fmt.Fprintf(out, failGatesFormat, domain.StatusFail, len(result.Lines), failed)
+	}
+	if err != nil {
+		return err
 	}
 	if result.Failed {
 		return ErrGatesFailed
@@ -95,10 +111,18 @@ func verifyGates(ctx context.Context, out io.Writer, h Handlers) error {
 	return nil
 }
 
+func isFailedStatus(status domain.Status) bool {
+	return status == domain.StatusFail || status == domain.StatusVetoed
+}
+
 func verifyCommits(ctx context.Context, out io.Writer, h Handlers, base string) error {
 	result, err := h.VerifyCommits(ctx, base)
 	if err != nil && !errors.Is(err, domain.ErrCommitRule) {
 		return err
+	}
+	if err == nil {
+		_, werr := fmt.Fprintf(out, passCommitsFormat, domain.StatusPass, len(result.Commits))
+		return werr
 	}
 	for _, commit := range result.Commits {
 		status := domain.StatusFail

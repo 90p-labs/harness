@@ -58,7 +58,7 @@ func TestVerifyCommand(t *testing.T) {
 
 		stdout, err := run(t, cmd)
 
-		if err != nil || stdout != "PASS vet 1.5s\nCACHED test 20s\n" || !closed {
+		if err != nil || stdout != "PASS gates=2 cached=1\n" || !closed {
 			t.Fatalf("err = %v, stdout = %q, closed = %v", err, stdout, closed)
 		}
 	})
@@ -71,7 +71,7 @@ func TestVerifyCommand(t *testing.T) {
 
 		stdout, err := run(t, cmd)
 
-		want := "PASS vet 1s\nFAIL test 2s\nVETOED criterion-3 0s\n\ntest:\n" + failedTail + "\n\ncriterion-3:\nnot now\n"
+		want := "FAIL test 2s\nVETOED criterion-3 0s\n\ntest:\n" + failedTail + "\n\ncriterion-3:\nnot now\nFAIL gates=3 failed=2\n"
 		if !errors.Is(err, cli.ErrGatesFailed) || stdout != want {
 			t.Fatalf("err = %v, stdout = %q, want ErrGatesFailed and %q", err, stdout, want)
 		}
@@ -87,7 +87,7 @@ func TestVerifyCommand(t *testing.T) {
 
 		stdout, err := run(t, cmd)
 
-		if err != nil || stdout != "setup deps 3.2s\nPASS vet 1.5s\nCACHED test 20s\n" {
+		if err != nil || stdout != "setup deps 3.2s\nPASS gates=2 cached=1\n" {
 			t.Fatalf("err = %v, stdout = %q", err, stdout)
 		}
 	})
@@ -105,7 +105,7 @@ func TestVerifyCommand(t *testing.T) {
 
 		stdout, err := run(t, cmd)
 
-		want := "FAIL lint 1s\nSKIPPED test needs lint\nSKIPPED e2e needs test\n\nlint:\n" + failedTail + "\n"
+		want := "FAIL lint 1s\nSKIPPED test needs lint\nSKIPPED e2e needs test\n\nlint:\n" + failedTail + "\nFAIL gates=3 failed=1\n"
 		if !errors.Is(err, cli.ErrGatesFailed) || stdout != want {
 			t.Fatalf("err = %v, stdout = %q, want ErrGatesFailed and %q", err, stdout, want)
 		}
@@ -153,7 +153,7 @@ func TestVerifyCommand(t *testing.T) {
 
 		stdout, err := run(t, cmd, "--commits", commitsBase)
 
-		if err != nil || gotBase != commitsBase || stdout != "FAIL 0123456789ab test\nPASS fedcba987654 feat\n" {
+		if err != nil || gotBase != commitsBase || stdout != "PASS commits=2\n" {
 			t.Fatalf("err = %v, base = %q, stdout = %q", err, gotBase, stdout)
 		}
 	})
@@ -171,6 +171,88 @@ func TestVerifyCommand(t *testing.T) {
 
 		if !errors.Is(err, domain.ErrCommitRule) || stdout != "FAIL 0123456789ab feat\n" {
 			t.Fatalf("err = %v, stdout = %q, want the commit line and the rule error", err, stdout)
+		}
+	})
+}
+
+func TestVerifyShortOutputPass(t *testing.T) {
+	var closed bool
+	cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+		Verify: func(context.Context) (verify.Result, error) {
+			return verify.Result{
+				Setup: []verify.SetupLine{{Step: "deps", Duration: time.Second}},
+				Lines: []verify.Line{
+					{Gate: "vet", Status: domain.StatusPass, Duration: time.Second},
+					{Gate: "test", Status: domain.StatusCached},
+					{Gate: "lint", Status: domain.StatusCached},
+				},
+			}, nil
+		},
+	}, &closed))
+
+	stdout, err := run(t, cmd)
+
+	if err != nil || stdout != "setup deps 1s\nPASS gates=3 cached=2\n" {
+		t.Fatalf("err = %v, stdout = %q", err, stdout)
+	}
+}
+
+func TestVerifyShortOutputFail(t *testing.T) {
+	var closed bool
+	cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+		Verify: func(context.Context) (verify.Result, error) {
+			return verify.Result{Failed: true, Lines: []verify.Line{
+				{Gate: "vet", Status: domain.StatusPass, Duration: time.Second},
+				{Gate: "lint", Status: domain.StatusCached},
+				{Gate: "test", Status: domain.StatusFail, Duration: 2 * time.Second, Tail: failedTail},
+				{Gate: "criterion-3", Status: domain.StatusVetoed, Tail: "not now"},
+				{Gate: "e2e", Status: domain.StatusSkipped, Need: "test"},
+			}}, nil
+		},
+	}, &closed))
+
+	stdout, err := run(t, cmd)
+
+	want := "FAIL test 2s\nVETOED criterion-3 0s\nSKIPPED e2e needs test\n\ntest:\n" + failedTail + "\n\ncriterion-3:\nnot now\nFAIL gates=5 failed=2\n"
+	if !errors.Is(err, cli.ErrGatesFailed) || stdout != want {
+		t.Fatalf("err = %v, stdout = %q, want ErrGatesFailed and %q", err, stdout, want)
+	}
+}
+
+func TestVerifyCommitsShortOutput(t *testing.T) {
+	t.Run("the rule holds with a failing test commit", func(t *testing.T) {
+		var closed bool
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+			VerifyCommits: func(context.Context, string) (verifycommits.Result, error) {
+				return verifycommits.Result{Commits: []domain.CommitResult{
+					{SHA: "0123456789abcdef", Type: "test", Passed: false},
+					{SHA: "fedcba9876543210", Type: "feat", Passed: true},
+				}}, nil
+			},
+		}, &closed))
+
+		stdout, err := run(t, cmd, "--commits", commitsBase)
+
+		if err != nil || stdout != "PASS commits=2\n" {
+			t.Fatalf("err = %v, stdout = %q", err, stdout)
+		}
+	})
+
+	t.Run("a rule error prints each commit", func(t *testing.T) {
+		var closed bool
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+			VerifyCommits: func(context.Context, string) (verifycommits.Result, error) {
+				return verifycommits.Result{Commits: []domain.CommitResult{
+					{SHA: "0123456789abcdef", Type: "feat", Passed: false},
+					{SHA: "fedcba9876543210", Type: "fix", Passed: true},
+				}}, domain.ErrCommitRule
+			},
+		}, &closed))
+
+		stdout, err := run(t, cmd, "--commits", commitsBase)
+
+		if !errors.Is(err, domain.ErrCommitRule) || stdout != "FAIL 0123456789ab feat\nPASS fedcba987654 fix\n" {
+			t.Fatalf("err = %v, stdout = %q", err, stdout)
 		}
 	})
 }
