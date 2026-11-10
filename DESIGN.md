@@ -226,6 +226,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
 | `agent-model-routing` | `tool.before` | An agent call whose model is not in the list of its role for the host, or that has no model |
 | `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 models have a record on `HEAD`. Also when a reviewer model of the host list has no record |
+| `review-findings` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when `findings.md` of the run has an open real finding of severity blocker or major. With `run.strict_minor` on, an open real minor finding also denies. A missing file allows. A file that does not parse denies |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD`. A push that only deletes remote refs is allowed |
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |

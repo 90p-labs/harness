@@ -23,6 +23,7 @@ func NewPlugins(
 	commitChecked func(ctx context.Context, dir string) (bool, error),
 	saveReview func(ctx context.Context, dir, model string) error,
 	reviewModels func(ctx context.Context, dir string) ([]string, error),
+	strictMinor bool,
 ) ([]shareddomain.Plugin, error) {
 	resolve := git.DefaultBranch
 	if defaultBranch != "" {
@@ -37,6 +38,7 @@ func NewPlugins(
 		ReviewModels:  reviewModels,
 		Models:        models,
 		Worktree:      worktree,
+		StrictMinor:   strictMinor,
 		Meter:         otel.Meter(instrumentationName),
 	})
 }
