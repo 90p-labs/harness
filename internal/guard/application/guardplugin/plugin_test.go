@@ -39,7 +39,7 @@ const (
 	pushToDevelop        = "git push origin HEAD:develop"
 	pushToMain           = "git push origin HEAD:main"
 	stopReason           = "the run is in phase working and is not finished"
-	stopShellTasksText   = "wait for the background agents and shell tasks"
+	stopShellTasksText   = "wait for agents"
 	missingBodyMsg       = "missing.md"
 	subDir               = "sub"
 )

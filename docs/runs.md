@@ -13,7 +13,7 @@ models: lead=opus explorer=haiku worker=sonnet,haiku reviewer=sonnet,haiku,opus 
 next: write the plan in .harness/runs/20261108-132848-let-a-customer-cancel-an-order-before-it/plan.md, then harness run plan
 ```
 
-The `models:` line lists the models of each role for the host, from `roles` in the configuration. With two hosts it prints one line for each, named `models (claude):` and `models (codex):`.
+The `models:` line lists the models of each role for the host, from `roles` in the configuration. With two hosts, or with no detected host, it prints one line for each known host (`claude` and `codex`), named `models (claude):` and `models (codex):`.
 
 Write `plan.md` in the run folder. `harness plan --help` gives the format. Write each diagram through `harness diagram`: a `+`, `*` or `-` at the end of a line marks it new, changed or removed. `harness diagram --help` gives the forms for each diagram kind.
 
@@ -41,13 +41,13 @@ advisor: on, model fable
 wave 1: task 1, task 2
 wave 2: task 3
 $ harness plan view
-/home/dev/shop/.harness/runs/20261108-132848-let-a-customer-cancel-an-order-before-it/plan.html
+.harness/runs/20261108-132848-let-a-customer-cancel-an-order-before-it/plan.html
 $ harness run plan
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=awaiting_approval review_round=0 live_round=0
 next: ask the Plan question; when the user picks Approve, run harness run approve
 ```
 
-Before the plan, the `explorer` agent reads `CONTEXT.md`, `docs/adr/` and the touched code. Each decision that the code cannot make goes under `## Open questions` in `plan.md`. After `harness run plan`, the agent grills the user in rounds through the question tool of the host (`AskUserQuestion` on Claude Code, `request_user_input` on Codex). Each answer moves to `## Decisions`.
+Before the plan, the `explorer` agent reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the touched code. Each decision that the code cannot make goes under `## Open questions` in `plan.md`. After `harness run plan`, the agent grills the user in rounds through the question tool of the host (`AskUserQuestion` on Claude Code, `request_user_input` on Codex). Each answer moves to `## Decisions`.
 
 The plan also needs `## Review risks`. Write `- none`, or one risk on each line with `Test:` and a backticked test name, or `Decision:` and text. The rule `risk-unanchored` checks it. A tree path with a `guard` or `security` folder needs `## Threat model` with the bullets `Attacker`, `Input forms` and `Fail closed`. The rule `threat-model` checks it.
 

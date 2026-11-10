@@ -51,6 +51,63 @@ func TestDecideStop(t *testing.T) {
 	}
 }
 
+// guardSuffixBudget is the room the guard plugin needs for ". " plus
+// StopHoldsTurnNextStep (34 characters). The guard domain is not imported here,
+// so the budget is hardcoded with margin: 200 - 40.
+const guardSuffixBudget = 160
+
+func TestStopReasonIsShort(t *testing.T) {
+	policy := domain.Policy{MaxStopBlocks: 2}
+	long := strings.Repeat("x", 500)
+	for _, phase := range []domain.Phase{domain.PhasePlanning, domain.PhaseWorking, domain.PhaseReviewing, domain.PhaseShipping} {
+		for _, header := range []domain.Phase{domain.PhaseAwaitingApproval, domain.PhaseReleasing, domain.PhaseObserving, domain.PhaseAbandoned, domain.Phase(long)} {
+			run := domain.Run{Phase: phase, Step: 12345}
+			bodies := map[string]string{
+				"missing":        "",
+				"over the limit": strings.Repeat("x", domain.HandoffLimit*100),
+				"no phase":       "Step: 1\n",
+				"wrong phase":    "Phase: " + string(header) + "\nStep: 1\n",
+				"no step":        "Phase: " + string(phase) + "\n",
+				"wrong step":     "Phase: " + string(phase) + "\nStep: " + long + "\n",
+				"no section":     "Phase: " + string(phase) + "\nStep: 12345\n",
+				"empty section":  "Phase: " + string(phase) + "\nStep: 12345\n## Next\n## Open findings\n- a\n## Unreviewed commits\n- a\n## Decisions\n- a\n",
+				"no unreviewed":  "Phase: " + string(phase) + "\nStep: 12345\n## Next\n- a\n## Open findings\n- a\n## Unreviewed commits\n## Decisions\n- a\n",
+			}
+			for name, body := range bodies {
+				t.Run(string(phase)+"/"+string(header)+"/"+name, func(t *testing.T) {
+					var raw []byte
+					if name != "missing" {
+						raw = []byte(body)
+					}
+					refusal := domain.CheckHandoff(run, raw)
+					if refusal == nil {
+						t.Fatal("want a refusal")
+					}
+					current := run
+					current.HandoffStep = current.Step
+					verdict, _ := domain.DecideStop(current, policy, false, refusal)
+
+					if len(verdict.Reason) > guardSuffixBudget {
+						t.Errorf("reason has %d characters, want at most %d: %q", len(verdict.Reason), guardSuffixBudget, verdict.Reason)
+					}
+					for _, want := range []string{string(phase), "no background agent or shell task", "in the background"} {
+						if !strings.Contains(verdict.Reason, want) {
+							t.Errorf("reason %q lacks %q", verdict.Reason, want)
+						}
+					}
+				})
+			}
+		}
+	}
+	t.Run("handoff written", func(t *testing.T) {
+		run := domain.Run{Phase: domain.PhaseReviewing, Step: 1, HandoffStep: 1}
+		verdict, _ := domain.DecideStop(run, policy, false, nil)
+		if len(verdict.Reason) > guardSuffixBudget {
+			t.Errorf("reason has %d characters: %q", len(verdict.Reason), verdict.Reason)
+		}
+	})
+}
+
 func TestStopBlocksTotal(t *testing.T) {
 	policy := domain.Policy{MaxStopBlocks: 3}
 	run := domain.Run{Phase: domain.PhaseWorking}

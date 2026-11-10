@@ -3,6 +3,8 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -33,7 +35,7 @@ func viewCommand(connect Connect) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), page)
+			fmt.Fprintln(cmd.OutOrStdout(), relativeToTop(handlers.RepoTop, page))
 			return nil
 		},
 	}
@@ -56,4 +58,20 @@ func viewFor(cmd *cobra.Command, handlers Handlers) (renderview.Command, error) 
 		command.Out = out
 	}
 	return command, nil
+}
+
+// relativeToTop shortens the page path to the repository top, and keeps it when there is no top or the page lies outside.
+func relativeToTop(top, page string) string {
+	if top == "" {
+		return page
+	}
+	abs, err := filepath.Abs(page)
+	if err != nil {
+		return page
+	}
+	rel, err := filepath.Rel(top, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return page
+	}
+	return rel
 }

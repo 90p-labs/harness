@@ -10,6 +10,7 @@ import (
 
 const (
 	HandoffLimit      = 4096
+	handoffClip       = 12
 	HandoffSizeFormat = "handoff.md has %d bytes, the limit is %d"
 
 	handoffPhaseKey   = "Phase"
@@ -62,14 +63,14 @@ func CheckHandoff(run Run, raw []byte) error {
 		return fmt.Errorf("handoff.md has no %s line", handoffPhaseKey)
 	}
 	if phase != string(run.Phase) {
-		return fmt.Errorf("handoff.md has phase %s, the run is in phase %s", phase, run.Phase)
+		return fmt.Errorf("handoff.md has phase %s, want %s", clip(phase), run.Phase)
 	}
 	stepText, ok := headers[handoffStepKey]
 	if !ok {
 		return fmt.Errorf("handoff.md has no %s line", handoffStepKey)
 	}
 	if step, err := strconv.Atoi(stepText); err != nil || step != run.Step {
-		return fmt.Errorf("handoff.md has step %s, the run is at step %d", stepText, run.Step)
+		return fmt.Errorf("handoff.md has step %s, want %d", clip(stepText), run.Step)
 	}
 	for _, name := range handoffSections {
 		count, found := items[name]
@@ -81,4 +82,12 @@ func CheckHandoff(run Run, raw []byte) error {
 		}
 	}
 	return nil
+}
+
+// clip bounds a value read from the file so a refusal stays short.
+func clip(value string) string {
+	if runes := []rune(value); len(runes) > handoffClip {
+		return string(runes[:handoffClip]) + "..."
+	}
+	return value
 }

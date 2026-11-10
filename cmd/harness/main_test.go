@@ -1873,8 +1873,8 @@ func TestPlanViewWiring(t *testing.T) {
 	code, stdout, stderr := execute(t, commandPlan, "view", "--file", plan)
 
 	page := filepath.Join(dir, "plan.html")
-	if code != exitOK || strings.TrimSpace(stdout) != page || stderr != "" {
-		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, page)
+	if code != exitOK || strings.TrimSpace(stdout) != "plan.html" || stderr != "" {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want %q", code, stdout, stderr, "plan.html")
 	}
 	html, err := os.ReadFile(page)
 	if err != nil {

@@ -69,6 +69,35 @@ func viewConnect(renderer domain.ViewRenderer, defaultView func(context.Context)
 	}
 }
 
+func TestViewPrintsRelativePath(t *testing.T) {
+	valid, err := os.ReadFile(validPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top := t.TempDir()
+	dir := filepath.Join(top, ".harness", "runs", runIDValue)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	plan := filepath.Join(dir, "plan.md")
+	if err := os.WriteFile(plan, valid, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inner := viewConnect(&pageRenderer{}, nil)
+	connect := func(ctx context.Context) (cli.Handlers, func() error, error) {
+		handlers, closeStore, err := inner(ctx)
+		handlers.RepoTop = top
+		return handlers, closeStore, err
+	}
+
+	out, err := execute(t, connect, subView, flagFile, plan)
+
+	want := filepath.Join(".harness", "runs", runIDValue, pageName)
+	if err != nil || strings.TrimSpace(out) != want {
+		t.Fatalf("err = %v, out = %q, want %q", err, out, want)
+	}
+}
+
 func TestPlanViewCommand(t *testing.T) {
 	failDefault := func(context.Context) (renderview.Command, error) {
 		t.Error("DefaultView called")

@@ -27,6 +27,7 @@ func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
 			return plancli.Handlers{}, nil, err
 		}
 		handlers := planmodule.NewModule(env.bus, env.key.Worktree, env.proofs, env.defaultBranch)
+		handlers.RepoTop = env.key.Worktree
 		handlers.AdvisorModels = advisorModels(env.cfg.Roles, install.DetectHosts(env.key.Worktree, os.Getenv))
 		handlers.DefaultPlan = func(ctx context.Context) (checkplan.Query, error) {
 			return activePlan(ctx, flags)

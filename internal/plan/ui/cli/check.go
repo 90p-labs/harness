@@ -39,8 +39,10 @@ type Handlers struct {
 	View   renderview.Handler
 	// AdvisorModels lists the models of the advisor role for the host: the first serves a full track, the second a path trigger.
 	AdvisorModels []string
-	DefaultPlan   func(ctx context.Context) (checkplan.Query, error)
-	DefaultView   func(ctx context.Context) (renderview.Command, error)
+	// RepoTop is the repository top that plan view prints the page path against; empty prints the path as given.
+	RepoTop     string
+	DefaultPlan func(ctx context.Context) (checkplan.Query, error)
+	DefaultView func(ctx context.Context) (renderview.Command, error)
 }
 
 type Connect func(ctx context.Context) (Handlers, func() error, error)

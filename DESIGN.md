@@ -235,7 +235,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 |---|---|---|
 | `pr-no-merge` | `tool.before` | `gh pr merge` |
 | `pr-draft-only` | `tool.before` | `gh pr create` without `--draft` |
-| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. |
+| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. `harness pr body [--base <ref>]` prints a body skeleton. It has placeholders for the bottom line and Why. What lists the commit subjects over the base. How holds the mermaid fences of the active run plan. The base defaults to the default branch. A `--base` that starts with `-` is a usage error. |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch |
 | `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |
@@ -691,7 +691,7 @@ The track comes from `Classify`. It is `full` when the code tree touches 3 or mo
 
 The state file is `.harness/state.db` in the git common dir, so each linked worktree shares it. The DBAL base dir is the common dir, and the default DSN `sqlite:.harness/state.db` is relative to it.
 
-Only a `run` command, `plan check` and `report` load the config. Only a `run` command, `plan check` without `--file`, and `report` open the store. `report` reads only the active run, and an error gives the run line `none`. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
+Only a `run` command, `plan check`, `pr body` and `report` load the config. Only a `run` command, `plan check` without `--file`, and `report` open the store. `report` reads only the active run, and an error gives the run line `none`. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
 
 `cmd/harness` wraps the `Args` of every command in a usage error, and a command with no `Args` takes none. A `run` command checks its required flag in its `Args` function, because cobra checks `MarkFlagRequired` after the `Args` step.
 
@@ -712,12 +712,12 @@ A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. 
 - With `--file`, it checks that file with live round 0.
 - Without `--file`, it checks `plan.md` in the run folder of the active run, with the live round of the run.
 - It prints one problem on each stdout line, as `plan.md:12: rule: text`. A diagram of an unchecked kind prints `plan.md:30: note: diagram kind flowchart is not checked`.
-- A clean single-run plan prints the advisor line, as `advisor: on, model fable`, then one line for each wave, as `wave 1: task 1 (haiku), task 2`. The lead reads the task order there, and renders no page for it.
+- A clean single-run plan prints the advisor line, as `advisor: on, model fable`, then one line for each wave, as `wave 1: task 1 (haiku), task 2`. A light-track plan with a guard, security or hook path prints the advisor line with the suffix `(light track, risky path)`, as `advisor: on, model opus (light track, risky path)`. The lead reads the task order there, and renders no page for it.
 - It exits 0 on a clean plan, and 1 when there is a problem or the file is unreadable.
 - Without `--file` and with no active run, it exits 2 and prints the usage.
 - The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.
 
-`harness plan view [--file path] [--out path]` writes the plan as one self-contained HTML page, `plan.html` beside the plan by default. It works in every phase, prints the page path, and writes the page also for a plan with problems.
+`harness plan view [--file path] [--out path]` writes the plan as one self-contained HTML page, `plan.html` beside the plan by default. It works in every phase, prints the page path relative to the repository top, and writes the page also for a plan with problems.
 
 - Without `--file`, it reads the plan of the active run, with its branch and its proofs. With no active run, it needs `--file`, else it exits 2 and prints the usage. With `--file`, it reads no proof, so each proof shows `not run`.
 - The view plugin reads the live round of the active run, so the page lists the same problems as `harness plan check`.
