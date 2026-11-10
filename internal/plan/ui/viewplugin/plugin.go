@@ -44,9 +44,6 @@ func (p Plugin) Handle(ctx context.Context, envelope shareddomain.Envelope) (sha
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
 		return allow, fmt.Errorf("decode transition payload: %w", err)
 	}
-	if payload.To != shareddomain.PhaseAwaitingApproval {
-		return allow, nil
-	}
 	round, roundErr := p.liveRound(ctx)
 	if roundErr != nil {
 		round = 0
@@ -60,6 +57,9 @@ func (p Plugin) Handle(ctx context.Context, envelope shareddomain.Envelope) (sha
 	})
 	if err != nil {
 		return allow, errors.Join(roundErr, err)
+	}
+	if payload.To != shareddomain.PhaseAwaitingApproval {
+		return allow, roundErr
 	}
 	return allow, errors.Join(roundErr, p.open(ctx, page))
 }
