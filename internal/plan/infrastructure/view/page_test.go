@@ -318,9 +318,20 @@ func TestPageNavGroups(t *testing.T) {
 			groupOfSection[strings.TrimPrefix(h[1], "#")] = m[1]
 		}
 	}
-	want := []string{view.GroupProduct, view.GroupSpecs, view.GroupTasks, view.GroupQA, view.GroupSignals}
+	want := []string{view.GroupOverview, view.GroupBuild, view.GroupVerify}
 	if !slices.Equal(groups, want) {
 		t.Fatalf("nav groups = %v, want %v", groups, want)
+	}
+	wantGroup := map[string]string{
+		"summary": view.GroupOverview, "criteria": view.GroupOverview,
+		"specs": view.GroupBuild, "tasks": view.GroupBuild, "trees": view.GroupBuild, "delivery": view.GroupBuild,
+		"problems": view.GroupVerify, "trace-matrix": view.GroupVerify, "proofs": view.GroupVerify,
+		"source": view.GroupVerify, "signals": view.GroupVerify,
+	}
+	for anchor, g := range wantGroup {
+		if groupOfSection[anchor] != g {
+			t.Errorf("nav link %s is in group %q, want %q", anchor, groupOfSection[anchor], g)
+		}
 	}
 	sections := sectionTag.FindAllStringSubmatch(page, -1)
 	if len(sections) != len(groupOfSection) {
@@ -352,14 +363,33 @@ func TestPageReviewRisks(t *testing.T) {
 	in.Links = domain.Trace(doc)
 
 	page := render(t, in)
+	text := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(page, "")
 
+	if !strings.Contains(page, "<code>TestPong</code>") {
+		t.Error("a review risk loses its inline code")
+	}
 	for _, want := range []string{
-		"<h3>Review risks</h3><ul><li>Late reply. Test: <code>TestPong</code>.</li></ul>",
-		"<h3>Threat model</h3><ul><li>Attacker: an honest agent.</li></ul>",
+		`Review risks\s*\d*\s*Late reply\. Test: TestPong\.`,
+		`Threat model\s*\d*\s*Attacker: an honest agent\.`,
 	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("notes do not hold %q", want)
+		if !regexp.MustCompile(want).MatchString(text) {
+			t.Errorf("notes do not hold %s", want)
 		}
+	}
+}
+
+func TestPageOpenQuestions(t *testing.T) {
+	in := baseInput(t)
+	in.Doc.OpenQuestions = []string{"Ship the pong first?"}
+	text := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(render(t, in), "")
+	if !regexp.MustCompile(`Open questions\s*\d*\s*Ship the pong first\?`).MatchString(text) {
+		t.Error("the notes do not list the open question")
+	}
+
+	in.Doc.OpenQuestions = []string{domain.OpenQuestionsNone}
+	text = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(render(t, in), "")
+	if strings.Contains(text, "Open questions") {
+		t.Error("a plan with no open questions draws an empty group")
 	}
 }
 

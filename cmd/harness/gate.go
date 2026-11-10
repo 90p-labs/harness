@@ -163,11 +163,18 @@ func (p proofAdapter) Passed(ctx context.Context) (passed map[int]bool, err erro
 	if err != nil {
 		return nil, err
 	}
-	passed = make(map[int]bool, len(criteria))
+	return proofResults(criteria, statuses), nil
+}
+
+// proofResults leaves out a criterion with no evidence for this tree, so the plan shows it as not run.
+func proofResults(criteria []criterionGate, statuses map[string]gatedomain.Result) map[int]bool {
+	passed := make(map[int]bool, len(criteria))
 	for _, c := range criteria {
-		passed[c.number] = statuses[c.gate.ID] == gatedomain.ResultPass
+		if status, ok := statuses[c.gate.ID]; ok {
+			passed[c.number] = status == gatedomain.ResultPass
+		}
 	}
-	return passed, nil
+	return passed
 }
 
 type commitCheckAdapter struct {
