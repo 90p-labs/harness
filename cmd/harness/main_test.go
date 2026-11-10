@@ -1772,9 +1772,9 @@ func TestPlanCheckValidFixture(t *testing.T) {
 
 	code, stdout, stderr := execute(t, commandPlan, commandCheck, "--file", file)
 
-	const advisorLine = "advisor: on (full track)\n"
+	const advisorLine = "advisor: on (full track)\nwave 1: task 1\nwave 2: task 2\n"
 	if code != exitOK || stdout != advisorLine || stderr != "" {
-		t.Fatalf("code = %d, stdout = %q, stderr = %q, want the advisor line only", code, stdout, stderr)
+		t.Fatalf("code = %d, stdout = %q, stderr = %q, want the advisor line and the wave lines only", code, stdout, stderr)
 	}
 }
 

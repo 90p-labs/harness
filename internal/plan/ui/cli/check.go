@@ -23,6 +23,11 @@ const (
 	advisorFull = "advisor: on (full track)"
 	advisorPath = "advisor: on (guard, security or hook path)"
 	advisorOff  = "advisor: off (light track)"
+
+	waveLineForm  = "wave %d: %s"
+	waveTaskForm  = "task %d"
+	waveModelForm = "task %d (%s)"
+	waveTaskSep   = ", "
 )
 
 var ErrNoPlanFile = errors.New("no plan file: give --file or start a run")
@@ -111,6 +116,9 @@ func checkCommand(connect Connect) *cobra.Command {
 			}
 			if report.Program == nil {
 				fmt.Fprintln(cmd.OutOrStdout(), advisorLine(report))
+				for _, line := range waveLines(report.Doc.Tasks) {
+					fmt.Fprintln(cmd.OutOrStdout(), line)
+				}
 			}
 			return nil
 		},
@@ -128,6 +136,30 @@ func advisorLine(report domain.Report) string {
 	default:
 		return advisorOff
 	}
+}
+
+// waveLines gives the lead the task order as text, so that it reads no plan page.
+func waveLines(tasks []domain.Task) []string {
+	waves, err := domain.Waves(tasks)
+	if err != nil {
+		return nil
+	}
+	models := make(map[int]string, len(tasks))
+	for _, t := range tasks {
+		models[t.Number] = t.Model
+	}
+	lines := make([]string, len(waves))
+	for i, wave := range waves {
+		names := make([]string, len(wave))
+		for j, n := range wave {
+			names[j] = fmt.Sprintf(waveTaskForm, n)
+			if models[n] != "" {
+				names[j] = fmt.Sprintf(waveModelForm, n, models[n])
+			}
+		}
+		lines[i] = fmt.Sprintf(waveLineForm, i+1, strings.Join(names, waveTaskSep))
+	}
+	return lines
 }
 
 func queryFor(cmd *cobra.Command, handlers Handlers) (checkplan.Query, error) {

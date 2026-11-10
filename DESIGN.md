@@ -712,6 +712,7 @@ A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. 
 - With `--file`, it checks that file with live round 0.
 - Without `--file`, it checks `plan.md` in the run folder of the active run, with the live round of the run.
 - It prints one problem on each stdout line, as `plan.md:12: rule: text`. A diagram of an unchecked kind prints `plan.md:30: note: diagram kind flowchart is not checked`.
+- A clean single-run plan prints the advisor line, as `advisor: on (full track)`, then one line for each wave, as `wave 1: task 1 (haiku), task 2`. The lead reads the task order there, and renders no page for it.
 - It exits 0 on a clean plan, and 1 when there is a problem or the file is unreadable.
 - Without `--file` and with no active run, it exits 2 and prints the usage.
 - The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.
