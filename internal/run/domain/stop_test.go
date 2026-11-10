@@ -39,6 +39,9 @@ func TestDecideStop(t *testing.T) {
 				if !strings.Contains(verdict.Reason, string(c.run.Phase)) {
 					t.Fatalf("reason %q lacks the phase", verdict.Reason)
 				}
+				if !strings.Contains(verdict.Reason, "no background agent or shell task") || !strings.Contains(verdict.Reason, "in the background") {
+					t.Fatalf("reason %q lacks the hook view or the legal wait", verdict.Reason)
+				}
 			}
 			if next.StopBlocks != wantBlocks {
 				t.Fatalf("stop blocks %d want %d", next.StopBlocks, wantBlocks)

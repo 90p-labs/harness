@@ -19,6 +19,7 @@ const (
 )
 
 const (
+	TaskTypeShell        = "shell"
 	TaskTypeSubagent     = "subagent"
 	TaskTypeWorkflow     = "workflow"
 	TaskTypeTeammate     = "teammate"
@@ -26,6 +27,7 @@ const (
 )
 
 var backgroundAgentTypes = []string{
+	TaskTypeShell,
 	TaskTypeSubagent,
 	TaskTypeWorkflow,
 	TaskTypeTeammate,

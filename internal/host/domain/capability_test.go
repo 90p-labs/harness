@@ -129,7 +129,7 @@ func TestCapabilities(t *testing.T) {
 			shareddomain.TaskTypeWorkflow:     true,
 			shareddomain.TaskTypeTeammate:     true,
 			shareddomain.TaskTypeCloudSession: true,
-			"shell":                           false,
+			shareddomain.TaskTypeShell:        true,
 			"":                                false,
 		}
 		for taskType, want := range cases {

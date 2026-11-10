@@ -38,7 +38,7 @@ func TestCodexDecode(t *testing.T) {
 		{"pre tool edit", hostdomain.HookPreToolUse, codexPrePatchInput, shareddomain.EventToolBefore, `{"tool":"apply_patch","kind":"edit","input":{"command":"*** Begin Patch\n*** End Patch"}}`},
 		{"post tool", hostdomain.HookPostToolUse, codexPostToolInput, shareddomain.EventToolAfter, `{"tool":"Bash","kind":"shell","input":{"command":"ls"},"response":{"output":"a.go"}}`},
 		{"stop", hostdomain.HookStop, codexStopInput, shareddomain.EventTurnStopping, `{"stop_hook_active":true,"background_agents":0}`},
-		{"stop with tasks", hostdomain.HookStop, codexStopTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":1}`},
+		{"stop with tasks", hostdomain.HookStop, codexStopTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":2}`},
 		{"subagent start", hostdomain.HookSubagentStart, codexSubagentStartIn, shareddomain.EventSubagentStarted, `{"agent_id":"a1","agent_type":"explorer"}`},
 		{"subagent stop", hostdomain.HookSubagentStop, codexSubagentStopIn, shareddomain.EventSubagentStopped, `{"agent_id":"a1","agent_type":"explorer"}`},
 	}

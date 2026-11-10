@@ -34,7 +34,7 @@ func TestClaudeDecode(t *testing.T) {
 		{"user prompt", domain.HookUserPrompt, userPromptInput, shareddomain.EventPromptSubmitted, `{"prompt":"fix the flaky test"}`},
 		{"pre tool use", domain.HookPreToolUse, preToolUseInput, shareddomain.EventToolBefore, `{"tool":"Bash","kind":"shell","input":{"command":"go test ./...","description":"run tests"}}`},
 		{"post tool use", domain.HookPostToolUse, postToolUseInput, shareddomain.EventToolAfter, `{"tool":"Write","kind":"write","input":{"file_path":"/work/a.go","content":"package a"},"response":{"filePath":"/work/a.go","success":true}}`},
-		{"stop with tasks", domain.HookStop, stopInput, shareddomain.EventTurnStopping, `{"stop_hook_active":true,"background_agents":1}`},
+		{"stop with tasks", domain.HookStop, stopInput, shareddomain.EventTurnStopping, `{"stop_hook_active":true,"background_agents":2}`},
 		{"stop without tasks", domain.HookStop, stopNoTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":0}`},
 		{"subagent start", domain.HookSubagentStart, subagentStart, shareddomain.EventSubagentStarted, `{"agent_id":"agent-7","agent_type":"Explore"}`},
 		{"subagent stop", domain.HookSubagentStop, subagentStop, shareddomain.EventSubagentStopped, `{"agent_id":"agent-7","agent_type":"Explore"}`},
@@ -174,5 +174,19 @@ func TestClaudeIdentity(t *testing.T) {
 	}
 	if domain.MissingEvents(codec) == nil || len(domain.MissingEvents(codec)) != 0 {
 		t.Fatalf("MissingEvents = %v", domain.MissingEvents(codec))
+	}
+}
+
+func TestClaudeStopCountsShellTask(t *testing.T) {
+	got, err := hookcodec.NewClaude().Decode(domain.HookStop, []byte(stopInput))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload shareddomain.StopPayload
+	if err := json.Unmarshal(got.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.BackgroundAgents != 2 {
+		t.Fatalf("background agents = %d, want 2", payload.BackgroundAgents)
 	}
 }
