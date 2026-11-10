@@ -27,12 +27,12 @@ Start: run harness version ("Binary"), then step 1
 
 - In each command below, `harness` means the full path `"${CLAUDE_PLUGIN_ROOT}/bin/harness"`. Write the full path in each command.
 - On Codex, `${CLAUDE_PLUGIN_ROOT}` shows unexpanded. Use `bin/harness` two folders above this `SKILL.md`.
-- Run `harness version` first. If it fails, stop and report the error.
+- Run `harness version` first. If it fails, stop and report the error. Skip it when the harness skill started this skill: the loop already ran it.
 
 ## 1. Collect the sources
 
 1. The base is the argument. With no argument, it is the `PR sequence` base of the plan, else `git.default_branch` of `.harness.yaml`.
-2. Run `harness run status`. Its first line is `run <id> phase=...`. The plan is `.harness/runs/<id>/plan.md`. With `active: no`, there is no plan.
+2. Run `harness run status`. Its first line is `run <id> phase=...`. The plan is `.harness/runs/<id>/plan.md`. With `active: no`, there is no plan. Skip the command when you hold the run id from the harness loop.
 3. Read the commits: `git log --format='%h %s' <base>..HEAD`.
 4. A done task is a plan task whose `### Commits` line has the subject of a commit in that log. That line names the task with `(task n)`. The commit subject has no `(task n)`.
 5. Read the changed files: `git diff --name-only <base>...HEAD`. Read the diff of each file that a reviewer must understand.
