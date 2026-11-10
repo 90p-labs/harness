@@ -63,6 +63,8 @@ func deps(stop domain.StopDecider) guardplugin.Deps {
 		DefaultBranch: func(context.Context, string) (string, error) { return "main", nil },
 		Stop:          stop,
 		CommitChecked: func(context.Context, string) (bool, error) { return true, nil },
+		PatchID:       func(context.Context, string, string) (string, error) { return "", nil },
+		ReworkReasons: func(context.Context, string, string) ([]string, error) { return nil, nil },
 		Models:        map[shareddomain.Host]map[string][]string{},
 		Meter:         metricnoop.NewMeterProvider().Meter("test"),
 	}
@@ -131,7 +133,7 @@ func TestGuardPluginNames(t *testing.T) {
 	want = append(want, pluginPrefix+domain.RuleStopHoldsTurn, pluginReviewRecorder, pluginPrefix+domain.RuleReviewModels, pluginPrefix+domain.RuleReviewFindings)
 	events := map[string]shareddomain.EventName{
 		pluginPrefix + domain.RuleStopHoldsTurn:  shareddomain.EventTurnStopping,
-		pluginReviewRecorder:                     shareddomain.EventToolAfter,
+		pluginReviewRecorder:                     shareddomain.EventSubagentStopped,
 		pluginPrefix + domain.RuleReviewModels:   shareddomain.EventRunTransitionBefore,
 		pluginPrefix + domain.RuleReviewFindings: shareddomain.EventRunTransitionBefore,
 	}
@@ -418,7 +420,7 @@ func TestDefaultBranchOverride(t *testing.T) {
 	})
 
 	t.Run("configured value skips git", func(t *testing.T) {
-		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil }, nil, nil, false)
+		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil }, nil, nil, nil, false)
 		if err != nil {
 			t.Fatalf("new plugins: %v", err)
 		}

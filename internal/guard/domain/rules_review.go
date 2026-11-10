@@ -23,7 +23,34 @@ func IsReviewerAgent(agentType string) bool {
 	return agentRole(agentType) == shareddomain.RoleReviewer
 }
 
-func DenyReviewModels(models []string, listed map[shareddomain.Host][]string) (string, bool) {
+type Review struct {
+	Model     string
+	PatchID   string
+	RunID     string
+	FilesRead []string
+}
+
+type ReviewScope struct {
+	PatchID string
+	RunID   string
+}
+
+func ReviewedModels(reviews []Review) (counted, unread []string) {
+	for _, review := range reviews {
+		if len(review.FilesRead) > 0 {
+			counted = append(counted, review.Model)
+		} else {
+			unread = append(unread, review.Model)
+		}
+	}
+	slices.Sort(counted)
+	counted = slices.Compact(counted)
+	slices.Sort(unread)
+	unread = slices.DeleteFunc(slices.Compact(unread), func(model string) bool { return slices.Contains(counted, model) })
+	return counted, unread
+}
+
+func DenyReviewModels(models, unread []string, listed map[shareddomain.Host][]string) (string, bool) {
 	host, list := fullestList(models, listed)
 	found := noModel
 	if len(models) > 0 {
@@ -40,6 +67,7 @@ func DenyReviewModels(models []string, listed map[shareddomain.Host][]string) (s
 		if len(missing) > 0 {
 			reason += fmt.Sprintf(" and misses %s of %s", strings.Join(missing, modelSeparator), host)
 		}
+		reason += unreadNote(unread)
 		nextStep := nextStepReviewModels
 		if len(list) > 0 && len(list) < minReviewModels {
 			nextStep = NextStepReviewerList
@@ -53,9 +81,16 @@ func DenyReviewModels(models []string, listed map[shareddomain.Host][]string) (s
 	}
 	return deny(
 		fmt.Sprintf("the review of this HEAD needs every reviewer model of %s, and it has %s and misses %s",
-			host, found, strings.Join(missing, modelSeparator)),
+			host, found, strings.Join(missing, modelSeparator))+unreadNote(unread),
 		nextStepMissingModels,
 	)
+}
+
+func unreadNote(unread []string) string {
+	if len(unread) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("; %s read no changed file, so the review does not count", strings.Join(unread, modelSeparator))
 }
 
 func fullestList(models []string, listed map[shareddomain.Host][]string) (shareddomain.Host, []string) {

@@ -47,6 +47,14 @@ func (p findingsShip) Handle(ctx context.Context, envelope shareddomain.Envelope
 		return deny(fmt.Sprintf("the findings file is not valid: %s", err)), nil
 	}
 	reason, denied := domain.DenyOpenFindings(findings, p.deps.StrictMinor)
+	if !denied && domain.HasBlockerOrMajor(findings) {
+		reasons, err := p.deps.ReworkReasons(ctx, p.deps.Worktree, envelope.Run.ID)
+		if err != nil {
+			countDeny(ctx, p.denies, domain.RuleReviewFindings)
+			return deny(fmt.Sprintf("the rework reasons are not readable: %s", err)), nil
+		}
+		reason, denied = domain.DenyUnreworkedFindings(findings, reasons)
+	}
 	if !denied {
 		return allow, nil
 	}

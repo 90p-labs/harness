@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestDenyReviewModels(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			reason, denied := DenyReviewModels(c.models, c.listed)
+			reason, denied := DenyReviewModels(c.models, nil, c.listed)
 			if denied != c.deny {
 				t.Fatalf("denied = %v (%q), want %v", denied, reason, c.deny)
 			}
@@ -63,5 +64,33 @@ func TestDenyReviewModels(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReviewReadNoChangedFile(t *testing.T) {
+	reviews := []Review{
+		{Model: testSonnet, FilesRead: []string{"a.go"}},
+		{Model: testHaiku},
+		{Model: testOpus},
+		{Model: testOpus, FilesRead: []string{"b.go"}},
+		{Model: testHaiku, PatchID: "p1"},
+	}
+
+	counted, unread := ReviewedModels(reviews)
+
+	if !slices.Equal(counted, []string{testOpus, testSonnet}) || !slices.Equal(unread, []string{testHaiku}) {
+		t.Fatalf("counted = %v, unread = %v, want [opus sonnet] and [haiku]", counted, unread)
+	}
+
+	reason, denied := DenyReviewModels([]string{testSonnet}, unread, bothLists)
+	if !denied || !strings.Contains(reason, testHaiku+" read no changed file") {
+		t.Errorf("one counted model: denied = %v, reason %q, want a deny that names haiku", denied, reason)
+	}
+	reason, denied = DenyReviewModels([]string{testOpus, testSonnet}, unread, bothLists)
+	if !denied || !strings.Contains(reason, testHaiku+" read no changed file") {
+		t.Errorf("list misses haiku: denied = %v, reason %q, want a deny that names haiku", denied, reason)
+	}
+	if reason, denied := DenyReviewModels([]string{testOpus, testSonnet}, unread, nil); denied {
+		t.Errorf("two counted models and no list: denied with %q, want allow", reason)
 	}
 }

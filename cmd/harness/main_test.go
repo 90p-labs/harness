@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -1385,11 +1386,168 @@ func editPlan(t *testing.T, dir, runID string, edit func(string) string) {
 }
 
 const (
-	reviewerDoneFormat = `{"cwd":".","hook_event_name":"PostToolUse","tool_name":"Agent","tool_input":{"subagent_type":"90p:reviewer","model":%q,"prompt":"review"}}`
+	reviewerStopFormat = `{"cwd":".","hook_event_name":"SubagentStop","agent_id":"a1","agent_type":"90p:reviewer","agent_transcript_path":%q}`
+	modelIDFormat      = "claude-%s-5-5"
 	modelSonnet        = "sonnet"
 	modelHaiku         = "haiku"
 	modelOpus          = "opus"
+	strictMinorConfig  = "run:\n  strict_minor: true\n"
+	lastRoundConfig    = "run:\n  max_review_rounds: 1\n"
+	openMajorFinding   = "| ID | Severity | Verdict | Status |\n|---|---|---|---|\n| F1 | major | real | open |\n"
+	closedMinorFinding = "| ID | Severity | Verdict | Status |\n|---|---|---|---|\n| F1 | minor | real | closed |\n"
+	closedFinding      = "| ID | Severity | Verdict | Status |\n|---|---|---|---|\n| F1 | major | real | closed |\n"
+	reviewModelsRule   = "review-models"
+	findingsRule       = "review-findings"
+	fixedSource        = "package domain\n\n// Pong is fixed.\n"
 )
+
+var reviewerModels = []string{modelSonnet, modelHaiku, modelOpus}
+
+func recordReviews(t *testing.T, dir, file string) {
+	t.Helper()
+	for _, model := range reviewerModels {
+		line, err := json.Marshal(map[string]any{
+			"type": "assistant",
+			"message": map[string]any{
+				"model": fmt.Sprintf(modelIDFormat, model),
+				"content": []map[string]any{{
+					"type": "tool_use", "name": "Read", "input": map[string]string{"file_path": filepath.Join(dir, file)},
+				}},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		transcript := filepath.Join(t.TempDir(), model+".jsonl")
+		if err := os.WriteFile(transcript, append(line, '\n'), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, stderr := executeWithStdin(t, fmt.Sprintf(reviewerStopFormat, transcript), "hook", "--host", hostClaude, "subagent-stop")
+		if code != exitOK {
+			t.Fatalf("subagent-stop: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+	}
+}
+
+func writeInRepo(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func reviewingRun(t *testing.T, config string) (dir, runID string) {
+	t.Helper()
+	clearHarnessEnv(t)
+	dir, plan := tracedRepo(t)
+	if config != "" {
+		writeInRepo(t, dir, configFile, config)
+	}
+	runID = startWithPlan(t, dir, plan)
+	verifyPasses(t)
+	if code, _, stderr := execute(t, commandRun, "review"); code != exitOK {
+		t.Fatalf("run review: code = %d, stderr = %q", code, stderr)
+	}
+	return dir, runID
+}
+
+func assertShip(t *testing.T, wantCode int, wantOut string) {
+	t.Helper()
+	code, stdout, stderr := execute(t, commandRun, "ship")
+	if code != wantCode || !strings.Contains(stdout+stderr, wantOut) {
+		t.Fatalf("run ship: code = %d, stdout = %q, stderr = %q, want %d and %q", code, stdout, stderr, wantCode, wantOut)
+	}
+}
+
+func TestReviewSurvivesCleanRebase(t *testing.T) {
+	cases := []struct {
+		name     string
+		change   func(t *testing.T, dir string)
+		wantCode int
+		wantOut  string
+	}{
+		{"clean rebase", func(t *testing.T, dir string) {
+			gitIn(t, dir, "checkout", "--quiet", "main")
+			commitFiles(t, dir, "chore: move the default branch", map[string]string{"unrelated.txt": "x\n"})
+			gitIn(t, dir, "checkout", "--quiet", pingBranch)
+			gitIn(t, dir, "-c", gitUserName, "-c", gitUserEmail, "rebase", "--quiet", "main")
+		}, exitOK, " phase=" + string(domain.PhaseShipping) + " "},
+		{"changed diff", func(t *testing.T, dir string) {
+			commitFiles(t, dir, "fix: change the pong", map[string]string{pongSource: fixedSource})
+		}, exitRuntime, reviewModelsRule},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir, _ := reviewingRun(t, strictMinorConfig)
+			recordReviews(t, dir, pongSource)
+
+			c.change(t, dir)
+
+			assertShip(t, c.wantCode, c.wantOut)
+		})
+	}
+}
+
+func TestMinorFixupKeepsReviews(t *testing.T) {
+	cases := []struct {
+		name     string
+		config   string
+		wantCode int
+		wantOut  string
+	}{
+		{"default rule", "", exitOK, " phase=" + string(domain.PhaseShipping) + " "},
+		{"strict rule", strictMinorConfig, exitRuntime, reviewModelsRule},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir, runID := reviewingRun(t, c.config)
+			recordReviews(t, dir, pongSource)
+			writeInRepo(t, dir, filepath.FromSlash(shareddomain.RunFindingsFile(runID)), closedMinorFinding)
+
+			commitFiles(t, dir, "fix: tidy the pong", map[string]string{pongSource: fixedSource})
+
+			assertShip(t, c.wantCode, c.wantOut)
+		})
+	}
+}
+
+func TestReworkVoidsRunReviews(t *testing.T) {
+	cases := []struct {
+		name    string
+		config  string
+		blocked bool
+	}{
+		{"rounds left", "", false},
+		{"last round then resume", lastRoundConfig, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir, runID := reviewingRun(t, c.config)
+			recordReviews(t, dir, pongSource)
+			writeInRepo(t, dir, filepath.FromSlash(shareddomain.RunFindingsFile(runID)), openMajorFinding)
+			if code, _, stderr := execute(t, commandRun, "rework", "--findings", "F1, major, fix the pong"); code != exitOK {
+				t.Fatalf("run rework: code = %d, stderr = %q", code, stderr)
+			}
+			commitFiles(t, dir, "fix: the pong", map[string]string{pongSource: fixedSource})
+			if c.blocked {
+				if code, _, stderr := execute(t, commandRun, "resume"); code != exitOK {
+					t.Fatalf("run resume: code = %d, stderr = %q", code, stderr)
+				}
+			} else {
+				verifyPasses(t)
+				if code, _, stderr := execute(t, commandRun, "review"); code != exitOK {
+					t.Fatalf("run review: code = %d, stderr = %q", code, stderr)
+				}
+			}
+			writeInRepo(t, dir, filepath.FromSlash(shareddomain.RunFindingsFile(runID)), closedFinding)
+
+			assertShip(t, exitRuntime, reviewModelsRule)
+
+			recordReviews(t, dir, pongSource)
+			assertShip(t, exitOK, " phase="+string(domain.PhaseShipping)+" ")
+		})
+	}
+}
 
 func TestRunLifecycle(t *testing.T) {
 	clearHarnessEnv(t)
@@ -1411,9 +1569,7 @@ func TestRunLifecycle(t *testing.T) {
 			verifyPasses(t)
 		}
 		if step.args[0] == "ship" {
-			for _, model := range []string{modelSonnet, modelHaiku, modelOpus} {
-				answer(t, hostClaude, fmt.Sprintf(reviewerDoneFormat, model))
-			}
+			recordReviews(t, dir, pongSource)
 		}
 		code, stdout, stderr := execute(t, append([]string{commandRun}, step.args...)...)
 		if code != exitOK || stderr != "" {
@@ -1695,6 +1851,30 @@ func TestPluginCallSpanDetail(t *testing.T) {
 			if has := calls > 0; has != tc.wantSpans {
 				t.Errorf("has plugin.call spans = %v (%d spans), want %v", has, calls, tc.wantSpans)
 			}
+		})
+	}
+}
+
+func TestUnreworkedFixNeedsReview(t *testing.T) {
+	cases := []struct {
+		name     string
+		findings string
+		wantRule string
+	}{
+		{"closed major without rework", closedFinding, findingsRule},
+		{"no findings file", "", reviewModelsRule},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir, runID := reviewingRun(t, "")
+			recordReviews(t, dir, pongSource)
+			if c.findings != "" {
+				writeInRepo(t, dir, filepath.FromSlash(shareddomain.RunFindingsFile(runID)), c.findings)
+			}
+
+			commitFiles(t, dir, "fix: the pong", map[string]string{pongSource: fixedSource})
+
+			assertShip(t, exitRuntime, c.wantRule)
 		})
 	}
 }

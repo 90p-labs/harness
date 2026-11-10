@@ -72,11 +72,12 @@ type hookInput struct {
 	BackgroundTask []struct {
 		Type string `json:"type"`
 	} `json:"background_tasks"`
-	AgentID     string `json:"agent_id"`
-	AgentType   string `json:"agent_type"`
-	ToolUseID   string `json:"tool_use_id"`
-	IsInterrupt bool   `json:"is_interrupt"`
-	Reason      string `json:"reason"`
+	AgentID         string `json:"agent_id"`
+	AgentType       string `json:"agent_type"`
+	AgentTranscript string `json:"agent_transcript_path"`
+	ToolUseID       string `json:"tool_use_id"`
+	IsInterrupt     bool   `json:"is_interrupt"`
+	Reason          string `json:"reason"`
 }
 
 func (c Codec) Host() shareddomain.Host { return c.host }
@@ -152,7 +153,7 @@ func (c Codec) payloadOf(hook domain.HookName, in hookInput) any {
 		}
 		return shareddomain.StopPayload{StopHookActive: in.StopHookActive, BackgroundAgents: agents}
 	default:
-		return shareddomain.SubagentPayload{AgentID: in.AgentID, AgentType: in.AgentType}
+		return shareddomain.SubagentPayload{AgentID: in.AgentID, AgentType: in.AgentType, TranscriptPath: in.AgentTranscript}
 	}
 }
 

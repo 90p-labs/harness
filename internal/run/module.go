@@ -55,6 +55,10 @@ func NewApprovalRecorder(db *dbal.DB, gate domain.PlanGate, now func() time.Time
 	return recordapproval.NewHandler(persistence.NewSQLRunRepository(db, now), gate, persistence.NewSQLApprovalRepository(db), now)
 }
 
+func NewReworkLog(db *dbal.DB, now func() time.Time) domain.ReworkLog {
+	return persistence.NewSQLRunRepository(db, now)
+}
+
 func NewStatus(db *dbal.DB, now func() time.Time) status.Handler {
 	return status.NewHandler(persistence.NewSQLRunRepository(db, now))
 }

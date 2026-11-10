@@ -45,7 +45,7 @@ func TestClaudeDecode(t *testing.T) {
 		{"stop with tasks", domain.HookStop, stopInput, shareddomain.EventTurnStopping, `{"stop_hook_active":true,"background_agents":2}`},
 		{"stop without tasks", domain.HookStop, stopNoTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":0}`},
 		{"subagent start", domain.HookSubagentStart, subagentStart, shareddomain.EventSubagentStarted, `{"agent_id":"agent-7","agent_type":"Explore"}`},
-		{"subagent stop", domain.HookSubagentStop, subagentStop, shareddomain.EventSubagentStopped, `{"agent_id":"agent-7","agent_type":"Explore"}`},
+		{"subagent stop", domain.HookSubagentStop, subagentStop, shareddomain.EventSubagentStopped, `{"agent_id":"agent-7","agent_type":"Explore","agent_transcript_path":"/a.jsonl"}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

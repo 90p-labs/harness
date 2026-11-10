@@ -1,6 +1,7 @@
 package guardplugin_test
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -48,13 +49,14 @@ func TestReviewFindingsShip(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			d := deps(&fakeStop{})
 			d.StrictMinor = c.strict
+			d.ReworkReasons = func(context.Context, string, string) ([]string, error) { return []string{"F5, blocker, fixed"}, nil }
 			var readPath string
 			d.ReadFile = func(path string) ([]byte, error) {
 				readPath = path
 				return []byte(c.file), c.err
 			}
 			d.Worktree = worktree
-			d.ReviewModels = (&reviewStore{models: []string{modelOpus, modelSonnet}}).read
+			d.Reviews = (&reviewStore{models: []string{modelOpus, modelSonnet}}).read
 			env := transitionEnvelope(t, c.event)
 			env.Run = shareddomain.RunRef{ID: findingsRunID}
 			v := dispatch(t, newBus(build(t, nil, d)), env)
@@ -73,7 +75,7 @@ func TestReviewFindingsShip(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		d := deps(&fakeStop{})
 		d.ReadFile = func(string) ([]byte, error) { return []byte(findingsTable("| F1 | blocker | real | open |")), nil }
-		d.ReviewModels = (&reviewStore{models: []string{modelOpus, modelSonnet}}).read
+		d.Reviews = (&reviewStore{models: []string{modelOpus, modelSonnet}}).read
 		env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
 		env.Run = shareddomain.RunRef{ID: findingsRunID}
 		v := dispatch(t, newBus(build(t, []string{domain.RuleReviewFindings}, d)), env)
@@ -81,4 +83,45 @@ func TestReviewFindingsShip(t *testing.T) {
 			t.Errorf("verdict = %+v, want allow with the rule disabled", v)
 		}
 	})
+}
+
+func TestReviewFindingsNeedRework(t *testing.T) {
+	cases := []struct {
+		name    string
+		file    string
+		reasons []string
+		err     error
+		deny    bool
+		want    string
+	}{
+		{"closed major without rework", findingsTable("| F1 | major | real | closed |"), nil, nil, true, "F1"},
+		{"closed major reworked", findingsTable("| F1 | major | real | closed |"), []string{"F1, major, fix the pong"}, nil, false, ""},
+		{"closed minor without rework", findingsTable("| F1 | minor | real | closed |"), nil, nil, false, ""},
+		{"rework lookup fails", findingsTable("| F1 | major | real | closed |"), nil, errors.New(findingsRead), true, findingsRead},
+		{"rework lookup fails with only minors", findingsTable("| F1 | minor | real | closed |"), nil, errors.New(findingsRead), false, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := deps(&fakeStop{})
+			d.ReadFile = func(string) ([]byte, error) { return []byte(c.file), nil }
+			var asked string
+			d.ReworkReasons = func(_ context.Context, _, runID string) ([]string, error) {
+				asked = runID
+				return c.reasons, c.err
+			}
+			d.Reviews = (&reviewStore{models: []string{modelOpus, modelSonnet}}).read
+			env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+			env.Run = shareddomain.RunRef{ID: findingsRunID}
+			v := dispatch(t, newBus(build(t, nil, d)), env)
+			if (v.Kind == shareddomain.VerdictDeny) != c.deny {
+				t.Fatalf("verdict = %+v, want deny=%v", v, c.deny)
+			}
+			if c.deny && !strings.Contains(v.Reason, c.want) {
+				t.Errorf("reason %q does not contain %q", v.Reason, c.want)
+			}
+			if asked != "" && asked != findingsRunID {
+				t.Errorf("asked the reasons of run %q, want %q", asked, findingsRunID)
+			}
+		})
+	}
 }
