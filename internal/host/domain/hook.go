@@ -63,13 +63,24 @@ var toolKinds = map[string]shareddomain.ToolKind{
 }
 
 func ToolKindOf(tool string) shareddomain.ToolKind {
-	if kind, ok := toolKinds[tool]; ok {
+	base := shareddomain.ToolBaseName(tool, func(name string) bool {
+		_, ok := toolKinds[name]
+		return ok || isQuestionTool(name)
+	})
+	if kind, ok := toolKinds[base]; ok {
 		return kind
 	}
-	for _, question := range shareddomain.QuestionTools {
-		if question.Name == tool {
-			return shareddomain.ToolKindQuestion
-		}
+	if isQuestionTool(base) {
+		return shareddomain.ToolKindQuestion
 	}
 	return shareddomain.ToolKindOther
+}
+
+func isQuestionTool(name string) bool {
+	for _, question := range shareddomain.QuestionTools {
+		if question.Name == name {
+			return true
+		}
+	}
+	return false
 }

@@ -1423,6 +1423,50 @@ func TestApprovalHookCodex(t *testing.T) {
 	assertApprove(t, exitOK, " phase="+string(domain.PhaseWorking)+" ")
 }
 
+func withTool(input, plain, tool string) string {
+	return strings.Replace(input, `"tool_name":"`+plain+`"`, `"tool_name":"`+tool+`"`, 1)
+}
+
+func TestApprovalHookMCPName(t *testing.T) {
+	const (
+		claudeMCP = "mcp__crawl_ostrich__act_AskUserQuestion"
+		codexMCP  = "mcp__codex__act_request_user_input"
+	)
+	for _, tc := range []struct{ host, input string }{
+		{"claude", withTool(fmt.Sprintf(claudeAnswerFormat, approveLabel), "AskUserQuestion", claudeMCP)},
+		{"codex", withTool(codexApproveInput, "request_user_input", codexMCP)},
+	} {
+		t.Run(tc.host, func(t *testing.T) {
+			submittedPlan(t)
+			assertApprove(t, exitRuntime, notRecorded)
+
+			if out := answer(t, tc.host, tc.input); !strings.Contains(out, recordedContext) {
+				t.Fatalf("hook stdout = %q, want %q", out, recordedContext)
+			}
+
+			assertApprove(t, exitOK, " phase="+string(domain.PhaseWorking)+" ")
+		})
+	}
+}
+
+func TestApprovalNoForgeMCPName(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+	input := `{"cwd":".","tool_name":"mcp__crawl_ostrich__act_AskUserQuestion","tool_input":{"questions":[{` + planQuestion + `],` +
+		`"answers":{"Is the plan ready?":"Approve (Recommended)"}}}`
+
+	code, stdout, stderr := executeWithStdin(t, input, "hook", "--host", "claude", "pre-tool-use")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q, want %d", code, stderr, exitOK)
+	}
+	for _, want := range []string{`"permissionDecision":"deny"`, "approval-no-forge"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout = %q, want %q", stdout, want)
+		}
+	}
+}
+
 func TestApprovalHookRefusals(t *testing.T) {
 	t.Run("a Change the plan answer records nothing", func(t *testing.T) {
 		submittedPlan(t)
