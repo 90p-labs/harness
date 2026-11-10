@@ -98,7 +98,11 @@ run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=done review_r
 next: the run is closed, start the next with harness run start
 ```
 
-The lead merges the findings of the reviewers and starts a verifier for each one. For the real findings, the lead sends the run back once with `harness run rework --findings "..."`. The guard acts on each tool call of the agent. For example, a merge goes to `harness hook --host claude pre-tool-use`, and the hook denies it:
+The lead merges the findings of the reviewers and starts a verifier for each one. The lead writes them in `findings.md`. For the real open findings, the lead sends the run back once with `harness run rework --findings "..."`. A real open blocker or major finding gives `request-rework` and raises `review_round`. Only minor findings give `rework-minor` and keep it.
+
+The text names each blocker or major ID. The guard rule `review-findings` refuses `harness run ship` while a real open blocker or major finding stays. It also refuses it when a real blocker or major finding, open or closed, has an ID that no reason names.
+
+The guard acts on each tool call of the agent. For example, a merge goes to `harness hook --host claude pre-tool-use`, and the hook denies it:
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"guard.pr-no-merge: a pull request merge is for the user. leave it to the user"}}
@@ -168,6 +172,7 @@ stateDiagram-v2
         awaiting_approval --> working: approve-plan
         working --> reviewing: submit-for-review
         reviewing --> working: request-rework [rounds left]
+        reviewing --> working: rework-minor
         reviewing --> shipping: approve-review
         working --> awaiting_approval: amend [approval on]
         reviewing --> awaiting_approval: amend [approval on]
@@ -197,7 +202,7 @@ With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes 
 | Plan check | `submit-plan`, `amend` and `approve-plan`: the plan rules, then the `plan.submitted` plugins |
 | Gates | `harness verify` in `working`; the review needs a passing proof of each criterion |
 | Trace check | `submit-for-review`: the trees, the commits and the owned files against the branch |
-| Reviewers | `reviewing`: the agents of the `reviewer` role review the work. The common list runs on every listed model. Lens Spec runs on the first model, lens Standards on the second, and lens Spec on every other model. A verifier checks each finding. With real findings, the lead runs `harness run rework` once with the verified list. A worker fixes each finding and a re-review checks each fix, both in `working`. The final panel then runs the common list on the final `HEAD`. Then the phase goes to `ship` or `rework`. `ship` needs every listed model of the host on `HEAD` |
+| Reviewers | `reviewing`: the agents of the `reviewer` role review the work. The common list runs on every listed model. Lens Spec runs on the first model, lens Standards on the second, and lens Spec on every other model. A verifier checks each finding. With real findings, the lead runs `harness run rework` once with the verified list. A worker fixes each finding and a re-review checks each fix, both in `working`. The final panel then runs the common list on the final `HEAD`. Then the phase goes to `ship`, `rework` or `rework-minor`. `ship` needs a counted review of every listed model of the host. A review counts when it read a changed file and matches the `HEAD`, the patch id or the run. The run match ends at the last `request-rework`, `amend` or `regress`, and needs `findings.md` in the run folder |
 | Guard | each tool call (`tool.before` and `tool.after`), each stop (`turn.stopping`) of the agent and each run transition (`run.transition.before`), in every phase |
 | Plugins | every transition (`run.transition.before`, `run.transition.after`), each gate, each plan, each host hook, gate detection, lint and live signals |
 | Live check | `releasing` and `observing`: `harness live check` reads the deploy and the signals |

@@ -10,7 +10,7 @@ These terms have one meaning in the code, the docs and the plans.
 - **Guard**: a named pure function of the run and the policy. It decides which row of the transition table applies.
 - **Transition**: one table row `(from, event, guard) -> to`. Only one row applies to a phase and an event.
 - **Policy**: the settings that guards read, such as the approval need, the round limits and the go-live switch.
-- **Review round**: the count of rework requests since the last plan approval.
+- **Review round**: the count of reworks with a real open blocker or major finding. A rework with only minor findings keeps it. Only a regress resets it.
 - **Live round**: the count of regressions after a release. Each live round replans the run.
 - **Open question**: a decision of the plan that the code and the docs cannot make. It sits under `## Open questions` until the user answers it.
 - **Grill**: the rounds of questions that turn each open question into a decision of the user.
@@ -18,7 +18,9 @@ These terms have one meaning in the code, the docs and the plans.
 - **Approval record**: a row that holds the run id and the SHA-256 of `plan.md` when the user picks `Approve` on the `Plan` question. `run approve` needs it, unless `--by` names a model.
 - **Role**: a job of a subagent, such as `explorer`, `worker`, `reviewer` or `advisor`. `.harness.yaml` gives each role the models that it may use on each host.
 - **Review lens**: the question of one reviewer. `Spec` checks the diff against `plan.md`. `Standards` checks it against the repository rules.
-- **Review record**: a row that holds the repo, the `HEAD` and the model of one dispatched `reviewer` agent. Only a `reviewer` agent call in `reviewing` writes one. `run ship` needs a record of every listed `reviewer` model of the host on `HEAD`.
+- **Review record**: a row that holds the repo, the `HEAD`, the patch id, the files read and the model of one `reviewer` agent. The hook writes it when the agent stops in `reviewing`. `run ship` needs a counted record of every listed `reviewer` model of the host. A record counts when it read a changed file and matches the `HEAD`, the patch id or the run.
+- **Review finding**: one row of `findings.md` with an ID, a severity, a verdict and a status. Only a real open row counts for a rework or a ship.
+- **Patch id**: the `git patch-id --verbatim` of the diff from the merge base to `HEAD`. A clean rebase keeps it, so the reviews stay valid. A change of whitespace only changes it.
 - **Common list**: the findings that one `reviewer` agent for each listed model returns in one pass on the same `HEAD`. The lead merges them and removes duplicates.
 - **Verifier**: an agent that checks one finding and answers `real` or `not real`. It never edits a file and writes no review record.
 - **Re-review**: a `reviewer` agent that reads one fixup diff and answers `closed` or `open`. It runs in `working` and writes no review record.

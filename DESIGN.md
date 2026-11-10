@@ -120,7 +120,7 @@ stateDiagram-v2
     abandoned --> [*]
 ```
 
-The `rework` command reads `findings.md` of the run folder. A real open blocker or major finding gives `request-rework`. Only minor findings give `rework-minor`, or `request-rework` when `run.strict_minor` is on. No real open finding is an error.
+The `rework` command reads `findings.md` of the run folder. A real open blocker or major finding gives `request-rework`. Only minor findings give `rework-minor`, or `request-rework` when `run.strict_minor` is on. No real open finding is an error. The command also refuses a `--findings` text that does not name each real open blocker or major ID. The parser reads every table of the file.
 
 The effects of each event on the run, besides the phase:
 
@@ -225,13 +225,19 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `shell-write-source` | `tool.before` | A shell write to a source file. The rule expands variables and follows the `cd` of the same command only on a flat line. A flat line is simple commands joined by `;`, `&&`, `\|\|`, `\|`, `&` or a newline. The rule expands a variable or follows a `cd` only when the assignment or `cd` surely runs. A word such as `set`, `export` or `eval`, a subshell, a substitution or an unquoted heredoc makes a line not flat. A write command with an option outside its allow list, such as `cp -t`, makes a line not flat. A write command with a word that the rule cannot resolve also makes a line not flat. The deny names the file. On any other line, or for a target it cannot resolve, the deny asks for a literal absolute path. |
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
 | `agent-model-routing` | `tool.before` | An agent call whose model is not in the list of its role for the host, or that has no model |
-| `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 models have a record on `HEAD`. Also when a reviewer model of the host list has no record |
-| `review-findings` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when `findings.md` of the run has an open real finding of severity blocker or major. With `run.strict_minor` on, an open real minor finding also denies. A missing file allows. A file that does not parse denies |
+| `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 models have a counted review. Also when a reviewer model of the host list has no counted review |
+| `review-findings` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when `findings.md` of the run has an open real finding of severity blocker or major. With `run.strict_minor` on, an open real minor finding also denies. It also denies when a real blocker or major finding, open or closed, has an ID that no `request-rework` reason names. An ID matches as a whole word. A missing file allows. A file that does not parse denies. A lead that edits `findings.md` can still pass the rule |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD`. A push that only deletes remote refs is allowed |
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
 
-After each Agent call of the `reviewer` role, a hook writes a review record: the repo, `HEAD` and the model, in the gate state beside the commit checks. The rule `review-models` reads the models of `HEAD` and needs every reviewer model of one host list, and at least 2 models. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host list of one model still gets the deny, with the `roles.reviewer` next step. A background agent sends `tool.after` at dispatch, so a record proves a dispatch, not a finished review. `subagent.stopped` carries no model, so this limit stays. A repository on Codex sets `guard.disabled: [review-models]`, because Codex sends no Agent call with a model. A `verifier` call writes no review record, because `verifier` is not a reviewer agent type. A re-review runs in `working`, so it writes no record either.
+When a `reviewer` agent stops in `reviewing`, a hook writes a review record on `subagent.stopped`, in the gate state beside the commit checks. The record holds the repo, `HEAD`, the model, the patch id, the files read and the run id. The hook reads `HEAD` at that moment, so the lead does not commit while a reviewer runs. The files read come from the transcript: a `Read` call, a diff header in a tool result or a shell command that names the file.
+
+The rule `review-models` counts a review only when it read a changed file and it matches one of three things. The three are `HEAD`, the patch id of the diff from the merge base, and (without `run.strict_minor`) the run. The run match ends at the last `request-rework`, `amend` or `regress`. It needs `findings.md` in the run folder. The patch id is `git patch-id --verbatim`.
+
+The rule needs every reviewer model of one host list, and 2 models or more. The deny names the model with no counted review. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host list of one model still gets the deny.
+
+Codex sends no model in an agent call, so it records no review. This limit stays. A repository on Codex sets `guard.disabled: [review-models]`. A `verifier` call writes no review record, because `verifier` is not a reviewer agent type. A re-review runs in `working`, so it writes no record either.
 
 Event kinds:
 
