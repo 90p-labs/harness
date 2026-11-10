@@ -2006,3 +2006,24 @@ func TestUnreworkedFixNeedsReview(t *testing.T) {
 		})
 	}
 }
+
+func TestGuardMCPBash(t *testing.T) {
+	const plain = `{"cwd":".","tool_name":"Bash","tool_input":{"command":"harness hook --host claude post-tool-use"}}`
+	for _, tool := range []string{"Bash", "mcp__crawl_ostrich__life_Bash"} {
+		t.Run(tool, func(t *testing.T) {
+			clearHarnessEnv(t)
+			initRepo(t)
+
+			code, stdout, stderr := executeWithStdin(t, withTool(plain, "Bash", tool), "hook", "--host", "claude", "pre-tool-use")
+
+			if code != exitOK {
+				t.Fatalf("code = %d, stderr = %q, want %d", code, stderr, exitOK)
+			}
+			for _, want := range []string{`"permissionDecision":"deny"`, "a hook records what the user does"} {
+				if !strings.Contains(stdout, want) {
+					t.Fatalf("stdout = %q, want %q", stdout, want)
+				}
+			}
+		})
+	}
+}

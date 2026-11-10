@@ -71,7 +71,8 @@ func ToolCallOf(p shareddomain.ToolPayload) (ToolCall, error) {
 		call.AnswersGiven = len(question.Answers) > 0
 		return call, nil
 	}
-	if !slices.Contains(inputTools, p.Tool) {
+	base := shareddomain.ToolBaseName(p.Tool, func(n string) bool { return slices.Contains(inputTools, n) })
+	if !slices.Contains(inputTools, base) {
 		return call, nil
 	}
 	var in toolInput
@@ -80,7 +81,7 @@ func ToolCallOf(p shareddomain.ToolPayload) (ToolCall, error) {
 			return ToolCall{}, fmt.Errorf("decode %s input: %w", p.Tool, err)
 		}
 	}
-	switch p.Tool {
+	switch base {
 	case toolBash:
 		call.Command = in.Command
 	case toolEdit:
