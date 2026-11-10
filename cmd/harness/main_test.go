@@ -35,6 +35,7 @@ const (
 	invalidOTLPAddress = "localhost:4318"
 	telemetryPrefix    = "telemetry: "
 	harnessEnvPrefix   = "HARNESS_"
+	envNoBrowser       = "HARNESS_NO_BROWSER"
 )
 
 func clearOTLPEnv(t *testing.T) {
@@ -255,9 +256,16 @@ func clearHarnessEnv(t *testing.T) {
 	t.Helper()
 	clearOTLPEnv(t)
 	for _, entry := range os.Environ() {
-		if name, _, _ := strings.Cut(entry, "="); strings.HasPrefix(name, harnessEnvPrefix) {
+		if name, _, _ := strings.Cut(entry, "="); strings.HasPrefix(name, harnessEnvPrefix) && name != envNoBrowser {
 			t.Setenv(name, "")
 		}
+	}
+}
+
+func TestClearHarnessEnvKeepsBrowserOff(t *testing.T) {
+	clearHarnessEnv(t)
+	if os.Getenv(envNoBrowser) == "" {
+		t.Errorf("%s is empty after clearHarnessEnv, want it set so no test opens a browser", envNoBrowser)
 	}
 }
 
@@ -2026,4 +2034,9 @@ func TestGuardMCPBash(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMain(m *testing.M) {
+	os.Setenv(envNoBrowser, "1")
+	os.Exit(m.Run())
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/90p-labs/harness/internal/plan/application/query/checkplan"
 	"github.com/90p-labs/harness/internal/plan/application/query/markdiagram"
 	"github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/plan/infrastructure/browser"
 	"github.com/90p-labs/harness/internal/plan/infrastructure/excalidraw"
 	"github.com/90p-labs/harness/internal/plan/infrastructure/gitdiff"
 	"github.com/90p-labs/harness/internal/plan/infrastructure/mermaid"
@@ -40,8 +41,10 @@ func NewReviewPlugin(worktree string, proofs domain.ProofReader, defaultBranch D
 	return reviewplugin.New(worktree, gitdiff.Reader{}, proofs, defaultBranch)
 }
 
+var opener = browser.New()
+
 func NewViewPlugin(worktree string, proofs domain.ProofReader, defaultBranch DefaultBranch, liveRound viewplugin.LiveRound) shareddomain.Plugin {
-	return viewplugin.New(worktree, newView(newCheck(), worktree, proofs, defaultBranch).Handle, liveRound)
+	return viewplugin.New(worktree, newView(newCheck(), worktree, proofs, defaultBranch).Handle, liveRound, opener.Open)
 }
 
 func NewModule(bus shareddomain.Dispatcher, worktree string, proofs domain.ProofReader, defaultBranch DefaultBranch) cli.Handlers {
@@ -50,6 +53,7 @@ func NewModule(bus shareddomain.Dispatcher, worktree string, proofs domain.Proof
 		Check:  check,
 		Submit: submitplan.NewHandler(checkFile(check), bus, worktree),
 		View:   newView(check, worktree, proofs, defaultBranch),
+		Open:   opener.Open,
 	}
 }
 

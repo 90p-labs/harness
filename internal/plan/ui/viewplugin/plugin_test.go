@@ -27,6 +27,70 @@ func liveRound(round int, err error) viewplugin.LiveRound {
 	return func(context.Context) (int, error) { return round, err }
 }
 
+func noOpen(context.Context, string) error { return nil }
+
+func TestViewPluginOpensPage(t *testing.T) {
+	const pagePath = "/work/tree/.harness/runs/r1/plan.html"
+	errOpen := errors.New("no browser")
+	render := func(context.Context, renderview.Command) (string, error) { return pagePath, nil }
+
+	t.Run("awaiting approval opens the rendered page once", func(t *testing.T) {
+		var opened []string
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), func(_ context.Context, page string) error {
+			opened = append(opened, page)
+			return nil
+		})
+
+		verdict, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
+
+		if err != nil || verdict.Kind != shareddomain.VerdictAllow {
+			t.Fatalf("verdict = %v, err = %v, want allow", verdict, err)
+		}
+		if !slices.Equal(opened, []string{pagePath}) {
+			t.Errorf("opened = %v, want [%s]", opened, pagePath)
+		}
+	})
+
+	t.Run("another phase opens nothing", func(t *testing.T) {
+		var opened []string
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), func(_ context.Context, page string) error {
+			opened = append(opened, page)
+			return nil
+		})
+
+		_, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseWorking))
+
+		if err != nil || len(opened) != 0 {
+			t.Errorf("err = %v, opened = %v, want nothing", err, opened)
+		}
+	})
+
+	t.Run("a render error opens nothing", func(t *testing.T) {
+		var opened []string
+		failing := func(context.Context, renderview.Command) (string, error) { return "", errRender }
+		plugin := viewplugin.New(worktree, failing, liveRound(1, nil), func(_ context.Context, page string) error {
+			opened = append(opened, page)
+			return nil
+		})
+
+		_, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
+
+		if !errors.Is(err, errRender) || len(opened) != 0 {
+			t.Errorf("err = %v, opened = %v, want the render error and nothing opened", err, opened)
+		}
+	})
+
+	t.Run("an open error allows and is returned", func(t *testing.T) {
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), func(context.Context, string) error { return errOpen })
+
+		verdict, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
+
+		if !errors.Is(err, errOpen) || verdict.Kind != shareddomain.VerdictAllow {
+			t.Errorf("verdict = %v, err = %v, want allow and the open error", verdict, err)
+		}
+	})
+}
+
 func envelope(t *testing.T, to string) shareddomain.Envelope {
 	t.Helper()
 	raw, err := json.Marshal(shareddomain.TransitionPayload{Event: shareddomain.TransitionSubmitForReview, From: shareddomain.PhasePlanning, To: to})
@@ -46,7 +110,7 @@ func TestViewPlugin(t *testing.T) {
 		commands = append(commands, c)
 		return "", nil
 	}
-	plugin := viewplugin.New(worktree, render, liveRound(1, nil))
+	plugin := viewplugin.New(worktree, render, liveRound(1, nil), noOpen)
 
 	if !slices.Equal(plugin.Subscribes(), []shareddomain.EventName{shareddomain.EventRunTransitionAfter}) {
 		t.Errorf("Subscribes = %v", plugin.Subscribes())
@@ -74,7 +138,7 @@ func TestViewPlugin(t *testing.T) {
 
 	t.Run("a live round read error renders round 0 and reports the error", func(t *testing.T) {
 		commands = nil
-		noRound := viewplugin.New(worktree, render, liveRound(1, errRound))
+		noRound := viewplugin.New(worktree, render, liveRound(1, errRound), noOpen)
 
 		verdict, err := noRound.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
 
@@ -97,7 +161,7 @@ func TestViewPlugin(t *testing.T) {
 	})
 
 	t.Run("a render error allows and reports the error", func(t *testing.T) {
-		failing := viewplugin.New(worktree, func(context.Context, renderview.Command) (string, error) { return "", errRender }, liveRound(0, nil))
+		failing := viewplugin.New(worktree, func(context.Context, renderview.Command) (string, error) { return "", errRender }, liveRound(0, nil), noOpen)
 
 		verdict, err := failing.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
 

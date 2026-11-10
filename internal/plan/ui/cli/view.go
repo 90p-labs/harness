@@ -14,6 +14,7 @@ import (
 const (
 	commandView = "view"
 	flagOut     = "out"
+	flagOpen    = "open"
 )
 
 func viewCommand(connect Connect) *cobra.Command {
@@ -36,11 +37,15 @@ func viewCommand(connect Connect) *cobra.Command {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), relativeToTop(handlers.RepoTop, page))
+			if open, _ := cmd.Flags().GetBool(flagOpen); open {
+				return handlers.Open(cmd.Context(), page)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().String(flagFile, "", "the plan file, default the plan of the active run")
 	cmd.Flags().String(flagOut, "", "the page file, default plan.html beside the plan")
+	cmd.Flags().Bool(flagOpen, false, "open the page in the browser")
 	return cmd
 }
 
