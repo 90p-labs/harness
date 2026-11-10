@@ -129,3 +129,18 @@ func TestToolMarkRoundTrip(t *testing.T) {
 		t.Fatalf("the other run keeps %d marks, want 1", len(left))
 	}
 }
+
+func TestDeleteRunKeepsOtherRuns(t *testing.T) {
+	m := openMarks(t)
+	mustOpen(t, m, runID, domain.MarkTurn, first)
+	mustOpen(t, m, runID, domain.MarkSubagent, first)
+	mustOpen(t, m, otherRunID, domain.MarkTurn, first)
+
+	if err := m.DeleteRun(context.Background(), runID); err != nil {
+		t.Fatalf("DeleteRun: %v", err)
+	}
+
+	assertClose(t, m, runID, domain.MarkTurn, time.Time{}, false)
+	assertClose(t, m, runID, domain.MarkSubagent, time.Time{}, false)
+	assertClose(t, m, otherRunID, domain.MarkTurn, first, true)
+}

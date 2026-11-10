@@ -106,7 +106,8 @@ func newLiveCommand(flags *pflag.FlagSet) *cobra.Command {
 		if err != nil {
 			return nil, err
 		}
-		return runLiveCheck(ctx, env)
+		results, err := runLiveCheck(ctx, env)
+		return results, errors.Join(err, env.state.Close())
 	})
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
 	return cmd
@@ -119,7 +120,7 @@ func runLiveCheck(ctx context.Context, env environment) ([]check.Result, error) 
 	}
 	results, err := livemodule.NewCheck(db, liveRuns{handlers: handlers}, env.bus, env.cfg.Live).
 		Handle(ctx, check.Command{Repo: env.key.Repo, Now: time.Now()})
-	return results, errors.Join(err, db.Close())
+	return results, err
 }
 
 type runDispatcher struct {
@@ -133,11 +134,10 @@ func (d runDispatcher) Dispatch(ctx context.Context, envelope shareddomain.Envel
 
 func activeRunRef(env environment) func(ctx context.Context) (shareddomain.RunRef, error) {
 	return func(ctx context.Context) (shareddomain.RunRef, error) {
-		handlers, db, err := openRun(ctx, env)
+		handlers, _, err := openRun(ctx, env)
 		if err != nil {
 			return shareddomain.RunRef{}, err
 		}
-		defer func() { _ = db.Close() }()
 		current, err := handlers.Status.Handle(ctx, status.Query{Key: env.key})
 		if err != nil {
 			return shareddomain.RunRef{}, err

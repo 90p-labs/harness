@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,22 +13,27 @@ import (
 	hostpersistence "github.com/90p-labs/harness/internal/host/infrastructure/persistence"
 	hostcli "github.com/90p-labs/harness/internal/host/ui/cli"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
-	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
-	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 func newHookCommand(flags *pflag.FlagSet) *cobra.Command {
+	marks := &runMarks{}
 	handler := host.NewHookHandler(func(ctx context.Context) (shareddomain.Dispatcher, error) {
 		env, err := newEnvironment(ctx, flags)
+		marks.state = env.state
 		return runDispatcher{next: env.bus}, err
-	}, runMarks{flags: flags})
+	}, marks)
 	cmd := hostcli.NewHookCommand(handler)
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return err })
+	run := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		defer func() { _ = marks.state.Close() }()
+		return run(cmd, args)
+	}
 	return cmd
 }
 
 type runMarks struct {
-	flags *pflag.FlagSet
+	state *stateHolder
 }
 
 func (m runMarks) Open(ctx context.Context, kind hostdomain.MarkKind, id string, at time.Time) error {
@@ -77,27 +81,10 @@ func (m runMarks) CloseSession(ctx context.Context, sessionID string) (closed []
 }
 
 func (m runMarks) withMarks(ctx context.Context, use func(hostpersistence.SQLAgentMarks) error) error {
-	cwd, err := os.Getwd()
+	db, err := m.state.DB(ctx)
 	if err != nil {
 		return err
 	}
-	_, worktree, err := git.RepoKey(ctx, cwd)
-	if err != nil {
-		return err
-	}
-	commonDir, err := git.CommonDir(ctx, cwd)
-	if err != nil {
-		return err
-	}
-	cfg, err := config.Load(m.flags, worktree)
-	if err != nil {
-		return err
-	}
-	db, err := openState(ctx, cfg, commonDir)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
 	return use(hostpersistence.NewSQLAgentMarks(db))
 }
 

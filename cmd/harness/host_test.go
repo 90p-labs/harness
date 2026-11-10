@@ -1,11 +1,88 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
+
+const (
+	freshStopJSON     = `{"cwd":".","session_id":"s1"}`
+	subagentStartJSON = `{"cwd":".","session_id":"s1","agent_id":"a1","agent_type":"Explore"}`
+	commandSubagent   = "subagent-start"
+	maxStopOpens      = 2
+)
+
+func countStateOpens(t *testing.T) *int {
+	t.Helper()
+	opens := 0
+	previous := openStateDB
+	openStateDB = func(ctx context.Context, cfg config.Config, commonDir string) (*dbal.DB, error) {
+		opens++
+		return previous(ctx, cfg, commonDir)
+	}
+	t.Cleanup(func() { openStateDB = previous })
+	return &opens
+}
+
+func TestStopHookStateOpens(t *testing.T) {
+	clearHarnessEnv(t)
+	initRepo(t)
+	execute(t, commandRun, "start", "Add the login page")
+	opens := countStateOpens(t)
+
+	for attempt := 1; attempt <= maxStopAttempts; attempt++ {
+		*opens = 0
+		code, stdout, stderr := executeWithStdin(t, freshStopJSON, commandHook, initHostFlag, hostClaude, "stop")
+		if code != exitOK {
+			t.Fatalf("stop: code = %d, stderr = %q", code, stderr)
+		}
+		if *opens > maxStopOpens {
+			t.Fatalf("stop attempt %d: state opens = %d, want at most %d", attempt, *opens, maxStopOpens)
+		}
+		if stdout == "" {
+			return
+		}
+	}
+	t.Fatal("the guard held every stop")
+}
+
+func TestClosedRunDeletesMarks(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	execute(t, commandRun, "start", "Add the login page")
+	if code, _, stderr := executeWithStdin(t, subagentStartJSON, commandHook, initHostFlag, hostClaude, commandSubagent); code != exitOK {
+		t.Fatalf("subagent-start: code = %d, stderr = %q", code, stderr)
+	}
+	db, err := sql.Open("sqlite", defaultStatePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	countMarks := func() (marks int) {
+		if err := db.QueryRowContext(context.Background(), "SELECT count(*) FROM agent_marks").Scan(&marks); err != nil {
+			t.Fatal(err)
+		}
+		return marks
+	}
+	if countMarks() == 0 {
+		t.Fatal("the subagent start opened no mark")
+	}
+
+	if code, _, stderr := execute(t, commandRun, "abandon"); code != exitOK {
+		t.Fatalf("abandon: code = %d, stderr = %q", code, stderr)
+	}
+
+	if got := countMarks(); got != 0 {
+		t.Fatalf("agent_marks rows = %d, want 0 after the run is abandoned", got)
+	}
+}
 
 const (
 	envClaudeSession   = "CLAUDECODE"

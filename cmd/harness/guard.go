@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	gatepersistence "github.com/90p-labs/harness/internal/gate/infrastructure/persistence"
@@ -16,22 +17,62 @@ import (
 	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 )
 
-type stopAdapter struct {
+// stateHolder opens the state database on first use, so a repository with no use of it gets no file.
+type stateHolder struct {
 	cfg       config.Config
 	commonDir string
-	key       domain.RunKey
+
+	mu sync.Mutex
+	db *dbal.DB
+}
+
+func newStateHolder(cfg config.Config, commonDir string) *stateHolder {
+	return &stateHolder{cfg: cfg, commonDir: commonDir}
+}
+
+func (h *stateHolder) DB(ctx context.Context) (*dbal.DB, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.db == nil {
+		db, err := openStateDB(ctx, h.cfg, h.commonDir)
+		if err != nil {
+			return nil, err
+		}
+		h.db = db
+	}
+	return h.db, nil
+}
+
+func (h *stateHolder) Close() error {
+	if h == nil {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.db == nil {
+		return nil
+	}
+	err := h.db.Close()
+	h.db = nil
+	return err
+}
+
+type stopAdapter struct {
+	cfg   config.Config
+	state *stateHolder
+	key   domain.RunKey
 }
 
 func (s stopAdapter) DecideStop(ctx context.Context, agentRunning bool) (bool, string, error) {
-	db, err := openState(ctx, s.cfg, s.commonDir)
+	db, err := s.state.DB(ctx)
 	if err != nil {
 		return false, "", err
 	}
-	defer func() { _ = db.Close() }()
-
 	verdict, err := runmodule.NewStopDecider(db, s.cfg.Run, time.Now).Handle(ctx, decidestop.Command{Key: s.key, AgentRunning: agentRunning})
 	return verdict.Block, verdict.Reason, err
 }
+
+var openStateDB = openState
 
 func openState(ctx context.Context, cfg config.Config, commonDir string) (*dbal.DB, error) {
 	db, err := dbal.Open(ctx, cfg.State.DSN, commonDir)

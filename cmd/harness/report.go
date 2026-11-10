@@ -40,6 +40,7 @@ func runLine(ctx context.Context, flags *pflag.FlagSet) string {
 	if err != nil {
 		return reportdomain.RunNone
 	}
+	defer func() { _ = env.state.Close() }()
 	ref, err := activeRunRef(env)(ctx)
 	if err != nil {
 		return reportdomain.RunNone

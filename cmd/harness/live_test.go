@@ -156,13 +156,19 @@ func (d *recordingDispatcher) Dispatch(_ context.Context, envelope shareddomain.
 func TestActiveRunRef(t *testing.T) {
 	ctx := context.Background()
 	key := domain.RunKey{Repo: liveRepo, Worktree: t.TempDir()}
-	env := environment{key: key, commonDir: t.TempDir(), cfg: config.Config{State: config.State{DSN: liveStateDSN}}}
+	cfg := config.Config{State: config.State{DSN: liveStateDSN}}
+	commonDir := t.TempDir()
+	activeRef := func(cfg config.Config) (shareddomain.RunRef, error) {
+		env := environment{key: key, commonDir: commonDir, cfg: cfg, state: newStateHolder(cfg, commonDir)}
+		defer func() { _ = env.state.Close() }()
+		return activeRunRef(env)(ctx)
+	}
 
-	if _, err := activeRunRef(env)(ctx); !errors.Is(err, domain.ErrRunNotFound) {
+	if _, err := activeRef(cfg); !errors.Is(err, domain.ErrRunNotFound) {
 		t.Fatalf("no run: err = %v, want ErrRunNotFound", err)
 	}
 
-	db, err := openState(ctx, env.cfg, env.commonDir)
+	db, err := openState(ctx, cfg, commonDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,13 +176,13 @@ func TestActiveRunRef(t *testing.T) {
 	if closeErr := db.Close(); err != nil || closeErr != nil {
 		t.Fatalf("seed: %v, close: %v", err, closeErr)
 	}
-	ref, err := activeRunRef(env)(ctx)
+	ref, err := activeRef(cfg)
 	if err != nil || ref != (shareddomain.RunRef{ID: "r1", Phase: string(domain.PhaseWorking)}) {
 		t.Fatalf("active run: ref = %+v, err = %v", ref, err)
 	}
 
-	env.cfg.State.DSN = "unknown:state.db"
-	if _, err := activeRunRef(env)(ctx); err == nil {
+	cfg.State.DSN = "unknown:state.db"
+	if _, err := activeRef(cfg); err == nil {
 		t.Fatal("bad state: want an error")
 	}
 }

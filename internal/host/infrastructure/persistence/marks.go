@@ -20,6 +20,7 @@ const (
 	insertToolMark = "INSERT INTO agent_marks (run_id, kind, id, session_id, tool, started_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (run_id, kind, id) DO NOTHING"
 
 	deleteSessionMarks = "DELETE FROM agent_marks WHERE run_id = ? AND kind = ? AND session_id = ? RETURNING id, session_id, tool, started_at"
+	deleteRunMarks     = "DELETE FROM agent_marks WHERE run_id = ?"
 	deleteMark         = "DELETE FROM agent_marks WHERE run_id = ? AND kind = ? AND id = ? RETURNING started_at"
 )
 
@@ -44,6 +45,11 @@ func NewSQLAgentMarks(db *dbal.DB) SQLAgentMarks {
 
 func (r SQLAgentMarks) Open(ctx context.Context, runID string, kind domain.MarkKind, id string, at time.Time) error {
 	_, err := r.db.ExecContext(ctx, insertMark, runID, kind, id, at.UTC())
+	return err
+}
+
+func (r SQLAgentMarks) DeleteRun(ctx context.Context, runID string) error {
+	_, err := r.db.ExecContext(ctx, deleteRunMarks, runID)
 	return err
 }
 
