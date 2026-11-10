@@ -2040,3 +2040,12 @@ func TestMain(m *testing.M) {
 	os.Setenv(envNoBrowser, "1")
 	os.Exit(m.Run())
 }
+
+func TestReviewPanelCommand(t *testing.T) {
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: seed", map[string]string{"a.txt": "a\n"})
+	code, stdout, stderr := execute(t, "review", "panel")
+	if code != exitOK || !strings.HasPrefix(stdout, "panel: ") || !strings.Contains(stdout, "(full panel: ") {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+}
