@@ -8,12 +8,14 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/90p-labs/harness/internal/host/application/command/handlehook"
 	hostdomain "github.com/90p-labs/harness/internal/host/domain"
@@ -23,6 +25,11 @@ import (
 )
 
 const (
+	agentTurnSpan     = "agent.turn"
+	agentSubagentSpan = "agent.subagent"
+	turnEndAttr       = "harness.turn.end"
+	agentIDAttr       = "harness.agent.id"
+	agentTypeAttr     = "harness.agent.type"
 	sessionIDAttr     = "harness.session.id"
 	preToolInput      = `{"cwd":"/work","tool_name":"Bash","tool_input":{"command":"ls"}}`
 	sessionInput      = `{"cwd":"/work","source":"startup"}`
@@ -62,7 +69,7 @@ func newHandler(t *testing.T, connect handlehook.Connect, codecs ...hostdomain.C
 	t.Helper()
 	tracer := sdktrace.NewTracerProvider().Tracer("test")
 	meter := sdkmetric.NewMeterProvider().Meter("test")
-	return handlehook.NewHandler(codecs, connect, tracer, meter)
+	return handlehook.NewHandler(codecs, connect, tracer, meter, newFakeMarks(), time.Now)
 }
 
 type partialCodec struct{}
@@ -268,7 +275,7 @@ func TestHandleHookTelemetry(t *testing.T) {
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
 	reader := sdkmetric.NewManualReader()
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
-	handler := handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(allowAll()), tracer, meter)
+	handler := handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(allowAll()), tracer, meter, newFakeMarks(), time.Now)
 
 	handler.Handle(context.Background(), handlehook.Command{
 		Host: shareddomain.HostClaude, Hook: hostdomain.HookPreToolUse, Input: strings.NewReader(preToolInput),
@@ -322,7 +329,7 @@ func TestHandleHookSessionIDAttribute(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
 			meter := sdkmetric.NewMeterProvider().Meter("test")
-			handler := handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(allowAll()), tracer, meter)
+			handler := handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(allowAll()), tracer, meter, newFakeMarks(), time.Now)
 
 			handler.Handle(context.Background(), handlehook.Command{
 				Host: shareddomain.HostClaude, Hook: hostdomain.HookPreToolUse, Input: strings.NewReader(tc.input),
@@ -351,7 +358,7 @@ func TestHandleHookTelemetryOnError(t *testing.T) {
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
 	reader := sdkmetric.NewManualReader()
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
-	handler := handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(failing()), tracer, meter)
+	handler := handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(failing()), tracer, meter, newFakeMarks(), time.Now)
 
 	handler.Handle(context.Background(), handlehook.Command{
 		Host: shareddomain.HostClaude, Hook: hostdomain.HookPreToolUse, Input: bytes.NewReader([]byte(preToolInput)),
@@ -365,5 +372,216 @@ func TestHandleHookTelemetryOnError(t *testing.T) {
 	got, _ := point.Attributes.Value("harness.verdict")
 	if got.AsString() != "error" {
 		t.Fatalf("verdict attribute = %q, want error", got.AsString())
+	}
+}
+
+type markKey struct {
+	kind hostdomain.MarkKind
+	id   string
+}
+
+type fakeMarks struct {
+	open map[markKey]time.Time
+	err  error
+}
+
+func newFakeMarks() *fakeMarks { return &fakeMarks{open: map[markKey]time.Time{}} }
+
+func (f *fakeMarks) Open(_ context.Context, kind hostdomain.MarkKind, id string, at time.Time) error {
+	if f.err != nil {
+		return f.err
+	}
+	if _, ok := f.open[markKey{kind, id}]; !ok {
+		f.open[markKey{kind, id}] = at
+	}
+	return nil
+}
+
+func (f *fakeMarks) Close(_ context.Context, kind hostdomain.MarkKind, id string) (time.Time, bool, error) {
+	if f.err != nil {
+		return time.Time{}, false, f.err
+	}
+	at, ok := f.open[markKey{kind, id}]
+	delete(f.open, markKey{kind, id})
+	return at, ok, nil
+}
+
+const (
+	hookHandleSpan = "hook.handle"
+	exceptionEvent = "exception"
+	turnEndStop    = "stop"
+	turnEndPrompt  = "prompt"
+	claudeSession  = `"session_id":"s1","cwd":"/work"`
+	promptInput    = `{` + claudeSession + `,"prompt":"go"}`
+	stopInput      = `{` + claudeSession + `,"stop_hook_active":false}`
+	subagentInput  = `{` + claudeSession + `,"agent_id":"a1","agent_type":"reviewer"}`
+)
+
+var clockBase = time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+
+type agentFixture struct {
+	handler  handlehook.Handler
+	recorder *tracetest.SpanRecorder
+	marks    *fakeMarks
+	clock    time.Time
+}
+
+func newAgentFixture(d shareddomain.Dispatcher) *agentFixture {
+	f := &agentFixture{recorder: tracetest.NewSpanRecorder(), marks: newFakeMarks(), clock: clockBase}
+	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(f.recorder)).Tracer("test")
+	f.handler = handlehook.NewHandler([]hostdomain.Codec{hookcodec.NewClaude()}, connectTo(d), tracer,
+		sdkmetric.NewMeterProvider().Meter("test"), f.marks, func() time.Time { return f.clock })
+	return f
+}
+
+func (f *agentFixture) fire(after time.Duration, hook hostdomain.HookName, input string) handlehook.Output {
+	f.clock = clockBase.Add(after)
+	return f.handler.Handle(context.Background(), handlehook.Command{
+		Host: shareddomain.HostClaude, Hook: hook, Input: strings.NewReader(input),
+	})
+}
+
+func (f *agentFixture) agentSpans() []sdktrace.ReadOnlySpan {
+	var spans []sdktrace.ReadOnlySpan
+	for _, span := range f.recorder.Ended() {
+		if span.Name() != hookHandleSpan {
+			spans = append(spans, span)
+		}
+	}
+	return spans
+}
+
+func attrOf(span sdktrace.ReadOnlySpan, key string) string {
+	for _, kv := range span.Attributes() {
+		if string(kv.Key) == key {
+			return kv.Value.AsString()
+		}
+	}
+	return ""
+}
+
+func TestAgentTurnSpan(t *testing.T) {
+	f := newAgentFixture(allowAll())
+
+	f.fire(time.Second, hostdomain.HookUserPrompt, promptInput)
+	f.fire(5*time.Second, hostdomain.HookStop, stopInput)
+
+	spans := f.agentSpans()
+	if len(spans) != 1 || spans[0].Name() != agentTurnSpan {
+		t.Fatalf("agent spans = %d, want one %s", len(spans), agentTurnSpan)
+	}
+	if !spans[0].StartTime().Equal(clockBase.Add(time.Second)) || !spans[0].EndTime().Equal(clockBase.Add(5*time.Second)) {
+		t.Fatalf("span runs %v to %v, want the stored time to the clock", spans[0].StartTime(), spans[0].EndTime())
+	}
+	if attrOf(spans[0], turnEndAttr) != turnEndStop || attrOf(spans[0], sessionIDAttr) != "s1" {
+		t.Fatalf("attributes = %v", spans[0].Attributes())
+	}
+}
+
+func TestAgentTurnClosedByPrompt(t *testing.T) {
+	f := newAgentFixture(allowAll())
+
+	f.fire(time.Second, hostdomain.HookUserPrompt, promptInput)
+	f.fire(3*time.Second, hostdomain.HookUserPrompt, promptInput)
+
+	spans := f.agentSpans()
+	if len(spans) != 1 || attrOf(spans[0], turnEndAttr) != turnEndPrompt {
+		t.Fatalf("agent spans = %v, want one with %s=%s", spans, turnEndAttr, turnEndPrompt)
+	}
+	if _, open := f.marks.open[markKey{hostdomain.MarkTurn, "s1"}]; !open {
+		t.Fatal("the second prompt did not open a new turn")
+	}
+}
+
+func TestDeniedStopKeepsTheTurnOpen(t *testing.T) {
+	denied := false
+	f := newAgentFixture(dispatcherFunc(func(context.Context, shareddomain.Envelope) (shareddomain.DispatchResult, error) {
+		if denied {
+			return shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictDeny, Reason: "hold"}}, nil
+		}
+		return shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}, nil
+	}))
+	f.fire(time.Second, hostdomain.HookUserPrompt, promptInput)
+	denied = true
+	f.fire(2*time.Second, hostdomain.HookStop, stopInput)
+	if got := f.agentSpans(); len(got) != 0 {
+		t.Fatalf("a denied stop exported %d agent spans", len(got))
+	}
+
+	denied = false
+	f.fire(9*time.Second, hostdomain.HookStop, stopInput)
+
+	spans := f.agentSpans()
+	if len(spans) != 1 || !spans[0].StartTime().Equal(clockBase.Add(time.Second)) {
+		t.Fatalf("agent spans = %v, want one from the first prompt", spans)
+	}
+}
+
+func TestSubagentSpan(t *testing.T) {
+	f := newAgentFixture(allowAll())
+
+	f.fire(time.Second, hostdomain.HookSubagentStart, subagentInput)
+	f.fire(4*time.Second, hostdomain.HookSubagentStop, subagentInput)
+
+	spans := f.agentSpans()
+	if len(spans) != 1 || spans[0].Name() != agentSubagentSpan {
+		t.Fatalf("agent spans = %v, want one %s", spans, agentSubagentSpan)
+	}
+	if attrOf(spans[0], agentIDAttr) != "a1" || attrOf(spans[0], agentTypeAttr) != "reviewer" || attrOf(spans[0], sessionIDAttr) != "s1" {
+		t.Fatalf("attributes = %v", spans[0].Attributes())
+	}
+}
+
+func TestUnmatchedCloseExportsNothing(t *testing.T) {
+	f := newAgentFixture(allowAll())
+
+	f.fire(time.Second, hostdomain.HookSubagentStop, subagentInput)
+	f.fire(2*time.Second, hostdomain.HookStop, stopInput)
+
+	if got := f.agentSpans(); len(got) != 0 {
+		t.Fatalf("agent spans = %d, want 0", len(got))
+	}
+}
+
+func TestAgentSpanParentIsTheRunContext(t *testing.T) {
+	f := newAgentFixture(allowAll())
+	root := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled, Remote: true,
+	})
+	ctx := trace.ContextWithRemoteSpanContext(context.Background(), root)
+	run := func(hook hostdomain.HookName, input string) {
+		f.handler.Handle(ctx, handlehook.Command{Host: shareddomain.HostClaude, Hook: hook, Input: strings.NewReader(input)})
+	}
+
+	run(hostdomain.HookUserPrompt, promptInput)
+	run(hostdomain.HookStop, stopInput)
+
+	spans := f.agentSpans()
+	if len(spans) != 1 || spans[0].Parent().SpanID() != root.SpanID() {
+		t.Fatalf("agent spans = %v, want one with the root span as parent", spans)
+	}
+}
+
+func TestAgentMarksError(t *testing.T) {
+	plain := newAgentFixture(allowAll())
+	want := plain.fire(time.Second, hostdomain.HookStop, stopInput)
+	broken := newAgentFixture(allowAll())
+	broken.marks.err = errors.New(errBoom)
+
+	got := broken.fire(time.Second, hostdomain.HookStop, stopInput)
+
+	if string(got.Stdout) != string(want.Stdout) || got.Stderr != want.Stderr {
+		t.Fatalf("output = %+v, want %+v", got, want)
+	}
+	ended := broken.recorder.Ended()
+	if len(ended) != 1 || ended[0].Name() != hookHandleSpan {
+		t.Fatalf("spans = %d, want one %s", len(ended), hookHandleSpan)
+	}
+	var recorded bool
+	for _, event := range ended[0].Events() {
+		recorded = recorded || event.Name == exceptionEvent
+	}
+	if !recorded {
+		t.Fatal("the hook.handle span has no exception event")
 	}
 }

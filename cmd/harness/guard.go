@@ -5,6 +5,7 @@ import (
 	"time"
 
 	gatepersistence "github.com/90p-labs/harness/internal/gate/infrastructure/persistence"
+	hostpersistence "github.com/90p-labs/harness/internal/host/infrastructure/persistence"
 	livepersistence "github.com/90p-labs/harness/internal/live/infrastructure/persistence"
 	runmodule "github.com/90p-labs/harness/internal/run"
 	"github.com/90p-labs/harness/internal/run/application/command/decidestop"
@@ -43,6 +44,9 @@ func openState(ctx context.Context, cfg config.Config, commonDir string) (*dbal.
 	}
 	if err == nil {
 		err = db.Migrate(ctx, livepersistence.Module, livepersistence.Migrations)
+	}
+	if err == nil {
+		err = db.Migrate(ctx, hostpersistence.Module, hostpersistence.Migrations)
 	}
 	if err != nil {
 		_ = db.Close()

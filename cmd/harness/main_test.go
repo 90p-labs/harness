@@ -554,6 +554,87 @@ func TestHookSpansCarryTheRun(t *testing.T) {
 	assertSpansCarryRun(t, spans(), runID, dir)
 }
 
+const (
+	agentTurnSpan = "agent.turn"
+	promptJSON    = `{"cwd":".","session_id":"s1","prompt":"go"}`
+	stopJSON      = `{"cwd":".","session_id":"s1","stop_hook_active":true}`
+	commandHook   = "hook"
+
+	maxStopAttempts = 6
+)
+
+func fireTurn(t *testing.T) {
+	t.Helper()
+	if code, _, stderr := executeWithStdin(t, promptJSON, commandHook, initHostFlag, hostClaude, "user-prompt"); code != exitOK {
+		t.Fatalf("user-prompt: code = %d, stderr = %q", code, stderr)
+	}
+	for range maxStopAttempts {
+		code, stdout, stderr := executeWithStdin(t, stopJSON, commandHook, initHostFlag, hostClaude, "stop")
+		if code != exitOK {
+			t.Fatalf("stop: code = %d, stderr = %q", code, stderr)
+		}
+		if stdout == "" {
+			return
+		}
+	}
+	t.Fatal("the guard held every stop")
+}
+
+func TestHookTracesTheAgentTurn(t *testing.T) {
+	t.Run("run", func(t *testing.T) {
+		clearHarnessEnv(t)
+		initRepo(t)
+		execute(t, commandRun, "start", "Add the login page")
+		spans := collectSpans(t)
+
+		fireTurn(t)
+
+		var turns, handles []receivedSpan
+		for _, span := range spans() {
+			switch span.name {
+			case agentTurnSpan:
+				turns = append(turns, span)
+			case hookHandleSpan:
+				handles = append(handles, span)
+			}
+		}
+		if len(turns) != 1 || len(handles) == 0 {
+			t.Fatalf("turn spans = %d, hook spans = %d, want one turn span", len(turns), len(handles))
+		}
+		if turns[0].parentID != handles[0].parentID || turns[0].parentID == "" {
+			t.Errorf("turn parent = %q, want the run root %q", turns[0].parentID, handles[0].parentID)
+		}
+		if turns[0].attrs[sessionIDAttr] != "s1" {
+			t.Errorf("%s = %q, want s1", sessionIDAttr, turns[0].attrs[sessionIDAttr])
+		}
+	})
+	t.Run("no run", func(t *testing.T) {
+		clearHarnessEnv(t)
+		dir := initRepo(t)
+		spans := collectSpans(t)
+
+		fireTurn(t)
+
+		for _, span := range spans() {
+			if span.name == agentTurnSpan {
+				t.Errorf("span %s exported with no run", span.name)
+			}
+		}
+		db, err := sql.Open("sqlite", defaultStatePath(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = db.Close() }()
+		var marks int
+		if err = db.QueryRowContext(context.Background(), "SELECT count(*) FROM agent_marks").Scan(&marks); err != nil {
+			t.Fatal(err)
+		}
+		if marks != 0 {
+			t.Errorf("agent_marks rows = %d, want 0 with no run", marks)
+		}
+	})
+}
+
 func TestPreRunHonoursStateDSN(t *testing.T) {
 	clearHarnessEnv(t)
 	initRepo(t)
