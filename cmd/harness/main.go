@@ -11,9 +11,11 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	guardcli "github.com/90p-labs/harness/internal/guard/ui/cli"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 )
 
@@ -30,6 +32,61 @@ const (
 )
 
 var errNoCommand = errors.New("no command given")
+
+// prBodySource reads the plan of the active run and the branch commits for `harness pr body`. It writes no state.
+type prBodySource struct{ flags *pflag.FlagSet }
+
+func (s prBodySource) Plan(ctx context.Context) (string, error) {
+	// The pre-run resolved the run from an existing state file, so this opens no state and creates none.
+	ref := runRefFrom(ctx)
+	if ref.ID == "" {
+		return "", nil
+	}
+	worktree, err := topLevel(ctx)
+	if err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(planPath(worktree, ref.ID))
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	return string(content), err
+}
+
+func topLevel(ctx context.Context) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return git.TopLevel(ctx, cwd)
+}
+
+func (s prBodySource) Commits(ctx context.Context, base string) ([]string, error) {
+	worktree, err := topLevel(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if strings.HasPrefix(base, "-") {
+		return nil, usageError{fmt.Errorf("--base %q must be a ref, not an option", base)}
+	}
+	if base == "" {
+		cfg, err := config.Load(s.flags, worktree)
+		if err != nil {
+			return nil, err
+		}
+		base = cfg.Git.DefaultBranch
+	}
+	if base == "" {
+		if base, err = git.DefaultBranch(ctx, worktree); err != nil {
+			return nil, err
+		}
+	}
+	out, err := git.Run(ctx, worktree, nil, "log", "--reverse", "--format=%s", "--end-of-options", base+"..HEAD")
+	if err != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(out, "\n"), nil
+}
 
 type usageError struct{ error }
 
@@ -115,7 +172,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newVerifyCommand(root.PersistentFlags()), newGatesCommand(root.PersistentFlags()), newLintCommand(root.PersistentFlags(), version), newLiveCommand(root.PersistentFlags()))
 	root.AddCommand(newInitCommand(root.PersistentFlags(), version))
 	root.AddCommand(newReportCommand(root.PersistentFlags()))
-	root.AddCommand(guardcli.NewPRCommand())
+	root.AddCommand(guardcli.NewPRCommand(prBodySource{flags: root.PersistentFlags()}))
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",

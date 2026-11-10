@@ -875,6 +875,72 @@ func TestPreRunCreatesNoState(t *testing.T) {
 	}
 }
 
+func TestPRBodyCreatesNoState(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	gitIn(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFiles(t, dir, "chore: first", nil)
+
+	code, _, stderr := execute(t, "pr", "body")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if _, err := os.Stat(defaultStatePath(dir)); !os.IsNotExist(err) {
+		t.Fatalf("stat %s: err = %v, want the file to not exist", defaultStatePath(dir), err)
+	}
+}
+
+func TestPRBodyBaseFlag(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: first", nil)
+	gitIn(t, dir, "tag", "pr-base")
+	commitFiles(t, dir, "feat: second", nil)
+
+	code, stdout, stderr := execute(t, "pr", "body", "--base", "pr-base")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	if !strings.Contains(stdout, "- feat: second\n") || strings.Contains(stdout, "chore: first") {
+		t.Fatalf("stdout = %q, want only the commits over pr-base", stdout)
+	}
+}
+
+func TestPRBodyRefusesAnOptionAsBase(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	commitFiles(t, dir, "chore: first", nil)
+
+	code, stdout, _ := execute(t, "pr", "body", "--base=--output=x")
+
+	if code == exitOK || stdout != "" {
+		t.Fatalf("code = %d, stdout = %q, want a refusal with no body", code, stdout)
+	}
+}
+
+func TestPRBodyPrintsThePlanDiagramUnderHow(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	gitIn(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFiles(t, dir, "chore: first", nil)
+	_, out, _ := execute(t, commandRun, "start", "Add the login page")
+	runID := startedRunID(t, out)
+	fence := "```mermaid\nflowchart TD\n    a --> b +\n```\n"
+	writeRunPlan(t, dir, runID, "# Plan\n\n"+fence)
+
+	code, stdout, stderr := execute(t, "pr", "body")
+
+	if code != exitOK {
+		t.Fatalf("code = %d, stderr = %q", code, stderr)
+	}
+	_, how, found := strings.Cut(stdout, "## How\n")
+	if !found || !strings.Contains(how, fence) {
+		t.Fatalf("stdout = %q, want the fence under How", stdout)
+	}
+}
+
 func TestRunAbandonSpansCarryTheRun(t *testing.T) {
 	clearHarnessEnv(t)
 	dir := initRepo(t)
