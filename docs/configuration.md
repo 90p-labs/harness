@@ -59,6 +59,7 @@ Telemetry is not a key of `.harness.yaml`. Set the endpoint in the env. Under Cl
 - `HARNESS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: the traces endpoint.
 - `HARNESS_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`: the metrics endpoint.
 - `HARNESS_OTEL_EXPORTER_OTLP_ENDPOINT`: one endpoint for both signals.
+- `HARNESS_OTEL_TRACE_DETAIL`: the detail level of the `plugin.call` spans. `compact` is the default. `full` keeps a span for each plugin call.
 
 For one signal, the harness reads the first env variable that is set, in this order:
 
@@ -93,7 +94,28 @@ A hook cannot see model time or a server tool call. A gap between hook spans sit
 - A user interrupt fires no stop. The turn then ends at the next prompt and holds the idle time.
 - With no active run, the harness stores no mark. The first turn of a run has no span.
 - A turn or subagent with no closing hook has no span.
-- There is no tool span.
+- The `tool.call` span covers a tool call of Claude Code only.
+
+### Spans that answer an audit
+
+- `plugin.call`: with `compact`, the harness keeps the span only for a deny or an error. With `full`, it keeps every span.
+- `hook.handle`: has `harness.tool` on a tool hook. On a deny, it has `harness.rule`, the names of the denying plugins, such as `guard.<rule id>`.
+- `run.transition`: has `harness.review.round`. A `request-rework` also has `harness.rework.class` and `harness.rework.severity`.
+- `tool.call`: one span for each tool call. It starts at `PreToolUse`. It ends at `PostToolUse`, `PostToolUseFailure` or `SessionEnd`. It has `harness.tool`, `harness.tool.kind`, `harness.tool.outcome` (`succeeded`, `failed` or `interrupted`) and `harness.session.id`.
+- `run.report`: one span for each call of `harness run report`.
+- No span carries command text, tool input, a response or an error text from a tool.
+
+### Audit a run
+
+`harness run report [<run id>]` prints the rework rounds, the amends, the stop blocks and the rework classes. It also prints the minutes in each phase and the trace ID. Use the trace ID to find the trace in Jaeger.
+
+To count the denies, the reworks, the amends, the stop blocks and the tool outcomes, read the trace from Jaeger. Use the jq program `docs/audit-trace.jq`:
+
+```sh
+curl -sf localhost:16686/api/v3/traces/<trace id> | jq -e -f docs/audit-trace.jq
+```
+
+The program prints nothing and `jq -e` fails when the trace has no `run.transition` span.
 
 The root span appears only after the run reaches done or abandoned. Until then, the trace in the backend has no root span. If that export fails, the trace has no root span.
 

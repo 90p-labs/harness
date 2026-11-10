@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-07.
+Accepted, 2026-11-07. Updated 2026-11-10 for the tool call span and the run report.
 
 ## Context
 
@@ -22,6 +22,8 @@ Kodify builds one tracer provider for each span, has no metrics and gives the mo
 - A process of an active run is a child of the root span. A `TRACEPARENT` in the same trace stays the parent. A parent in another trace is replaced by the root span.
 - The harness exports the root span when the run reaches done or abandoned, for example through `harness run done`, `harness run abandon` or the live check.
 - The harness exports an `agent.turn` span for each agent turn and an `agent.subagent` span for each subagent. It builds them from the hook events. The start time is stored in the state database.
+- The `plugin.call` span has a detail level. The default `compact` keeps the span only for a deny or an error. `HARNESS_OTEL_TRACE_DETAIL=full` keeps every span.
+- A span attribute never holds a secret. No span carries command text, tool input, a response or an error text from a tool.
 
 ## Consequences
 

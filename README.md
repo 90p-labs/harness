@@ -134,6 +134,7 @@ The agent normally runs these commands, and the hooks enforce the order. The blo
 | `/90p:harness approve` | Approve the plan |
 | `/90p:harness abandon` | Abandon the run |
 | `harness run status` | Print the phase of the run |
+| `harness run report` | Print the rework rounds, the stop blocks and the trace ID of the run |
 | `harness plan view` | Write the plan as an HTML page |
 | `harness verify` | Run the gates and the acceptance criteria |
 | `harness verify --commits main` | Check each commit of the branch |
