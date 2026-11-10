@@ -106,6 +106,44 @@ func TestTransitionCommand(t *testing.T) {
 	}
 }
 
+func TestReworkClass(t *testing.T) {
+	t.Run("the class is stored with the transition", func(t *testing.T) {
+		repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: domain.PhaseReviewing}}
+		connect := func(context.Context) (cli.Handlers, func() error, error) {
+			flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, nil, domain.Policy{MaxReviewRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"), noTrace{})
+			return cli.Handlers{Transition: transition.NewHandler(repo, flow), Status: status.NewHandler(repo)}, func() error { return nil }, nil
+		}
+		cmd := cli.NewCommand(connect)
+		cmd.SetOut(&bytes.Buffer{})
+		cmd.SetArgs([]string{"rework", "--findings", "F1 major a.go:1", "--class", string(domain.ReworkSpecGap)})
+
+		if err := cmd.ExecuteContext(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(repo.saved) != 1 || repo.saved[0].Events()[0].Class != domain.ReworkSpecGap {
+			t.Fatalf("saved = %+v, want class %s", repo.saved, domain.ReworkSpecGap)
+		}
+	})
+
+	t.Run("an unknown class is refused before the transition", func(t *testing.T) {
+		connect := func(context.Context) (cli.Handlers, func() error, error) {
+			t.Fatal("the command connected with an unknown class")
+			return cli.Handlers{}, nil, nil
+		}
+		cmd := cli.NewCommand(connect)
+		cmd.SetOut(&bytes.Buffer{})
+		cmd.SetErr(&bytes.Buffer{})
+		cmd.SetArgs([]string{"rework", "--findings", "F1", "--class", "bogus"})
+
+		err := cmd.ExecuteContext(t.Context())
+
+		if err == nil || !strings.Contains(err.Error(), "bogus") {
+			t.Fatalf("err = %v, want an unknown class error", err)
+		}
+	})
+}
+
 func TestApproveCommandFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"approve", "--by", "fable"},

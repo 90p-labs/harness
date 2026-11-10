@@ -8,5 +8,6 @@ type Transitioned struct {
 	Event  Event
 	To     Phase
 	Reason string
+	Class  ReworkClass
 	At     time.Time
 }

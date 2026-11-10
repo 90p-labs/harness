@@ -9,21 +9,22 @@ import (
 )
 
 type Run struct {
-	ID          string
-	Key         RunKey
-	Prompt      string
-	Track       shareddomain.Track
-	Phase       Phase
-	ReviewRound int
-	LiveRound   int
-	StopBlocks  int
-	BlockedFrom Phase
-	Reason      string
-	PRURL       string
-	PRs         []string
-	Version     int
-	StartedAt   time.Time
-	events      []Transitioned
+	ID              string
+	Key             RunKey
+	Prompt          string
+	Track           shareddomain.Track
+	Phase           Phase
+	ReviewRound     int
+	LiveRound       int
+	StopBlocks      int
+	StopBlocksTotal int
+	BlockedFrom     Phase
+	Reason          string
+	PRURL           string
+	PRs             []string
+	Version         int
+	StartedAt       time.Time
+	events          []Transitioned
 }
 
 func (r Run) Events() []Transitioned { return slices.Clone(r.events) }
@@ -42,9 +43,11 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 	next := r
 	next.Phase = row.To
 	next.StopBlocks = 0
-	next.events = append(slices.Clone(r.events), Transitioned{
-		RunID: r.ID, From: r.Phase, Event: cmd.Event, To: row.To, Reason: cmd.Reason, At: cmd.At,
-	})
+	transitioned := Transitioned{RunID: r.ID, From: r.Phase, Event: cmd.Event, To: row.To, Reason: cmd.Reason, At: cmd.At}
+	if cmd.Event == EventRequestRework {
+		transitioned.Class = cmd.Class
+	}
+	next.events = append(slices.Clone(r.events), transitioned)
 
 	switch {
 	case row.To == PhaseBlocked:

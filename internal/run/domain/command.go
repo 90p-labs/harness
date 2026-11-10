@@ -12,5 +12,6 @@ type Command struct {
 	By     string
 	Track  shareddomain.Track
 	PRURL  string
+	Class  ReworkClass
 	At     time.Time
 }

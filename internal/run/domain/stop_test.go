@@ -49,3 +49,33 @@ func TestDecideStop(t *testing.T) {
 		})
 	}
 }
+
+func TestStopBlocksTotal(t *testing.T) {
+	policy := domain.Policy{MaxStopBlocks: 3}
+	run := domain.Run{Phase: domain.PhaseWorking}
+	for range 2 {
+		_, run = domain.DecideStop(run, policy, false)
+	}
+	if run.StopBlocks != 2 || run.StopBlocksTotal != 2 {
+		t.Fatalf("blocks = %d, total = %d, want 2 and 2", run.StopBlocks, run.StopBlocksTotal)
+	}
+
+	next, err := run.Apply(domain.Command{Event: domain.EventSubmitForReview}, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.StopBlocks != 0 || next.StopBlocksTotal != 2 {
+		t.Errorf("after Apply blocks = %d, total = %d, want 0 and 2", next.StopBlocks, next.StopBlocksTotal)
+	}
+}
+
+func TestReworkClassIsRecorded(t *testing.T) {
+	run := domain.Run{Phase: domain.PhaseReviewing}
+	next, err := run.Apply(domain.Command{Event: domain.EventRequestRework, Reason: "F1", Class: domain.ReworkSpecGap}, domain.Policy{MaxReviewRounds: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events := next.Events(); len(events) != 1 || events[0].Class != domain.ReworkSpecGap {
+		t.Errorf("events = %+v, want class %s", events, domain.ReworkSpecGap)
+	}
+}

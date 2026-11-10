@@ -1,0 +1,2 @@
+ALTER TABLE run_transitions ADD COLUMN rework_class TEXT NOT NULL DEFAULT '';
+ALTER TABLE runs ADD COLUMN stop_blocks_total INTEGER NOT NULL DEFAULT 0;

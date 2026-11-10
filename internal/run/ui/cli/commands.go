@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -24,6 +25,7 @@ const (
 	flagReason   = "reason"
 	flagPR       = "pr"
 	flagBy       = "by"
+	flagClass    = "class"
 
 	runLineFormat  = "run %s phase=%s review_round=%d live_round=%d"
 	reasonPrefix   = "reason: "
@@ -31,13 +33,27 @@ const (
 	noActiveRun    = "active: no"
 	missingFlagMsg = "required flag %q not set"
 	pairedFlagsMsg = "flags %q and %q go together"
+	unknownClass   = "unknown rework class %q"
 	planningHint   = "write the plan in %s, then harness run plan"
 )
+
+var reworkClasses = []domain.ReworkClass{
+	domain.ReworkImplementation, domain.ReworkSpecGap, domain.ReworkGateCheckable, domain.ReworkMinor,
+}
+
+func reworkClassNames(separator, lastSeparator string) string {
+	names := make([]string, len(reworkClasses))
+	for i, class := range reworkClasses {
+		names[i] = string(class)
+	}
+	last := len(names) - 1
+	return strings.Join(names[:last], separator) + lastSeparator + names[last]
+}
 
 var phaseHints = map[domain.Phase]string{
 	domain.PhaseAwaitingApproval: "ask the Plan question; when the user picks Approve, run harness run approve",
 	domain.PhaseWorking:          "implement test first, run harness verify, then harness run review",
-	domain.PhaseReviewing:        "review the change, then harness run ship, or harness run rework --findings",
+	domain.PhaseReviewing:        "review the change, then harness run ship, or harness run rework --findings \"<id, severity, file:line>\" --class <" + reworkClassNames("|", "|") + ">",
 	domain.PhaseShipping:         "merge the change, then harness run done --pr URL",
 	domain.PhaseReleasing:        "deploy the change and wait for the live check",
 	domain.PhaseObserving:        "watch the signals until the live check ends the run",
@@ -134,6 +150,7 @@ func statusCommand(connect Connect) *cobra.Command {
 
 func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 	approvedBy := spec.event == domain.EventApprovePlan
+	classed := spec.event == domain.EventRequestRework
 	cmd := &cobra.Command{
 		Use:   spec.use,
 		Short: spec.short,
@@ -146,6 +163,9 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 			}
 			if approvedBy && (flagValue(cmd, flagBy) == "") != (flagValue(cmd, flagReason) == "") {
 				return fmt.Errorf(pairedFlagsMsg, flagBy, flagReason)
+			}
+			if class := domain.ReworkClass(flagValue(cmd, flagClass)); classed && class != "" && !class.Known() {
+				return fmt.Errorf(unknownClass, class)
 			}
 			if spec.flag == flagPR {
 				_, err := shareddomain.ParsePRURL(flagValue(cmd, flagPR))
@@ -168,6 +188,7 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 				default:
 					command.Reason = flagValue(cmd, spec.flag)
 				}
+				command.Class = domain.ReworkClass(flagValue(cmd, flagClass))
 				if err = h.Transition.Handle(ctx, command); err != nil {
 					return err
 				}
@@ -177,6 +198,9 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 	}
 	if spec.flag != "" {
 		cmd.Flags().String(spec.flag, "", "the "+spec.flag+" of the change")
+	}
+	if classed {
+		cmd.Flags().String(flagClass, "", "the class of the rework: "+reworkClassNames(", ", " or "))
 	}
 	if approvedBy {
 		cmd.Flags().String(flagBy, "", "the model that approves without the recorded answer of the user")
