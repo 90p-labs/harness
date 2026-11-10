@@ -52,7 +52,33 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step.
    - Use low effort for a haiku task that is mundane: docs, a rename or a config change.
    - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.
    - Send a failed task once to a new `worker` agent, with the same `model` field.
-   - Commit in plan order, one commit for each task. Run `harness verify --commits <default branch>`, then `harness run review`.
+   - Commit in plan order, one commit for each task. Run `harness verify --commits <default branch>`.
+   - Self-check: start one `worker` agent with the `model` field set to the first model of the `worker` role. It reads `git diff <default branch>...HEAD`, the lens checklists of `agents/reviewer.md` and `plan.md`. It runs each proof command of `## Acceptance criteria`. A `|` in a proof command is written `\|` in the proof table.
+   - The worker writes `self-check.md` in the run folder, in this format. The results are `pass`, `fixed` or `open`. The proof table has one row for each criterion.
+     ```text
+     # Self-check
+
+     Head: <full sha of HEAD>
+
+     | Check | Result | Evidence |
+     |-------|--------|----------|
+     | spec-proof | pass | <criterion or file:line> |
+     | spec-scope | pass | <criterion or file:line> |
+     | spec-text | pass | <criterion or file:line> |
+     | standards-rules | pass | <criterion or file:line> |
+     | standards-judgement | pass | <criterion or file:line> |
+
+     | # | Proof | Exit |
+     |---|-------|------|
+     | 1 | `<proof command>` | 0 |
+     ```
+   - `spec-proof`: each criterion has its code, and its proof fails without the code.
+   - `spec-scope`: each task changed only its owned files, with no missing or partial requirement and no scope creep.
+   - `spec-text`: each changed doc sentence agrees with the code and with the other docs.
+   - `standards-rules`: the diff follows `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md` and the lint rules.
+   - `standards-judgement`: edge cases, error paths, leaks, dead code and code smells.
+   - The worker fixes each miss test first. The lead commits each fix with `git commit --fixup=<sha>`, rebases with autosquash, and runs `harness verify --commits <default branch>` again. An `open` check goes to a fix worker.
+   - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`.
    - After `harness run rework`, do the steps Fix and Re-review of phase 5.
 5. `reviewing`: run the steps below in order. Start each agent in a fresh context.
    - **Common list**: start one `reviewer` agent for each listed model, in parallel, on the same `HEAD`. Set the `model` field of each agent call.
