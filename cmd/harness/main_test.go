@@ -414,6 +414,7 @@ func startWithPlan(t *testing.T, dir, plan string) (runID string) {
 	_, stdout, _ := execute(t, commandRun, "start", "Add the login page")
 	runID = startedRunID(t, stdout)
 	writeRunPlan(t, dir, runID, plan)
+	writeSelfCheck(t, dir, runID)
 	for _, step := range [][]string{{commandPlan}, approveByTest} {
 		if code, _, stderr := execute(t, append([]string{commandRun}, step...)...); code != exitOK {
 			t.Fatalf("run %s: code = %d, stderr = %q", step, code, stderr)
@@ -1239,6 +1240,14 @@ func writeRunPlan(t *testing.T, dir, runID, body string) {
 	}
 }
 
+func writeSelfCheck(t *testing.T, dir, runID string) {
+	t.Helper()
+	file := filepath.Join(dir, filepath.FromSlash(shareddomain.RunSelfCheckFile(runID)))
+	if err := os.WriteFile(file, []byte("# Self-check\n\nHead: "+strings.Repeat("a", 40)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func validPlan(t *testing.T) string {
 	t.Helper()
 	body, err := os.ReadFile(validPlanFile(t))
@@ -1416,7 +1425,9 @@ func TestRunLifecycle(t *testing.T) {
 			}
 		}
 		if step.args[0] == "start" {
-			writeRunPlan(t, dir, startedRunID(t, stdout), valid)
+			runID := startedRunID(t, stdout)
+			writeRunPlan(t, dir, runID, valid)
+			writeSelfCheck(t, dir, runID)
 		}
 	}
 

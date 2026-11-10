@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	runID      = "run-1"
-	baseBranch = "develop"
-	mainBranch = "main"
-	planText   = "# Plan: a\n" +
+	runID         = "run-1"
+	baseBranch    = "develop"
+	goodSelfCheck = "# Self-check\n\nHead: 0123456789abcdef0123456789abcdef01234567\n"
+	mainBranch    = "main"
+	planText      = "# Plan: a\n" +
 		"\n## Acceptance criteria\n\n| # | Criterion | Proof |\n|---|---|---|\n| 1 | It works. | `make check` |\n" +
 		"\n## Tasks\n\n### 1. Work\n\n- Side: backend\n- Owned files: `pkg/a.go`, `pkg/a_test.go`\n" +
 		"- Test first: `a_test.go`: `TestA` fails.\n- DoD: criterion 1.\n- Depends on: none\n" +
@@ -76,7 +77,19 @@ func worktreeWith(t *testing.T, planBase string) string {
 	if err := os.WriteFile(file, []byte(strings.Replace(planText, "%s", planBase, 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeSelfCheck(t, dir, goodSelfCheck)
 	return dir
+}
+
+func writeSelfCheck(t *testing.T, dir, body string) {
+	t.Helper()
+	file := filepath.Join(dir, filepath.FromSlash(shareddomain.RunSelfCheckFile(runID)))
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func newPlugin(dir string, b *branches, p proofs) shareddomain.Plugin {
@@ -160,3 +173,57 @@ func TestReviewPlugin(t *testing.T) {
 		}
 	})
 }
+
+func TestSelfCheckRequired(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name       string
+		body       *string
+		deny       bool
+		unreadable bool
+	}{
+		{name: "missing file", deny: true},
+		{name: "unreadable file", deny: true, unreadable: true},
+		{name: "no Head line", body: ptr("# Self-check\n\nall good\n"), deny: true},
+		{name: "Head without a sha", body: ptr("# Self-check\n\nHead: HEAD\n"), deny: true},
+		{name: "good file", body: ptr(goodSelfCheck)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := worktreeWith(t, "")
+			file := filepath.Join(dir, filepath.FromSlash(shareddomain.RunSelfCheckFile(runID)))
+			if c.body == nil {
+				if err := os.Remove(file); err != nil {
+					t.Fatal(err)
+				}
+				if c.unreadable {
+					if err := os.Mkdir(file, 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else {
+				writeSelfCheck(t, dir, *c.body)
+			}
+
+			verdict, err := newPlugin(dir, &branches{branch: cleanBranch()}, proofs{1: true}).Handle(ctx, envelope(t, dir, shareddomain.TransitionSubmitForReview))
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !c.deny {
+				if verdict.Kind != shareddomain.VerdictAllow {
+					t.Fatalf("verdict = %+v, want allow", verdict)
+				}
+				return
+			}
+			if verdict.Kind != shareddomain.VerdictDeny || !strings.Contains(verdict.Reason, shareddomain.RunSelfCheckFile(runID)) {
+				t.Fatalf("verdict = %+v, want a deny that names the self-check file", verdict)
+			}
+			if c.unreadable && strings.Contains(verdict.Reason, "is missing") {
+				t.Fatalf("reason = %q, want a read error, not missing", verdict.Reason)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
