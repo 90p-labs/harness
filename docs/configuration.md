@@ -144,6 +144,7 @@ The policy of the run loop. `harness run` reads it on each transition.
 | `go_live` | bool | `false` | `HARNESS_RUN_GO_LIVE` | `true` adds the phases `releasing` and `observing` after the merge. See [go-live](go-live.md) |
 | `max_review_rounds` | int, 1 or more | `3` | `HARNESS_RUN_MAX_REVIEW_ROUNDS` | The review rounds of a run. A rework request in the last round moves the run to `blocked` |
 | `max_live_rounds` | int, 1 or more | `3` | `HARNESS_RUN_MAX_LIVE_ROUNDS` | The production regressions that send the run back to `planning`. The last one moves the run to `blocked` |
+| `strict_minor` | bool | `false` | `HARNESS_RUN_STRICT_MINOR` | `false` counts a review round only for a real open blocker or major finding. A minor finding moves the run to `working` and keeps the round. `true` counts a minor finding like a major one |
 | `max_stop_blocks` | int, 1 or more | `3` | `HARNESS_RUN_MAX_STOP_BLOCKS` | How many times in a row the guard refuses the end of an agent turn in a phase that holds the turn |
 
 A plan with only `docs` commits and no open question skips the approval, also with `approval: true`.
@@ -164,7 +165,7 @@ Your own commands on the event bus. The harness writes the event envelope as JSO
 | `command` | list of strings | required | none | The program and its arguments. The harness runs it with no shell |
 | `events` | list of strings | required | none | One event name or more, from the table below. An unknown name is an error |
 | `timeout` | duration | `5s` | none | The longest run of one call. `0` gives `5s`. A negative value is an error |
-| `transition` | list of strings | none | none | Optional. Only for the events `run.transition.before` and `run.transition.after`; any other event with it is an error. The plugin runs only for these transitions: `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume`, `abandon`. A value in one key is an OR. The three keys together are an AND |
+| `transition` | list of strings | none | none | Optional. Only for the events `run.transition.before` and `run.transition.after`; any other event with it is an error. The plugin runs only for these transitions: `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `rework-minor`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume`, `abandon`. A value in one key is an OR. The three keys together are an AND |
 | `from` | list of strings | none | none | Optional. Same rules as `transition`. The plugin runs only when the run leaves one of these phases: `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done`, `abandoned`. The transition `start` has no phase before it, so `from` never matches it |
 | `to` | list of strings | none | none | Optional. Same rules as `transition`. The plugin runs only when the run enters one of these phases: `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done`, `abandoned` |
 
@@ -202,7 +203,7 @@ plugins:
 
 ### Filter a transition
 
-The keys `transition`, `from` and `to` pick the run transitions that a plugin sees. The transition names are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phase names are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`.
+The keys `transition`, `from` and `to` pick the run transitions that a plugin sees. The transition names are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `rework-minor`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phase names are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`.
 
 - Values in one key are an OR. The keys together are an AND.
 - A plugin with no filter sees all transitions.

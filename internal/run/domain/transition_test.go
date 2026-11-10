@@ -18,7 +18,7 @@ var resumable = allPhases[1:8]
 
 var allEvents = []domain.Event{
 	domain.EventStart, domain.EventSubmitPlan, domain.EventApprovePlan, domain.EventAmend,
-	domain.EventSubmitForReview, domain.EventRequestRework, domain.EventApproveReview,
+	domain.EventSubmitForReview, domain.EventRequestRework, domain.EventReworkMinor, domain.EventApproveReview,
 	domain.EventComplete, domain.EventDeploy, domain.EventClose, domain.EventRegress,
 	domain.EventBlock, domain.EventResume, domain.EventAbandon,
 }

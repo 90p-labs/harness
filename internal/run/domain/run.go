@@ -44,7 +44,7 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 	next.Phase = row.To
 	next.StopBlocks = 0
 	transitioned := Transitioned{RunID: r.ID, From: r.Phase, Event: cmd.Event, To: row.To, Reason: cmd.Reason, At: cmd.At}
-	if cmd.Event == EventRequestRework {
+	if cmd.Event.IsRework() {
 		transitioned.Class = cmd.Class
 	}
 	next.events = append(slices.Clone(r.events), transitioned)
@@ -60,9 +60,10 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 		next.Track = shareddomain.Stricter(r.Track, cmd.Track)
 	case cmd.Event == EventApprovePlan:
 		next.Track = shareddomain.Stricter(r.Track, cmd.Track)
-		next.ReviewRound = 0
 	case cmd.Event == EventRequestRework:
 		next.ReviewRound++
+		next.Reason = cmd.Reason
+	case cmd.Event == EventReworkMinor:
 		next.Reason = cmd.Reason
 	case cmd.Event == EventComplete:
 		next.PRURL = cmd.PRURL

@@ -78,10 +78,10 @@ func (h Handler) Handle(ctx context.Context, query Query) (result Report, err er
 	result = Report{ID: run.ID, Phase: run.Phase, StopBlocks: run.StopBlocksTotal, TraceID: h.traceID(run.ID)}
 	classes := map[domain.ReworkClass]int{}
 	for _, row := range rows {
-		switch row.Event {
-		case domain.EventRequestRework:
+		switch {
+		case row.Event.IsRework():
 			result.ReworkRounds++
-		case domain.EventAmend:
+		case row.Event == domain.EventAmend:
 			result.Amends++
 		}
 		if row.Class != "" {

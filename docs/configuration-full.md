@@ -15,6 +15,7 @@ run:
   max_review_rounds: 3
   max_live_rounds: 3
   max_stop_blocks: 3
+  strict_minor: false
 plugins:
   - name: notify-approval
     command: [scripts/notify.sh]

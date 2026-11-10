@@ -84,6 +84,7 @@ stateDiagram-v2
     working --> reviewing: submit-for-review
     reviewing --> working: request-rework [rounds left]
     reviewing --> blocked: request-rework [last round]
+    reviewing --> working: rework-minor
     reviewing --> shipping: approve-review
     shipping --> done: complete [go-live off]
     shipping --> releasing: complete [go-live on]
@@ -119,13 +120,16 @@ stateDiagram-v2
     abandoned --> [*]
 ```
 
+The `rework` command reads `findings.md` of the run folder. A real open blocker or major finding gives `request-rework`. Only minor findings give `rework-minor`, or `request-rework` when `run.strict_minor` is on. No real open finding is an error.
+
 The effects of each event on the run, besides the phase:
 
 | Event | Effect |
 |---|---|
 | any | `StopBlocks` goes to 0 |
-| `approve-plan` | `Track` keeps the stricter of the run track and the plan track, `ReviewRound` goes to 0 |
+| `approve-plan` | `Track` keeps the stricter of the run track and the plan track |
 | `request-rework` into `working` | `ReviewRound` goes up by 1, `Reason` holds the findings |
+| `rework-minor` | `ReviewRound` stays, `Reason` holds the findings |
 | any event into `blocked` | `BlockedFrom` holds the old phase, `Reason` holds the reason or the findings |
 | `resume` | `BlockedFrom` and `Reason` are cleared |
 | `regress` into `planning` | `LiveRound` goes up by 1, `ReviewRound` goes to 0, `Reason` holds the regression findings |
@@ -137,9 +141,10 @@ The Go types are in `internal/run/domain`:
 | `phase.go` | `Phase`, one constant for each phase, `Phase.HoldsTheTurn()` |
 | `event.go` | `Event`, one constant for each event of the diagram |
 | `command.go` | `Command{Event, Reason}` |
-| `policy.go` | `Policy{ApprovalNeeded, MaxReviewRounds, GoLive, MaxLiveRounds, MaxStopBlocks}` |
+| `policy.go` | `Policy{ApprovalNeeded, MaxReviewRounds, GoLive, MaxLiveRounds, MaxStopBlocks, StrictMinor}` |
 | `guard.go` | `Guard{Name, Holds}`, one variable for each guard |
 | `transition.go` | `Transition{From, Event, Guard, To}`, `Transitions()` returns a copy of the table |
+| `rework_round.go` | `ReworkEvent(findings, policy)` picks `request-rework` or `rework-minor`, and the `FindingsReader` port |
 | `run.go` | `Run`, `Run.Apply(cmd, policy) (Run, error)` |
 | `stop.go` | `StopVerdict{Block, Reason}`, `DecideStop(run, policy, agentRunning)` |
 | `errors.go` | `ErrIllegalTransition`, wrapped with the phase and the event |
@@ -188,6 +193,7 @@ classDiagram
         +GoLive bool
         +MaxLiveRounds int
         +MaxStopBlocks int
+        +StrictMinor bool
     }
     class StopVerdict {
         +Block bool
@@ -277,7 +283,7 @@ An exec plugin writes a verdict on stdout, so the gate line is a JSON string ins
 
 Only one plugin renders a chart. An exec plugin on `chart.render` while `helm` is on is a config error. With no renderer, the chart rules stop with `no plugin rendered the chart`. A document with no `# Source:` comment also stops them, so a render in another format cannot pass as clean.
 
-A plugin on `run.transition.before` or `run.transition.after` can filter by `transition`, `from` and `to`. The transitions are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phases are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`. Values in one key are an OR, and the keys together are an AND. No filter matches all transitions.
+A plugin on `run.transition.before` or `run.transition.after` can filter by `transition`, `from` and `to`. The transitions are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `rework-minor`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phases are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`. Values in one key are an OR, and the keys together are an AND. No filter matches all transitions.
 
 The payload is `{"event","from","to","reason"}`. In the `run.transition.before` payload `to` is the phase that the transition would reach. On `run.transition.after`, the envelope `run.phase` is the source phase, so a plugin reads `payload.to`. The transition `start` has an empty `from`.
 
@@ -554,6 +560,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `run.max_review_rounds` | `3` | 1 or more |
 | `run.max_live_rounds` | `3` | 1 or more |
 | `run.max_stop_blocks` | `3` | 1 or more |
+| `run.strict_minor` | `false` | `true` counts a minor finding as a review round |
 | `live.environment` | `production` | The GitHub deployment environment |
 | `live.rollback` | empty | The rollback line of the findings |
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
@@ -596,7 +603,7 @@ Exit codes:
 | `approve` | `--by` and `--reason`, both or neither | `approve-plan` |
 | `amend` | none | `amend` |
 | `review` | none | `submit-for-review` |
-| `rework` | `--findings`, required | `request-rework` |
+| `rework` | `--findings`, required | `request-rework`, or `rework-minor` when the real open findings of `findings.md` are all minor |
 | `ship` | none | `approve-review` |
 | `done` | none | `complete` |
 | `block` | `--reason`, required | `block` |

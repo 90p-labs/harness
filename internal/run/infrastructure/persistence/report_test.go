@@ -44,6 +44,11 @@ func readReasons(t *testing.T) []reasonRow {
 
 func seedReworks(t *testing.T, s store, repo string, rows []reasonRow) {
 	t.Helper()
+	seedEvents(t, s, repo, domain.EventRequestRework, rows)
+}
+
+func seedEvents(t *testing.T, s store, repo string, event domain.Event, rows []reasonRow) {
+	t.Helper()
 	runs := map[string]bool{}
 	for _, row := range rows {
 		if !runs[row.Run] {
@@ -54,7 +59,7 @@ func seedReworks(t *testing.T, s store, repo string, rows []reasonRow) {
 			save(t, s, run)
 		}
 		_, err := s.db.Exec("INSERT INTO run_transitions (run_id, at, from_phase, event, to_phase, reason, rework_class) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			row.Run, clock.UTC(), domain.PhaseReviewing, domain.EventRequestRework, domain.PhaseWorking, "reason", row.Class)
+			row.Run, clock.UTC(), domain.PhaseReviewing, event, domain.PhaseWorking, "reason", row.Class)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,6 +103,23 @@ func TestRepeatClassesCount(t *testing.T) {
 					t.Fatalf("got %+v, %v, want %+v", got, err, want)
 				}
 			})
+		})
+	}
+}
+
+func TestRepeatClassesCountMinorReworks(t *testing.T) {
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			seedEvents(t, s, key.Repo, domain.EventRequestRework, []reasonRow{{Run: "a", Class: domain.ReworkMinor}})
+			seedEvents(t, s, key.Repo, domain.EventReworkMinor, []reasonRow{{Run: "b", Class: domain.ReworkMinor}})
+
+			got, err := s.repo.RepeatClasses(context.Background(), key.Repo)
+
+			want := []domain.ClassCount{{Class: domain.ReworkMinor, Count: 2}}
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %+v, %v, want %+v", got, err, want)
+			}
 		})
 	}
 }

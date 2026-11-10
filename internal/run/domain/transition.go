@@ -29,6 +29,7 @@ func buildTable() []Transition {
 		{PhaseWorking, EventSubmitForReview, always, PhaseReviewing},
 		{PhaseReviewing, EventRequestRework, roundsLeft, PhaseWorking},
 		{PhaseReviewing, EventRequestRework, lastRound, PhaseBlocked},
+		{PhaseReviewing, EventReworkMinor, always, PhaseWorking},
 		{PhaseReviewing, EventApproveReview, always, PhaseShipping},
 		{PhaseShipping, EventComplete, goLiveOff, PhaseDone},
 		{PhaseShipping, EventComplete, goLiveOn, PhaseReleasing},

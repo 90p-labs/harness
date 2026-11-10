@@ -71,7 +71,7 @@ func runWithStreams(t *testing.T, store *reportStore, now time.Time, args ...str
 		return cli.Handlers{
 			Key:        reportKey,
 			Start:      start.NewHandler(store, flow, func() time.Time { return now }),
-			Transition: transition.NewHandler(store, flow),
+			Transition: transition.NewHandler(store, flow, majorFinding{}, domain.Policy{}),
 			Status:     status.NewHandler(store),
 			Report: report.NewHandler(store, store, func() time.Time { return now },
 				func(id string) string { return "trace-of-" + id }, noop.NewTracerProvider().Tracer("test")),

@@ -38,6 +38,7 @@ type runView struct {
 	MaxReviewRounds int  `yaml:"max_review_rounds"`
 	MaxLiveRounds   int  `yaml:"max_live_rounds"`
 	MaxStopBlocks   int  `yaml:"max_stop_blocks"`
+	StrictMinor     bool `yaml:"strict_minor"`
 }
 
 type pluginView struct {
@@ -83,6 +84,7 @@ func viewOf(cfg config.Config) configView {
 			MaxReviewRounds: cfg.Run.MaxReviewRounds,
 			MaxLiveRounds:   cfg.Run.MaxLiveRounds,
 			MaxStopBlocks:   cfg.Run.MaxStopBlocks,
+			StrictMinor:     cfg.Run.StrictMinor,
 		},
 		Plugins: []pluginView{},
 		Roles:   map[string]map[string][]string{},

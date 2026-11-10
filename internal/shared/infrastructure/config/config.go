@@ -36,6 +36,7 @@ const (
 	keyMaxReviewRounds  = "run.max_review_rounds"
 	keyMaxLiveRounds    = "run.max_live_rounds"
 	keyMaxStopBlocks    = "run.max_stop_blocks"
+	keyStrictMinor      = "run.strict_minor"
 	keyPlugins          = "plugins"
 	keyRoles            = "roles"
 	keyGuardDisabled    = "guard.disabled"
@@ -151,6 +152,7 @@ type Run struct {
 	MaxReviewRounds int  `mapstructure:"max_review_rounds"`
 	MaxLiveRounds   int  `mapstructure:"max_live_rounds"`
 	MaxStopBlocks   int  `mapstructure:"max_stop_blocks"`
+	StrictMinor     bool `mapstructure:"strict_minor"`
 }
 
 type Plugin struct {
@@ -250,6 +252,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyMaxReviewRounds, defaultRounds)
 	v.SetDefault(keyMaxLiveRounds, defaultRounds)
 	v.SetDefault(keyMaxStopBlocks, defaultRounds)
+	v.SetDefault(keyStrictMinor, false)
 	v.SetDefault(keyPlugins, []any{})
 	v.SetDefault(keyGuardDisabled, []any{})
 	v.SetDefault(keyDeployDisabled, []any{})

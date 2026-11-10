@@ -3,6 +3,8 @@ package domain
 import (
 	"strings"
 	"unicode"
+
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 type ReworkClass string
@@ -22,24 +24,16 @@ func (c ReworkClass) Known() bool {
 	return false
 }
 
-type ReviewSeverity string
+var severityRank = map[shareddomain.ReviewSeverity]int{
+	shareddomain.SeverityMinor: 1, shareddomain.SeverityMajor: 2, shareddomain.SeverityBlocker: 3,
+}
 
-const (
-	SeverityBlocker ReviewSeverity = "blocker"
-	SeverityMajor   ReviewSeverity = "major"
-	SeverityMinor   ReviewSeverity = "minor"
-)
-
-var severityRank = map[ReviewSeverity]int{SeverityMinor: 1, SeverityMajor: 2, SeverityBlocker: 3}
-
-func (s ReviewSeverity) Known() bool { return severityRank[s] > 0 }
-
-func HighestSeverity(findings string) ReviewSeverity {
-	var highest ReviewSeverity
+func HighestSeverity(findings string) shareddomain.ReviewSeverity {
+	var highest shareddomain.ReviewSeverity
 	for _, finding := range strings.Split(findings, ";") {
 		words := strings.FieldsFunc(finding, func(r rune) bool { return !unicode.IsLetter(r) })
 		for _, word := range words {
-			severity := ReviewSeverity(strings.ToLower(word))
+			severity := shareddomain.ReviewSeverity(strings.ToLower(word))
 			if !severity.Known() {
 				continue
 			}

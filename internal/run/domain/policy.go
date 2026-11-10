@@ -6,4 +6,5 @@ type Policy struct {
 	GoLive          bool
 	MaxLiveRounds   int
 	MaxStopBlocks   int
+	StrictMinor     bool
 }

@@ -125,7 +125,7 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 		f.runTrace.End(ctx, next)
 	}
 	span.SetAttributes(attrPhaseTo.String(string(next.Phase)), attrReviewRound.Int(next.ReviewRound))
-	if cmd.Event == domain.EventRequestRework {
+	if cmd.Event.IsRework() {
 		span.SetAttributes(reworkAttributes(cmd)...)
 	}
 	return nil
@@ -171,18 +171,29 @@ func (f Flow) treeOnly(ctx context.Context, run domain.Run) bool {
 }
 
 type Handler struct {
-	repo domain.RunRepository
-	flow Flow
+	repo     domain.RunRepository
+	flow     Flow
+	findings domain.FindingsReader
+	policy   domain.Policy
 }
 
-func NewHandler(repo domain.RunRepository, flow Flow) Handler {
-	return Handler{repo: repo, flow: flow}
+func NewHandler(repo domain.RunRepository, flow Flow, findings domain.FindingsReader, policy domain.Policy) Handler {
+	return Handler{repo: repo, flow: flow, findings: findings, policy: policy}
 }
 
 func (h Handler) Handle(ctx context.Context, cmd Command) error {
 	run, err := h.load(ctx, cmd)
 	if err != nil {
 		return err
+	}
+	if cmd.Event == domain.EventRequestRework {
+		findings, err := h.findings.Read(ctx, run)
+		if err != nil {
+			return err
+		}
+		if cmd.Event, err = domain.ReworkEvent(findings, h.policy, cmd.Reason); err != nil {
+			return err
+		}
 	}
 	return h.flow.Move(ctx, run, domain.Command{Event: cmd.Event, Reason: cmd.Reason, By: cmd.By, PRURL: cmd.PRURL, Class: cmd.Class})
 }

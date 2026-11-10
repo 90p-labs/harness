@@ -10,7 +10,7 @@ import (
 const (
 	selectTransitions = "SELECT run_id, at, from_phase, event, to_phase, reason, rework_class FROM run_transitions WHERE run_id = ? ORDER BY at, id"
 	selectRepeatClass = "SELECT t.rework_class, count(*) AS n FROM run_transitions t JOIN runs r ON r.id = t.run_id " +
-		"WHERE r.repo = ? AND t.event = ? AND t.rework_class <> '' GROUP BY t.rework_class HAVING count(*) >= ? ORDER BY n DESC, t.rework_class"
+		"WHERE r.repo = ? AND t.event IN (?, ?) AND t.rework_class <> '' GROUP BY t.rework_class HAVING count(*) >= ? ORDER BY n DESC, t.rework_class"
 
 	minRepeatCount = 2
 )
@@ -35,7 +35,7 @@ func (r SQLRunRepository) Transitions(ctx context.Context, runID string) ([]doma
 }
 
 func (r SQLRunRepository) RepeatClasses(ctx context.Context, repo string) ([]domain.ClassCount, error) {
-	rows, err := r.db.QueryContext(ctx, selectRepeatClass, repo, string(domain.EventRequestRework), minRepeatCount)
+	rows, err := r.db.QueryContext(ctx, selectRepeatClass, repo, string(domain.EventRequestRework), string(domain.EventReworkMinor), minRepeatCount)
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ const (
 	TransitionApprovePlan     = "approve-plan"
 	TransitionAmend           = "amend"
 	TransitionRequestRework   = "request-rework"
+	TransitionReworkMinor     = "rework-minor"
 	TransitionSubmitForReview = "submit-for-review"
 	TransitionApproveReview   = "approve-review"
 	TransitionComplete        = "complete"
@@ -29,8 +30,10 @@ const (
 	PhaseDone             = "done"
 	PhaseAbandoned        = "abandoned"
 
-	runsFolder   = ".harness/runs"
-	planFileName = "plan.md"
+	runsFolder        = ".harness/runs"
+	planFileName      = "plan.md"
+	findingsFileName  = "findings.md"
+	selfCheckFileName = "self-check.md"
 )
 
 var Phases = []string{
@@ -40,7 +43,7 @@ var Phases = []string{
 
 var Transitions = []string{
 	TransitionStart, TransitionSubmitPlan, TransitionApprovePlan, TransitionAmend,
-	TransitionRequestRework, TransitionSubmitForReview, TransitionApproveReview,
+	TransitionRequestRework, TransitionReworkMinor, TransitionSubmitForReview, TransitionApproveReview,
 	TransitionComplete, TransitionDeploy, TransitionClose, TransitionRegress,
 	TransitionBlock, TransitionResume, TransitionAbandon,
 }
@@ -54,4 +57,12 @@ type TransitionPayload struct {
 
 func RunPlanFile(runID string) string {
 	return path.Join(runsFolder, runID, planFileName)
+}
+
+func RunFindingsFile(runID string) string {
+	return path.Join(runsFolder, runID, findingsFileName)
+}
+
+func RunSelfCheckFile(runID string) string {
+	return path.Join(runsFolder, runID, selfCheckFileName)
 }

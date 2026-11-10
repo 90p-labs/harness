@@ -31,6 +31,7 @@ const (
 	callKeep   = "keep"
 	callTree   = "tree"
 	callRow    = "row"
+	callRead   = "read"
 
 	spanName      = "run.transition"
 	attrRunID     = "harness.run.id"
@@ -186,6 +187,17 @@ func (f *fakeApprovals) Latest(context.Context, string) (string, bool, error) {
 	return f.latest, f.latestOK, f.latestErr
 }
 
+type fakeFindings struct {
+	journal  *journal
+	findings []shareddomain.ReviewFinding
+	err      error
+}
+
+func (f *fakeFindings) Read(context.Context, domain.Run) ([]shareddomain.ReviewFinding, error) {
+	f.journal.calls = append(f.journal.calls, callRead)
+	return f.findings, f.err
+}
+
 type fixture struct {
 	journal   *journal
 	repo      *fakeRepository
@@ -194,6 +206,7 @@ type fixture struct {
 	approvals *fakeApprovals
 	trace     *fakeTrace
 	spans     *tracetest.SpanRecorder
+	findings  *fakeFindings
 	handler   transition.Handler
 }
 
@@ -210,8 +223,9 @@ func newFixtureWith(stored domain.Run, policy domain.Policy) fixture {
 	gate := &fakeGate{journal: j, submission: domain.Submission{Track: shareddomain.TrackFull}}
 	approvals := &fakeApprovals{journal: j, recorded: map[string]bool{}}
 	runTrace := &fakeTrace{journal: j}
+	findings := &fakeFindings{journal: j}
 	flow := transition.NewFlow(repo, hooks, gate, approvals, policy, func() time.Time { return now }, tracer, runTrace)
-	return fixture{journal: j, repo: repo, hooks: hooks, gate: gate, approvals: approvals, trace: runTrace, spans: spans, handler: transition.NewHandler(repo, flow)}
+	return fixture{journal: j, repo: repo, hooks: hooks, gate: gate, approvals: approvals, trace: runTrace, spans: spans, findings: findings, handler: transition.NewHandler(repo, flow, findings, policy)}
 }
 
 func planningRun() domain.Run {
@@ -588,13 +602,14 @@ func TestTransitionSpanAttributes(t *testing.T) {
 	t.Run("a rework carries the round, the class and the highest severity but not the reason", func(t *testing.T) {
 		const reason = "F1, major, a.go:12 secret detail; F2 blocker b.go:3"
 		f := newFixture(reviewing)
+		f.findings.findings = []shareddomain.ReviewFinding{realOpen(shareddomain.SeverityMajor)}
 
 		if err := f.handler.Handle(context.Background(), rework(reason, domain.ReworkSpecGap)); err != nil {
 			t.Fatal(err)
 		}
 
 		got := stringAttributes(f.spans.Ended()[0])
-		if got[attrReviewRound] != "2" || got[attrReworkClass] != string(domain.ReworkSpecGap) || got[attrReworkSeverity] != string(domain.SeverityBlocker) {
+		if got[attrReviewRound] != "2" || got[attrReworkClass] != string(domain.ReworkSpecGap) || got[attrReworkSeverity] != string(shareddomain.SeverityBlocker) {
 			t.Errorf("attributes = %v", got)
 		}
 		for key, value := range got {
@@ -606,8 +621,9 @@ func TestTransitionSpanAttributes(t *testing.T) {
 
 	t.Run("a rework without class or severity omits both", func(t *testing.T) {
 		f := newFixture(reviewing)
+		f.findings.findings = []shareddomain.ReviewFinding{realOpen(shareddomain.SeverityMajor)}
 
-		if err := f.handler.Handle(context.Background(), rework("broken", "")); err != nil {
+		if err := f.handler.Handle(context.Background(), rework("F1 broken", "")); err != nil {
 			t.Fatal(err)
 		}
 

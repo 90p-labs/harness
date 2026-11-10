@@ -11,6 +11,7 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/query/report"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
+	"github.com/90p-labs/harness/internal/run/infrastructure/findings"
 	"github.com/90p-labs/harness/internal/run/infrastructure/persistence"
 	"github.com/90p-labs/harness/internal/run/infrastructure/pluginhooks"
 	"github.com/90p-labs/harness/internal/run/ui/cli"
@@ -42,6 +43,7 @@ func policyOf(cfg config.Run) domain.Policy {
 		GoLive:          cfg.GoLive,
 		MaxLiveRounds:   cfg.MaxLiveRounds,
 		MaxStopBlocks:   cfg.MaxStopBlocks,
+		StrictMinor:     cfg.StrictMinor,
 	}
 }
 
@@ -65,7 +67,7 @@ func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, gate domain.PlanGate, c
 	return cli.Handlers{
 		Key:        key,
 		Start:      start.NewHandler(repo, flow, now),
-		Transition: transition.NewHandler(repo, flow),
+		Transition: transition.NewHandler(repo, flow, findings.File{}, policy),
 		Status:     status.NewHandler(repo),
 		Report:     report.NewHandler(repo, repo, now, telemetry.TraceIDOf, tracer),
 	}

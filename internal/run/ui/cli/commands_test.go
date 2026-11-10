@@ -47,6 +47,12 @@ func (m *memoryRepository) Save(_ context.Context, run domain.Run) (domain.Run, 
 	return run, nil
 }
 
+type majorFinding struct{}
+
+func (majorFinding) Read(context.Context, domain.Run) ([]shareddomain.ReviewFinding, error) {
+	return []shareddomain.ReviewFinding{{ID: "F1", Severity: shareddomain.SeverityMajor, Verdict: shareddomain.FindingReal, Status: shareddomain.FindingOpen}}, nil
+}
+
 type passingGate struct{}
 
 func (passingGate) Submit(context.Context, domain.Run) (domain.Submission, error) {
@@ -93,7 +99,7 @@ func TestTransitionCommand(t *testing.T) {
 			connect := func(context.Context) (cli.Handlers, func() error, error) {
 				flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, noApprovals{}, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3, MaxLiveRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"), noTrace{})
 				return cli.Handlers{
-					Transition: transition.NewHandler(repo, flow),
+					Transition: transition.NewHandler(repo, flow, nil, domain.Policy{}),
 					Status:     status.NewHandler(repo),
 				}, func() error { return nil }, nil
 			}
@@ -119,7 +125,7 @@ func TestReworkClass(t *testing.T) {
 		repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: domain.PhaseReviewing}}
 		connect := func(context.Context) (cli.Handlers, func() error, error) {
 			flow := transition.NewFlow(repo, silentHooks{}, passingGate{}, nil, domain.Policy{MaxReviewRounds: 3}, time.Now, noop.NewTracerProvider().Tracer("test"), noTrace{})
-			return cli.Handlers{Transition: transition.NewHandler(repo, flow), Status: status.NewHandler(repo)}, func() error { return nil }, nil
+			return cli.Handlers{Transition: transition.NewHandler(repo, flow, majorFinding{}, domain.Policy{MaxReviewRounds: 3}), Status: status.NewHandler(repo)}, func() error { return nil }, nil
 		}
 		cmd := cli.NewCommand(connect)
 		cmd.SetOut(&bytes.Buffer{})
