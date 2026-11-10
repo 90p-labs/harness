@@ -9,40 +9,41 @@
 <style>{{.CSS}}</style>
 </head>
 <body>
-<div class="shell">
-<nav class="rail" aria-label="Sections">
-<div class="brand"><span class="brand-mark" aria-hidden="true"></span>harness<span class="brand-sub">program view</span></div>
-<div class="navgroups">
-{{range $g := .Nav}}<div class="navgrp" data-nav-group="{{$g.Name}}"><p class="navgrp-h"><span>{{$g.Number}}</span>{{$g.Name}}</p><ol>
-{{range $g.Items}}<li><a href="#{{.Anchor}}">{{.Label}}{{if .Count}}<span class="count{{if .Bad}} bad{{end}}">{{.Count}}</span>{{end}}</a></li>
+<div class="app">
+<aside class="side" aria-label="Sections">
+<div class="ws"><span class="ws-logo" aria-hidden="true"></span>harness</div>
+<nav id="nav" class="nav" aria-label="Sections">
+{{range $g := .Nav}}<div data-nav-group="{{$g.Name}}"><div class="nav-h">{{$g.Name}}</div><ol>
+{{range $g.Items}}<li><a href="#{{.Anchor}}">{{.Label}}{{if .Count}}<span class="n{{if .Bad}} bad{{end}}">{{.Count}}</span>{{end}}</a></li>
 {{end}}</ol></div>
-{{end}}</div>
+{{end}}</nav>
+<div class="side-foot">
 <button class="theme" type="button" data-theme-toggle aria-label="Switch the color theme">Theme: <span>auto</span></button>
-</nav>
+</div>
+</aside>
+<div>
+<header class="top">
+<div class="crumbs"><span>Runs</span><span class="sep">/</span><b>{{.Title}}</b></div>
+<span class="spacer"></span>
+</header>
+<div class="page">
 <main>
-<div class="group" id="grp-program">
-<p class="group-h"><span>01</span>{{.GroupName}}</p>
 <section id="summary" class="masthead" data-group="{{.GroupName}}">
 <p class="eyebrow"><span>program</span></p>
-<h1>{{.Title}}</h1>
+<h1 class="title">{{.Title}}</h1>
 {{range .Goal}}<p class="goal">{{.}}</p>
-{{end}}<dl class="facts">
-<div><dt>Runs</dt><dd>{{.Counts.Runs}}</dd></div>
-<div><dt>Waves</dt><dd>{{.Counts.Waves}}</dd></div>
-<div><dt>Problems</dt><dd>{{.Counts.Problems}}</dd></div>
-</dl>
-</section>
-<section id="waves" data-group="{{.GroupName}}" aria-labelledby="waves-h"><h2 id="waves-h">Runs by wave</h2>
+{{end}}</section>
+<section id="waves" data-group="{{.GroupName}}" aria-labelledby="waves-h"><h2 id="waves-h">Runs by wave <span class="n">{{.Counts.Runs}}</span></h2>
 <p class="lede">Runs in one wave share no dependency, so they can run in parallel.</p><div class="waves">
-{{range .Waves}}<div class="wave"><p class="wave-n">Wave {{.Number}}</p>
-{{range .Runs}}<article id="{{.Key}}" class="task run"><header><span class="tn">{{.ID}}</span><h3>{{.Slug}}</h3></header>
+{{range .Waves}}<div class="wave"><p class="wave-n">Wave {{.Number}}</p><div class="board">
+{{range .Runs}}<article id="{{.Key}}" class="task run"><header class="tid"><span class="tn">{{.ID}}</span></header><h3>{{.Slug}}</h3>
 <p class="branch"><em>Branch</em><code>{{.Branch}}</code></p>
 <ul class="owned">{{range .Owned}}<li><code>{{.}}</code></li>{{end}}</ul>
 <ol class="scope">{{range .Scope}}<li>{{.}}</li>{{end}}</ol>
 <p class="done-when"><em>Done when</em>{{.DoneWhen}}</p>
 {{if .After}}<div class="links"><span class="lk"><em>After</em>{{range .After}}{{if .Href}}<a class="chip" href="#{{.Href}}">{{.Label}}</a>{{else}}<span class="chip broken" title="No such run">{{.Label}}</span>{{end}}{{end}}</span></div>
 {{end}}</article>
-{{end}}</div>
+{{end}}</div></div>
 {{end}}</div></section>
 <section id="dependencies" data-group="{{.GroupName}}" aria-labelledby="dependencies-h"><h2 id="dependencies-h">Dependencies</h2>
 <p class="lede">An arrow points from a run to the run that waits for it.</p>
@@ -54,10 +55,7 @@
 {{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>
 {{end}}</tbody></table></div></section>{{end}}
 {{if .Decisions}}<section id="decisions" data-group="{{.GroupName}}" aria-labelledby="decisions-h"><h2 id="decisions-h">Decisions</h2><div class="notes"><div><ul>{{range .Decisions}}<li>{{.}}</li>{{end}}</ul></div></div></section>{{end}}
-</div>
 
-<div class="group" id="grp-qa">
-<p class="group-h"><span>02</span>{{.GroupQA}}</p>
 <section id="problems" class="problems" data-group="{{.GroupQA}}" aria-labelledby="problems-h"><h2 id="problems-h">Problems <span class="n">{{.Counts.Problems}}</span></h2>
 {{if .Problems}}<ul>
 {{range .Problems}}<li class="problem">{{if .Anchor}}<a class="loc" href="#{{.Anchor}}">plan.md:{{.Line}}</a>{{else}}<span class="loc">plan.md{{with .Line}}:{{.}}{{end}}</span>{{end}}<span class="rule">{{.Rule}}</span><span class="ptext">{{.Message}}</span></li>
@@ -66,9 +64,18 @@
 <section id="source" data-group="{{.GroupQA}}" aria-labelledby="source-h"><h2 id="source-h">Source</h2>
 <details class="source" id="source-details"><summary><code>plan.md</code>, {{len .Source}} lines</summary><pre class="lines">{{range .Source}}<span id="L{{.N}}" class="ln{{if .Bad}} bad{{end}}"><a href="#L{{.N}}">{{.N}}</a>{{.Text}}</span>
 {{end}}</pre></details></section>
-</div>
 <footer class="foot">Rendered by <code>harness plan view</code> from <code>plan.md</code>. This page loads nothing from the network.</footer>
 </main>
+<aside class="props" id="props" aria-label="Properties">
+<div>
+<h4>Properties</h4>
+<div class="prop"><span>Runs</span><span class="v">{{.Counts.Runs}}</span></div>
+<div class="prop"><span>Waves</span><span class="v">{{.Counts.Waves}}</span></div>
+<div class="prop"><span>Problems</span><span class="v">{{.Counts.Problems}}</span></div>
+</div>
+</aside>
+</div>
+</div>
 </div>
 <script type="application/json" id="plan-data">{{.Data}}</script>
 <script>{{.Mermaid}}</script>
