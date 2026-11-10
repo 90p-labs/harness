@@ -403,7 +403,7 @@ func tracedRepo(t *testing.T) (dir, plan string) {
 func verifyPasses(t *testing.T) {
 	t.Helper()
 	code, stdout, stderr := execute(t, commandVerify)
-	if code != exitOK || stderr != "" || !strings.Contains(stdout, "criterion-3") {
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, "PASS gates=") {
 		t.Fatalf("verify: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
 	}
 }
@@ -894,8 +894,8 @@ func TestVerifyCriterionGateHashesTheWholeTree(t *testing.T) {
 	commitFiles(t, dir, "test: add a fixture", map[string]string{"internal/ping/domain/testdata/pong.txt": "pong\n"})
 	_, stdout, _ := execute(t, commandVerify)
 
-	if !strings.Contains(stdout, "PASS criterion-1 ") {
-		t.Fatalf("stdout = %q, want criterion-1 to run again after a testdata change", stdout)
+	if stdout != "PASS gates=3 cached=0\n" {
+		t.Fatalf("stdout = %q, want no gate cached, so criterion-1 runs again after a testdata change", stdout)
 	}
 }
 
@@ -933,7 +933,7 @@ func TestVerifyExitCodes(t *testing.T) {
 
 		code, stdout, stderr := execute(t, commandVerify)
 
-		if code != exitRuntime || !strings.Contains(stdout, "PASS fine ") || !strings.Contains(stdout, "FAIL broken ") || !strings.Contains(stdout, "boom") {
+		if code != exitRuntime || !strings.Contains(stdout, "FAIL broken ") || !strings.Contains(stdout, "boom") || !strings.Contains(stdout, "FAIL gates=2 failed=1") {
 			t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d and the gate lines", code, stdout, stderr, exitRuntime)
 		}
 
@@ -941,7 +941,7 @@ func TestVerifyExitCodes(t *testing.T) {
 			t.Fatal(err)
 		}
 		code, stdout, _ = execute(t, commandVerify)
-		if code != exitOK || !strings.Contains(stdout, "PASS fine ") {
+		if code != exitOK || !strings.Contains(stdout, "PASS gates=1 ") {
 			t.Fatalf("passing gate: code = %d, stdout = %q, want %d", code, stdout, exitOK)
 		}
 	})
@@ -981,7 +981,7 @@ gates:
 			}
 		}
 		code, stdout, stderr := execute(t, commandVerify)
-		if code != exitOK || strings.HasPrefix(stdout, "setup deps ") != r.setup || !strings.Contains(stdout, " test ") {
+		if code != exitOK || strings.HasPrefix(stdout, "setup deps ") != r.setup || !strings.Contains(stdout, "PASS gates=1 ") {
 			t.Fatalf("%s: code = %d, stdout = %q, stderr = %q, want exit 0 and a setup line %v", r.name, code, stdout, stderr, r.setup)
 		}
 	}
@@ -1031,8 +1031,8 @@ gates:
 	code, stdout, stderr := execute(t, commandVerify)
 
 	lines := strings.Split(stdout, "\n")
-	if code != exitRuntime || len(lines) < 5 || !strings.HasPrefix(lines[1], "FAIL lint ") ||
-		lines[3] != "SKIPPED test needs lint" || lines[4] != "SKIPPED e2e needs test" || !strings.Contains(stdout, "lint broke") {
+	if code != exitRuntime || len(lines) < 3 || !strings.HasPrefix(lines[0], "FAIL lint ") ||
+		lines[1] != "SKIPPED test needs lint" || lines[2] != "SKIPPED e2e needs test" || !strings.Contains(stdout, "lint broke") {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want exit %d and the SKIPPED lines", code, stdout, stderr, exitRuntime)
 	}
 	for _, marker := range []string{"test.ran", "e2e.ran"} {
@@ -1065,7 +1065,7 @@ gates:
 
 	code, stdout, stderr := execute(t, commandVerify)
 
-	if code != exitOK || !strings.Contains(stdout, "PASS writer ") || !strings.Contains(stdout, "PASS reader ") {
+	if code != exitOK || !strings.Contains(stdout, "PASS gates=2 ") {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q, want both gates to meet on the pipe", code, stdout, stderr)
 	}
 }
@@ -1086,7 +1086,7 @@ func TestVerifyCommitsAllowsAPush(t *testing.T) {
 		t.Fatalf("push before the check: code = %d, stdout = %q, want a commits-checked deny", code, stdout)
 	}
 	code, stdout, stderr := execute(t, commandVerify, "--commits", "main")
-	if code != exitOK || !strings.Contains(stdout, "PASS ") || stderr != "" {
+	if code != exitOK || !strings.Contains(stdout, "PASS commits=") || stderr != "" {
 		t.Fatalf("verify --commits: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
 	}
 	if code, stdout := denied(); code != exitOK || strings.Contains(stdout, "deny") {

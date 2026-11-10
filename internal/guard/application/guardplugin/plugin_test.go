@@ -39,6 +39,7 @@ const (
 	pushToDevelop        = "git push origin HEAD:develop"
 	pushToMain           = "git push origin HEAD:main"
 	stopReason           = "the run is in phase working and is not finished"
+	stopShellTasksText   = "wait for the background agents and shell tasks"
 	missingBodyMsg       = "missing.md"
 	subDir               = "sub"
 )
@@ -338,6 +339,22 @@ func TestStopHoldsTurn(t *testing.T) {
 				t.Errorf("reason = %q, want the decider reason then the next step", v.Reason)
 			}
 		})
+	}
+}
+
+func TestStopHoldsTurnDenyNamesShellTasks(t *testing.T) {
+	stop := &fakeStop{deny: true, reason: stopReason}
+	plugin := findPlugin(t, build(t, nil, deps(stop)), pluginPrefix+domain.RuleStopHoldsTurn)
+
+	v, err := plugin.Handle(context.Background(), stopEnvelope(t, 0))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if v.Kind != shareddomain.VerdictDeny {
+		t.Fatalf("verdict = %+v, want deny", v)
+	}
+	if !strings.Contains(v.Reason, stopShellTasksText) {
+		t.Errorf("reason = %q, want it to contain %q", v.Reason, stopShellTasksText)
 	}
 }
 

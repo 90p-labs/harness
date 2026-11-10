@@ -46,6 +46,14 @@ const (
 	resultPass            = "`pass`"
 	resultFixed           = "`fixed`"
 	resultOpen            = "`open`"
+	configurationDoc      = "docs/configuration.md"
+	leadRowPrefix         = "| `lead` |"
+	lightLeadText         = "A light-track run can use `sonnet` as the lead."
+	lightNoSwitchText     = "On a light track, the lead does not ask a `sonnet` session to switch."
+	diffStatFirstText     = "Read a diff with `git diff --stat` first, then only the files that you check."
+	tailPipefailText      = "set -o pipefail; go test ./... 2>&1 | tail -n 40"
+	verifyForegroundText  = "Run `harness verify --commits <default branch>` in the foreground, with a Bash timeout of 600000 ms (600 s)."
+	verifyBackgroundText  = "When it does not fit in 600 s, run it in the background."
 )
 
 var (
@@ -174,6 +182,34 @@ func TestSkillSelfCheckStep(t *testing.T) {
 		if !strings.Contains(item, want) {
 			t.Errorf("the working item does not name %q", want)
 		}
+	}
+}
+
+func TestSkillLeadCostLines(t *testing.T) {
+	doc := repository.Read(t, skillFile)
+	start := strings.Index(doc, workingItemStart)
+	end := strings.Index(doc, reviewingItemStart)
+	if start < 0 || end < start {
+		t.Fatalf("%s has no phase working item before the phase reviewing item", skillFile)
+	}
+	item := doc[start:end]
+	pins := []string{
+		lightLeadText, lightNoSwitchText, diffStatFirstText, tailPipefailText,
+		verifyForegroundText, verifyBackgroundText,
+	}
+	for _, want := range pins {
+		if !strings.Contains(item, want) {
+			t.Errorf("the working item does not name %q", want)
+		}
+	}
+	var leadRow string
+	for _, line := range strings.Split(repository.Read(t, configurationDoc), "\n") {
+		if strings.HasPrefix(line, leadRowPrefix) {
+			leadRow = line
+		}
+	}
+	if !strings.Contains(leadRow, lightLeadText) {
+		t.Errorf("the lead row of %s does not name %q", configurationDoc, lightLeadText)
 	}
 }
 

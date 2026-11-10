@@ -756,7 +756,7 @@ Needs and parallel runs:
 - An error that is not a gate result, such as a failed evidence write, stops new starts and cancels the running gates. A cancelled gate writes no evidence and dispatches no `gate.after`. The command returns the first error.
 - The config check refuses an unknown id in `needs`, a gate that needs itself and a cycle, and the error names the gate. A `criterion-N` gate has no `needs`, and no gate can need it. A configured gate id cannot start with `criterion-`.
 - Each gate hashes its inputs when it starts. A gate output that git does not ignore can go into the hash of a gate that runs at the same time, so ignore the gate outputs or set `paths`.
-- Each gate keeps its own output tail, and the result lines print in file order after the last gate ends.
+- Each gate keeps its own output tail, and the failure lines print in file order after the last gate ends.
 
 The usual case: the fast checks run in parallel, the tests need them, and the end-to-end tests need the tests. When lint fails, the tests do not start:
 
@@ -779,14 +779,14 @@ gates:
 ```
 
 ```text
-PASS format 412ms
 FAIL lint 1.02s
-PASS typecheck 2.3s
 SKIPPED test needs lint
 SKIPPED e2e needs test
 
 lint:
 <the last 4 KiB of the lint output>
+FAIL gates=5 failed=1
+error: gates failed
 ```
 
 Setup steps:
@@ -831,7 +831,7 @@ Baseline ratchet:
 
 Commands:
 
-- `harness verify` runs the setup steps first, then the gates by their `needs`, at most `verify.parallel` at the same time. It prints `PASS`, `FAIL`, `VETOED` or `CACHED`, the id and the duration for each gate, in file order. A skipped gate prints `SKIPPED <id> needs <need>`. It exits 1 when one gate fails, is vetoed or is skipped.
+- `harness verify` runs the setup steps first, then the gates by their `needs`, at most `verify.parallel` at the same time. It prints a line only for a gate that fails, is vetoed or is skipped, in file order. The line is `FAIL` or `VETOED` with the id and the duration, or `SKIPPED <id> needs <need>`. It then prints the output tail of each failed or vetoed gate. The last line is the summary: `PASS gates=<n> cached=<c>` or `FAIL gates=<n> failed=<f>`. It exits 1 when one gate fails, is vetoed or is skipped.
 - `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree, with the same setup steps, `needs` and `verify.parallel`. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
 - `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change a `gates` or `setup` key that holds an item, and the error names that key. An empty list or a null value counts as absent, and the write replaces it. With no gate to write, it writes no `gates` key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. A line with `"setup":true` goes to the `setup` key, with its `creates`, before the `gates` key. The built-in detection writes no `needs` and no setup step. A plugin failure, a deny, a bad line, a duplicate id, a bad `needs`, a setup line with `needs` or a gate line with `creates` stops it before it writes.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).

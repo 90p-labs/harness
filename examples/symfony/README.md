@@ -44,7 +44,7 @@ A step that runs prints `setup make-install <duration>` before the gate lines. A
 `vendor/` is in the `.gitignore` of Symfony. The temporary worktree of `harness verify --commits` has no `vendor/`, so the step runs there.
 If the step fails, `harness verify` stops before the first gate and prints `setup failed: make-install`.
 
-The `needs` marker gives the `needs` key of the gate. The `make-test` gate starts only after `make-cs`, `make-phpstan` and `make-lint-container` are `PASS` or `CACHED`.
+The `needs` marker gives the `needs` key of the gate. The `make-test` gate starts only after `make-cs`, `make-phpstan` and `make-lint-container` pass or are cached.
 If a gate in the list fails, the harness prints `SKIPPED make-test needs <gate>` and `harness verify` exits with 1.
 The plugin exits with 1 on an unknown marker.
 `verify.parallel: 3` in `.harness.yaml` sets the most gates that run at the same time. The default is 1. The gates without `needs` run three at a time.
@@ -181,21 +181,13 @@ Commit `.harness.yaml` and `.harness-lint/`. Then run the gates two times:
 ```console
 $ harness verify
 setup make-install 3.123s
-PASS lint 4.089s
-PASS make-cs 1.993s
-PASS make-phpstan 8.119s
-PASS make-lint-container 1.116s
-PASS make-test 2.364s
+PASS gates=5 cached=0
 $ harness verify
-CACHED lint 4.088s
-CACHED make-cs 1.993s
-CACHED make-phpstan 8.119s
-CACHED make-lint-container 1.116s
-CACHED make-test 2.364s
+PASS gates=5 cached=5
 ```
 
-The first run prints the setup line, then `PASS` for each gate. Three gates without `needs` run at the same time. `make-test` runs after `make-cs`, `make-phpstan` and `make-lint-container`.
-The second run prints no setup line and `CACHED` for each gate, because no input changed.
+The first run prints the setup line, then the summary line. Three gates without `needs` run at the same time. `make-test` runs after `make-cs`, `make-phpstan` and `make-lint-container`.
+The second run prints no setup line and shows `cached=5`, because no input changed.
 
 ## A failed gate
 
@@ -203,10 +195,7 @@ The proof moved the opening brace of `class Kernel` in `src/Kernel.php` to the l
 
 ```console
 $ harness verify
-PASS lint 3.562s
 FAIL make-cs 1.683s
-PASS make-phpstan 6.52s
-PASS make-lint-container 1.392s
 SKIPPED make-test needs make-cs
 
 make-cs:
@@ -246,12 +235,13 @@ Found 1 of 12 files that can be fixed in 0.479 seconds, 40.00 MB memory used
 
 make: *** [cs] Error 8
 
+FAIL gates=5 failed=1
 error: gates failed
 $ echo $?
 1
 ```
 
-The `echo $?` line is a separate command. It printed the exit code of `harness verify`. The proof then restored `src/Kernel.php`, and the gates were `CACHED` again.
+The `echo $?` line is a separate command. It printed the exit code of `harness verify`. The proof then restored `src/Kernel.php`, and the gates were cached again.
 php-cs-fixer checked 12 files:
 
 ```console
@@ -272,17 +262,13 @@ $ docker compose run --rm -T php vendor/bin/php-cs-fixer list-files 2>/dev/null
 
 ## The setup runs again
 
-The setup step does nothing when no input changed. It runs again when `vendor/autoload.php` is missing. The proof removed `vendor/`. The step ran, and the gates stayed `CACHED`, because `vendor/` is not in the gate paths:
+The setup step does nothing when no input changed. It runs again when `vendor/autoload.php` is missing. The proof removed `vendor/`. The step ran, and the gates stayed cached, because `vendor/` is not in the gate paths:
 
 ```console
 $ rm -rf vendor
 $ harness verify
 setup make-install 7.939s
-CACHED lint 4.088s
-CACHED make-cs 1.993s
-CACHED make-phpstan 8.119s
-CACHED make-lint-container 1.116s
-CACHED make-test 2.364s
+PASS gates=5 cached=5
 ```
 
 A change of `composer.lock` also runs the step, because `composer.lock` is in the `paths` of the step.
@@ -291,7 +277,7 @@ A change of `composer.lock` also runs the step, because `composer.lock` is in th
 
 ```console
 $ harness verify --commits HEAD~1
-PASS a0e48347076d chore
+PASS commits=1
 ```
 
 ## Architecture rules with deptrac
@@ -512,5 +498,5 @@ The harness writes its run state into `.harness/` when a run starts. `.gitignore
 - `vendor/` and `var/` are in the `.gitignore` of Symfony. They are not in the hash. The setup step restores `vendor/`.
 - The `paths` also hold every `.php` file outside `vendor/`, the sources, the tests, `config/`, `bin/`, `translations/`, the `.env` files, the phpunit, phpstan and php-cs-fixer configs, and the `Makefile`. php-cs-fixer checks every `.php` file, so `**/*.php` is in the paths.
 - On Linux with Docker Engine, read the root-user limit in the [examples index](../README.md#rules-for-every-example).
-- A file that a gate reads but that its `paths` do not match does not run the gate again. Then `harness verify` prints `CACHED` for a stale result.
+- A file that a gate reads but that its `paths` do not match does not run the gate again. Then `harness verify` counts a stale result in `cached`.
 - Edit the `PATHS` line of the plugin to match your project.
