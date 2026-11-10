@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const EmDash = "—"
@@ -46,5 +48,5 @@ func FrontmatterKeys(t testing.TB, path string) []string {
 
 // IsEmoji matches the symbol ranges disallowed in project documentation.
 func IsEmoji(r rune) bool {
-	return r >= 0x1F300 && r <= 0x1FAFF || r >= 0x2600 && r <= 0x27BF
+	return domain.IsEmoji(r)
 }

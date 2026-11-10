@@ -11,6 +11,15 @@ func words(n int) string {
 	return strings.TrimSpace(strings.Repeat("word ", n))
 }
 
+func TestSentenceGateIgnoresOtherProseRules(t *testing.T) {
+	const goalLine = "The service answers a ping with the word pong. The query records one span for each call."
+	paragraph := strings.TrimSpace(strings.Repeat("The service stays up. ", 7))
+	text := mutate(t, readValid(t), edit{goalLine, paragraph + "\n\nThe goal is clear \U0001F600."})
+	if got := checkText(text, domain.CheckInput{}); len(got) != 0 {
+		t.Fatalf("problems = %v, want none", got)
+	}
+}
+
 func TestSentenceLength(t *testing.T) {
 	valid := readValid(t)
 	const goalLine = "The service answers a ping with the word pong. The query records one span for each call."
