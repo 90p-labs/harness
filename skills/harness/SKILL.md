@@ -48,11 +48,14 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step.
    - On `Change the plan`, ask what to change, edit `plan.md`, and ask the `Plan` question again.
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
 4. `working`: you are the driver. You do not write the code of a task. `harness plan view` gives the waves.
+   - A light-track run can use `sonnet` as the lead. The track shows in `harness plan view`. On a light track, the lead does not ask a `sonnet` session to switch.
    - For each wave, start one `worker` agent for each task, in the background, with the `model` field set to the `Model` of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap.
    - Use low effort for a haiku task that is mundane: docs, a rename or a config change.
    - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.
+   - Read a diff with `git diff --stat` first, then only the files that you check. Read a long output through `tail`, with `set -o pipefail` so that the exit code stays. Example: `set -o pipefail; go test ./... 2>&1 | tail -n 40`.
    - Send a failed task once to a new `worker` agent, with the same `model` field.
-   - Commit in plan order, one commit for each task. Run `harness verify --commits <default branch>`.
+   - Commit in plan order, one commit for each task.
+   - Run `harness verify --commits <default branch>` in the foreground, with a Bash timeout of 600000 ms (600 s). When it does not fit in 600 s, run it in the background.
    - Self-check: start one `worker` agent with the `model` field set to the first model of the `worker` role. It reads `git diff <default branch>...HEAD`, the lens checklists of `agents/reviewer.md` and `plan.md`. It runs each proof command of `## Acceptance criteria`. A `|` in a proof command is written `\|` in the proof table.
    - The worker writes `self-check.md` in the run folder, in this format. The results are `pass`, `fixed` or `open`. The proof table has one row for each criterion.
      ```text

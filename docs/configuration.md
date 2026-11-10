@@ -248,7 +248,7 @@ The roles, and the agent names that the guard maps to each role:
 
 | Role | Agent names |
 |---|---|
-| `lead` | none: the lead is the main session. It defaults to `opus` on `claude` and `gpt-6-astra` on `codex`. The model is guidance only: the harness cannot switch the session model and no hook receives it, so the guard checks no agent call for it |
+| `lead` | none: the lead is the main session. It defaults to `opus` on `claude` and `gpt-6-astra` on `codex`. The model is guidance only. The harness cannot switch the session model and no hook receives it, so the guard checks no agent call for it. A light-track run can use `sonnet` as the lead. |
 | `explorer` | `explore`, `explorer`, `claude-code-guide` |
 | `worker` | `worker`, `general-purpose`, `claude`: the last two have every tool and can edit files |
 | `reviewer` | `reviewer`, `second-reviewer`, `code-reviewer`, `pr-reviewer` |
