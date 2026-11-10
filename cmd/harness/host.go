@@ -54,6 +54,28 @@ func (m runMarks) Close(ctx context.Context, kind hostdomain.MarkKind, id string
 	return started, found, err
 }
 
+func (m runMarks) OpenTool(ctx context.Context, mark hostdomain.ToolMark) error {
+	runID := runRefFrom(ctx).ID
+	if runID == "" {
+		return nil
+	}
+	return m.withMarks(ctx, func(marks hostpersistence.SQLAgentMarks) error {
+		return marks.OpenTool(ctx, runID, mark)
+	})
+}
+
+func (m runMarks) CloseSession(ctx context.Context, sessionID string) (closed []hostdomain.ToolMark, err error) {
+	runID := runRefFrom(ctx).ID
+	if runID == "" {
+		return nil, nil
+	}
+	err = m.withMarks(ctx, func(marks hostpersistence.SQLAgentMarks) (closeErr error) {
+		closed, closeErr = marks.CloseSession(ctx, runID, sessionID)
+		return closeErr
+	})
+	return closed, err
+}
+
 func (m runMarks) withMarks(ctx context.Context, use func(hostpersistence.SQLAgentMarks) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {

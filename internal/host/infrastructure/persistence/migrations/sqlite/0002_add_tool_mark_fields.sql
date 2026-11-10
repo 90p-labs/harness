@@ -1,0 +1,2 @@
+ALTER TABLE agent_marks ADD COLUMN session_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_marks ADD COLUMN tool TEXT NOT NULL DEFAULT '';
