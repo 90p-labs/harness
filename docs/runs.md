@@ -20,7 +20,6 @@ $ harness diagram < states.mmd
 
 ```mermaid
 stateDiagram-v2
-    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e
     [*] --> pending
     pending --> paid: pay
     paid --> shipped: ship

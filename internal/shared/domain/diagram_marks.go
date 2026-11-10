@@ -6,6 +6,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -27,9 +28,11 @@ const (
 )
 
 const (
-	commentPrefix = "%%"
-	frontMatter   = "---"
-	notePrefix    = "note "
+	commentPrefix    = "%%"
+	frontMatter      = "---"
+	notePrefix       = "note "
+	linkStyleKeyword = "linkStyle"
+	invisibleLink    = "~~~"
 )
 
 var ErrDiagramRefused = errors.New("diagram refused")
@@ -56,18 +59,31 @@ var markableKinds = map[string]grammar{
 var MarkableKindNames = slices.Sorted(maps.Keys(markableKinds))
 
 const (
-	reasonNoMark       = "no mark: end a line with + (new), * (changed) or - (removed)"
-	reasonNoMarkInPlan = "no mark: draw the marks with harness diagram"
+	reasonNoMark        = "no mark: end a line with + (new), * (changed) or - (removed)"
+	reasonNoMarkInPlan  = "no mark: draw the marks with harness diagram"
+	reasonAccessibility = "an accessibility line takes no mark"
+	reasonInvisible     = "an invisible link takes no mark"
 )
+
+var mermaidKeywords = []string{
+	"style", linkStyleKeyword, "classDef", "class", "click", "call",
+	"href", "interpolate", "end", "subgraph", "graph", "flowchart",
+}
 
 var blockEnds = map[string]bool{"}": true, "end": true}
 
 var (
 	attemptedMark = regexp.MustCompile(`^(.*\S)[ \t]+([^\w\s{}\[\]()"';])$`)
 	quoted        = regexp.MustCompile(`"[^"]*"`)
-	flowLink      = regexp.MustCompile(`--+[-xo>]|==+[=xo>]|-?\.+-[xo>]?`)
+	flowLink      = regexp.MustCompile(`--+[-xo>]|==+[=xo>]|-?\.+-[xo>]?|~~~`)
+	nodeID        = regexp.MustCompile(`[\w-]+`)
+	bareNode      = regexp.MustCompile(`^\s*([\w-]+)\s*(?:[\[\(\{>]|@\{|:::)`)
 	pipeLabel     = regexp.MustCompile(`^\s*\|([^|]*)\|`)
 	textLabel     = regexp.MustCompile(`(?:^|[^-=.])<?(?:--|==|-\.)\s+(\S.*?)\s*$`)
+	textLabelSpan = regexp.MustCompile(`(?:^|[^-=.])<?(?:--|==|-\.)\s+(\S.*?)\s+(?:--+[-xo>]|==+[=xo>]|\.+-[xo>]?)`)
+	accessibility = regexp.MustCompile(`^\s*acc(?:Title|Descr)\b`)
+	accDescrOpen  = regexp.MustCompile(`^accDescr\s*\{[^}]*$`)
+	linkStyleLine = regexp.MustCompile(`^linkStyle\s+(\d+(?:\s*,\s*\d+)*)\s+(\S.*?);?$`)
 	linkEdge      = regexp.MustCompile(`\s(?:-->|<--|--\|>|<\|--|\.\.>|<\.\.|\.\.\|>|<\|\.\.|\*--|--\*|o--|--o|--|\.\.)\s`)
 	erRelation    = regexp.MustCompile(`^[\w-]+\s+[|}o][|o](?:--|\.\.)[|o][|{]\s+[\w-]+`)
 	erRelLabel    = regexp.MustCompile(`^(.*?\S)\s*:\s*(.*)$`)
@@ -111,18 +127,48 @@ func MarkDiagram(input string) (string, error) {
 		id   string
 		mark Mark
 	}
+	type markedLinks struct {
+		first, count int
+		mark         Mark
+	}
 	var (
-		body    []string
-		ids     []markedID
-		used    = map[Mark]bool{}
-		seen    = map[string]bool{}
-		inBlock bool
+		body       []string
+		ids        []markedID
+		links      []markedLinks
+		used       = map[Mark]bool{}
+		seen       = map[string]bool{}
+		inBlock    bool
+		anyMark    bool
+		nextLink   int
+		inAccDescr bool
+		countLink  = g == grammarFlow
 	)
+	if g == grammarFlow {
+		if words := flowKeywordIDs(headerTail(lines[h])); len(words) > 0 {
+			return "", refuse(h+1, keywordReason(words[0]))
+		}
+	}
+	if countLink {
+		nextLink = flowLinkCount(headerTail(lines[h]))
+	}
 	for i := h + 1; i < len(lines); i++ {
 		line := strings.TrimRight(lines[i], " \t")
 		text := strings.TrimSpace(line)
+		var skip bool
+		if skip, inAccDescr = accDescrBlock(text, inAccDescr); skip {
+			body = append(body, line)
+			continue
+		}
+		if countLink {
+			if words := flowKeywordIDs(line); len(words) > 0 {
+				return "", refuse(i+1, keywordReason(words[0]))
+			}
+		}
 		m := attemptedMark.FindStringSubmatch(line)
 		if m == nil || isText(g, text) {
+			if countLink {
+				nextLink += flowLinkCount(line)
+			}
 			body = append(body, line)
 			if strings.HasSuffix(text, "{") {
 				inBlock = true
@@ -140,20 +186,31 @@ func MarkDiagram(input string) (string, error) {
 			return "", refuse(i+1, err.Error())
 		}
 		if id != "" {
+			if countLink && slices.Contains(mermaidKeywords, id) {
+				return "", refuse(i+1, keywordReason(id))
+			}
 			if seen[id] {
 				return "", refuse(i+1, id+" has a second mark")
 			}
 			seen[id] = true
 			ids = append(ids, markedID{id, mark})
+			used[mark] = true
 		}
-		used[mark] = true
+		if countLink {
+			n := flowLinkCount(m[1])
+			if id == "" {
+				links = append(links, markedLinks{nextLink, n, mark})
+			}
+			nextLink += n
+		}
+		anyMark = true
 		body = append(body, marked)
 	}
-	if len(used) == 0 {
+	if !anyMark {
 		return "", refuse(h+1, reasonNoMark)
 	}
 
-	out := make([]string, 0, len(lines)+len(markOrder)+len(ids))
+	out := make([]string, 0, len(lines)+len(markOrder)+len(ids)+len(links))
 	for _, l := range lines[:h+1] {
 		out = append(out, strings.TrimRight(l, " \t"))
 	}
@@ -171,6 +228,13 @@ func MarkDiagram(input string) (string, error) {
 		} else {
 			out = append(out, fmt.Sprintf("    class %s %s", n.id, n.mark))
 		}
+	}
+	for _, l := range links {
+		indexes := make([]string, l.count)
+		for k := range indexes {
+			indexes[k] = strconv.Itoa(l.first + k)
+		}
+		out = append(out, fmt.Sprintf("    %s %s %s", linkStyleKeyword, strings.Join(indexes, ","), MarkStyles[l.mark]))
 	}
 	return strings.Join(out, "\n"), nil
 }
@@ -191,15 +255,58 @@ func CheckMarks(body string) []string {
 			problems = append(problems, p)
 		}
 	}
-	defined := map[string]bool{}
-	marked := false
+	type styledLink struct {
+		written string
+		index   int
+		mark    Mark
+	}
+	var (
+		defined    = map[string]bool{}
+		linkMarks  = map[int]Mark{}
+		styled     []styledLink
+		nextLink   int
+		marked     bool
+		inAccDescr bool
+	)
+	if g == grammarFlow {
+		for _, word := range flowKeywordIDs(headerTail(lines[h])) {
+			add(keywordProblem(h+1, word))
+		}
+		for _, mark := range flowLinkMarks(headerTail(lines[h])) {
+			linkMarks[nextLink] = mark
+			nextLink++
+		}
+	}
 	for i := h + 1; i < len(lines); i++ {
 		text := strings.TrimSpace(lines[i])
-		if isText(g, text) {
+		var skip bool
+		if skip, inAccDescr = accDescrBlock(text, inAccDescr); skip || isText(g, text) {
 			continue
 		}
 		if m := attemptedMark.FindStringSubmatch(text); m != nil {
 			add(fmt.Sprintf("line %d keeps the raw mark %s", i+1, m[2]))
+		}
+		if g == grammarFlow {
+			for _, word := range flowKeywordIDs(text) {
+				add(keywordProblem(i+1, word))
+			}
+			for _, mark := range flowLinkMarks(text) {
+				linkMarks[nextLink] = mark
+				nextLink++
+			}
+			if m := linkStyleLine.FindStringSubmatch(text); m != nil {
+				if mark, ok := markOfStyle(m[2]); ok {
+					for _, index := range strings.Split(m[1], ",") {
+						written := strings.TrimSpace(index)
+						at, err := strconv.Atoi(written)
+						if err != nil {
+							at = -1
+						}
+						styled = append(styled, styledLink{written, at, mark})
+					}
+				}
+				continue
+			}
 		}
 		def := classDefLine.FindStringSubmatch(text)
 		uses := classUses(text)
@@ -237,10 +344,24 @@ func CheckMarks(body string) []string {
 			add("classDef " + name + " is missing")
 		}
 	}
+	for _, s := range styled {
+		if linkMarks[s.index] != s.mark {
+			add(fmt.Sprintf("%s %s is not a %s link", linkStyleKeyword, s.written, s.mark))
+		}
+	}
 	if !marked {
 		add(reasonNoMarkInPlan)
 	}
 	return problems
+}
+
+func markOfStyle(style string) (Mark, bool) {
+	for m, s := range MarkStyles {
+		if s == style {
+			return m, true
+		}
+	}
+	return "", false
 }
 
 type Marks struct {
@@ -307,7 +428,7 @@ func classUses(text string) []string {
 func isEdge(g grammar, text string) bool {
 	switch g {
 	case grammarFlow:
-		return flowLink.MatchString(maskQuoted(text))
+		return flowLinkCount(text) > 0
 	case grammarER:
 		return true
 	}
@@ -322,6 +443,8 @@ func isText(g grammar, text string) bool {
 func markLine(g grammar, content string, m Mark, inBlock bool) (line, id string, err error) {
 	text := strings.TrimSpace(content)
 	switch {
+	case accessibility.MatchString(text):
+		return "", "", errors.New(reasonAccessibility)
 	case blockEnds[text]:
 		return "", "", errors.New("a block end takes no mark")
 	case g == grammarER:
@@ -343,7 +466,7 @@ func markLine(g grammar, content string, m Mark, inBlock bool) (line, id string,
 }
 
 func markFlowEdge(content string, m Mark) (string, bool, error) {
-	masked := maskQuoted(content)
+	masked := maskFlow(content)
 	links := flowLink.FindAllStringIndex(masked, -1)
 	switch {
 	case len(links) == 0:
@@ -352,6 +475,9 @@ func markFlowEdge(content string, m Mark) (string, bool, error) {
 		return "", false, errors.New("a chain edge takes no mark")
 	}
 	start, end := links[0][0], links[0][1]
+	if masked[start:end] == invisibleLink {
+		return "", false, errors.New(reasonInvisible)
+	}
 	if l := pipeLabel.FindStringSubmatchIndex(masked[end:]); l != nil {
 		return withLabel(content, end+l[2], end+l[3], m), true, nil
 	}
@@ -388,6 +514,142 @@ func markER(content, text string, m Mark, inBlock bool) (string, error) {
 		return "", errors.New("an entity takes no mark")
 	}
 	return "", errNoForm
+}
+
+func maskFlow(line string) string {
+	masked := maskQuoted(line)
+	if at := strings.Index(masked, commentPrefix); at >= 0 {
+		masked = masked[:at] + strings.Repeat("_", len(masked)-at)
+	}
+	b := []byte(masked)
+	depth, inPipe := 0, false
+	for i, c := range b {
+		switch c {
+		case '[', '(', '{', '>':
+			opens := c != '>' || depth == 0 && followsNodeID(masked, i)
+			if !inPipe && opens {
+				depth++
+				continue
+			}
+		case ']', ')', '}':
+			if !inPipe && depth > 0 {
+				depth--
+				continue
+			}
+		case '|':
+			if depth == 0 {
+				inPipe = !inPipe
+				continue
+			}
+		}
+		if depth > 0 || inPipe {
+			b[i] = '_'
+		}
+	}
+	for _, l := range textLabelSpan.FindAllSubmatchIndex(b, -1) {
+		for i := l[2]; i < l[3]; i++ {
+			b[i] = '_'
+		}
+	}
+	return string(b)
+}
+
+func followsNodeID(masked string, at int) bool {
+	start := at
+	for start > 0 && isWordByte(masked[start-1]) {
+		start--
+	}
+	if start == at {
+		return false
+	}
+	before := strings.TrimRight(masked[:start], " \t")
+	if before == "" || strings.HasSuffix(before, "&") || strings.HasSuffix(before, ";") {
+		return true
+	}
+	links := flowLink.FindAllStringIndex(before, -1)
+	return len(links) > 0 && links[len(links)-1][1] == len(before)
+}
+
+func isWordByte(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+func headerTail(header string) string {
+	_, rest, _ := strings.Cut(header, ";")
+	return rest
+}
+
+func accDescrBlock(text string, inside bool) (skip, next bool) {
+	if inside {
+		return true, !strings.Contains(text, "}")
+	}
+	open := accDescrOpen.MatchString(text)
+	return open, open
+}
+
+func flowLinkCount(line string) int {
+	return len(flowLinkMarks(line))
+}
+
+func flowLinkMarks(line string) []Mark {
+	marks, _ := scanFlow(line)
+	return marks
+}
+
+func flowKeywordIDs(line string) []string {
+	_, ids := scanFlow(line)
+	return slices.DeleteFunc(ids, func(id string) bool { return !slices.Contains(mermaidKeywords, id) })
+}
+
+func scanFlow(line string) (marks []Mark, ids []string) {
+	if accessibility.MatchString(line) {
+		return nil, nil
+	}
+	masked := maskFlow(line)
+	base := 0
+	for _, statement := range strings.Split(masked, ";") {
+		var segments []string
+		var labels []Mark
+		start := 0
+		for _, l := range flowLink.FindAllStringIndex(statement, -1) {
+			segments = append(segments, statement[start:l[0]])
+			from, to := 0, 0
+			if t := textLabel.FindStringSubmatchIndex(statement[start:l[0]]); t != nil {
+				from, to = base+start+t[2], base+start+t[3]
+			}
+			start = l[1]
+			if p := pipeLabel.FindStringSubmatchIndex(statement[start:]); p != nil {
+				from, to = base+start+p[2], base+start+p[3]
+				start += p[1]
+			}
+			labels = append(labels, markInLabel(line[from:to]))
+		}
+		base += len(statement) + 1
+		if len(segments) == 0 {
+			if n := bareNode.FindStringSubmatch(statement); n != nil {
+				ids = append(ids, n[1])
+			}
+			continue
+		}
+		segments = append(segments, statement[start:])
+		for _, segment := range segments {
+			for node := range strings.SplitSeq(segment, "&") {
+				if id := nodeID.FindString(node); id != "" {
+					ids = append(ids, id)
+				}
+			}
+		}
+		for k := 1; k < len(segments); k++ {
+			for range (strings.Count(segments[k-1], "&") + 1) * (strings.Count(segments[k], "&") + 1) {
+				marks = append(marks, labels[k-1])
+			}
+		}
+	}
+	return marks, ids
+}
+
+func markInLabel(label string) Mark {
+	return Mark(strings.Trim(labelMarkText.FindString(label), "()"))
 }
 
 func maskQuoted(s string) string {
@@ -432,6 +694,14 @@ func firstStatement(lines []string, from int) int {
 
 func firstWord(line string) string {
 	return strings.Fields(line)[0]
+}
+
+func keywordReason(word string) string {
+	return "node id " + word + " is a mermaid keyword"
+}
+
+func keywordProblem(line int, word string) string {
+	return fmt.Sprintf("line %d uses the keyword %s as a node id", line, word)
 }
 
 func refuse(line int, reason string) error {

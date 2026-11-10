@@ -21,7 +21,7 @@ Mark at least one line. A node, state or class takes one mark.
 These marks are not the tree marks of the plan (new, changed, deleted).
 
 flowchart, graph: node lines and link lines with one link. No chain edge (two links),
-  no subgraph line, no "end".
+  no subgraph line, no "end". A node id is never a mermaid keyword, such as style or end.
 stateDiagram, stateDiagram-v2: state lines and transition lines.
 classDiagram, classDiagram-v2: "class Name +", "class Name { +" and relation lines.
 erDiagram: relation lines and attribute lines inside { }. No entity line, no "}".

@@ -679,7 +679,7 @@ A plan has the heading `## Open questions`. It holds `- none` alone, or one ques
 - The rule `diagram-required` refuses a plan with a missing diagram or sketch file.
 - The render records the span `plan.view` with `harness.plan.problems` and `harness.view.bytes`.
 
-An agent writes each diagram through `harness diagram`. It reads plain mermaid on stdin, with a `+`, `*` or `-` at the end of each new, changed or removed line. It prints the fenced block with the fixed `classDef` and `class` lines. It needs no git repo, and exits 2 with the reason on a refused input. The plan `diagram` rule refuses an unmarked or restyled diagram.
+An agent writes each diagram through `harness diagram`. It reads plain mermaid on stdin, with a `+`, `*` or `-` at the end of each new, changed or removed line. It prints the fenced block with a label and, in a flowchart, a `linkStyle` line for each marked link. A marked node gets a fixed `classDef` and a `class` line, or a `cssClass` line in a class diagram. It needs no git repo, and exits 2 with the reason on a refused input. The plan `diagram` rule refuses an unmarked or restyled diagram, and reports a mark-style `linkStyle` line on a wrong index.
 
 ### Multi-run plan
 

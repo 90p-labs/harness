@@ -135,8 +135,9 @@ func executeWithStdin(t *testing.T, stdin string, args ...string) (code int, std
 
 func TestDiagramCommand(t *testing.T) {
 	const (
-		defNew   = "    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n"
-		unmarked = "flowchart TD\n    a --> b\n"
+		defNew       = "    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n"
+		linkStyleNew = "    linkStyle 0 stroke:#00b34e,stroke-width:3px,color:#00b34e\n"
+		unmarked     = "flowchart TD\n    a --> b\n"
 	)
 	clearOTLPEnv(t)
 	clearHarnessEnv(t)
@@ -146,7 +147,7 @@ func TestDiagramCommand(t *testing.T) {
 		{
 			"flowchart",
 			"flowchart TD\n    a[start] --> b[end] +\n",
-			"```mermaid\nflowchart TD\n" + defNew + "    a[start] -->|\"(new)\"| b[end]\n```\n",
+			"```mermaid\nflowchart TD\n    a[start] -->|\"(new)\"| b[end]\n" + linkStyleNew + "```\n",
 		},
 		{
 			"state diagram through the parser",
