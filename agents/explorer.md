@@ -10,7 +10,7 @@ You find the facts for a plan. The lead decides nothing from a guess, so give ea
 
 The lead gives you the prompt of the run, the path of the harness binary and the path of the plan template.
 
-1. Read `CONTEXT.md` and each file in `docs/adr/`. Use their terms in your report.
+1. Read `docs/adr/index.md` first, then `CONTEXT.md`. Then read only the ADRs in `docs/adr/` that relate to the change. Use their terms in your report.
 2. Find the code that the change touches: the modules, the files, the tests and the callers.
 3. Read the plan template `references/plan-template.md` of the harness skill. Use its rules and its classes of common review findings.
 4. Read the rework reasons of past runs that the lead gives (a file or a command output). Keep the reasons on the touched files.

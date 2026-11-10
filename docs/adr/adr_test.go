@@ -3,6 +3,7 @@ package adr_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -10,12 +11,14 @@ import (
 )
 
 const (
-	adrDir = "docs/adr"
+	adrDir     = "docs/adr"
+	adrPattern = "[0-9][0-9][0-9][0-9]-*.md"
+	indexFile  = "docs/adr/index.md"
 )
 
 var (
-	adrNumbers  = []string{"0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019"}
 	adrSections = []string{"## Status", "## Context", "## Decision", "## Consequences"}
+	indexLink   = regexp.MustCompile(`\((\d{4}-[^)\s]+\.md)\)`)
 )
 
 const (
@@ -53,28 +56,84 @@ func TestReviewRoundDocs(t *testing.T) {
 	}
 }
 
+// adrFiles returns the ADR files in the folder, found by glob.
+func adrFiles(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob(repository.Path(t, adrDir, adrPattern))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no ADR file in %s", adrDir)
+	}
+	return files
+}
+
 func TestADRSections(t *testing.T) {
-	for _, number := range adrNumbers {
-		files, err := filepath.Glob(repository.Path(t, adrDir, number+"-*.md"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(files) != 1 {
-			t.Errorf("ADR %s has %d files, want 1", number, len(files))
-			continue
-		}
-		raw, err := os.ReadFile(files[0])
+	for _, file := range adrFiles(t) {
+		number := filepath.Base(file)[:4]
+		raw, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
 		text := string(raw)
 		if !strings.HasPrefix(text, "# "+number+" ") {
-			t.Errorf("%s does not start with %q", files[0], "# "+number+" ")
+			t.Errorf("%s does not start with %q", file, "# "+number+" ")
 		}
 		for _, section := range adrSections {
 			if !strings.Contains(text, "\n"+section+"\n") {
-				t.Errorf("%s misses the section %q", files[0], section)
+				t.Errorf("%s misses the section %q", file, section)
 			}
+		}
+	}
+}
+
+func TestADRNumbersAreUnique(t *testing.T) {
+	seen := map[string]string{}
+	for _, file := range adrFiles(t) {
+		name := filepath.Base(file)
+		number := name[:4]
+		if other, ok := seen[number]; ok {
+			t.Errorf("%s and %s share the ADR number %s", other, name, number)
+		}
+		seen[number] = name
+	}
+}
+
+func TestADRIndexListsEveryADR(t *testing.T) {
+	index := repository.Read(t, indexFile)
+	lines := strings.Split(index, "\n")
+	for _, file := range adrFiles(t) {
+		name := filepath.Base(file)
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		title := ""
+		for _, line := range strings.Split(string(raw), "\n") {
+			if strings.HasPrefix(line, "# ") {
+				title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
+				break
+			}
+		}
+		if title == "" {
+			t.Errorf("%s has no title line", file)
+			continue
+		}
+		found := false
+		for _, line := range lines {
+			if strings.Contains(line, "("+name+")") && strings.Contains(line, title) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s has no entry for %q with the title %q", indexFile, name, title)
+		}
+	}
+	for _, m := range indexLink.FindAllStringSubmatch(index, -1) {
+		if _, err := os.Stat(repository.Path(t, adrDir, m[1])); err != nil {
+			t.Errorf("%s names %s, which does not exist", indexFile, m[1])
 		}
 	}
 }
