@@ -28,14 +28,16 @@ const (
 	flagBy       = "by"
 	flagClass    = "class"
 
-	runLineFormat  = "run %s phase=%s review_round=%d live_round=%d"
-	reasonPrefix   = "reason: "
-	nextPrefix     = "next: "
-	noActiveRun    = "active: no"
-	missingFlagMsg = "required flag %q not set"
-	pairedFlagsMsg = "flags %q and %q go together"
-	unknownClass   = "unknown rework class %q"
-	planningHint   = "write the plan in %s, then harness run plan"
+	runLineFormat      = "run %s phase=%s review_round=%d live_round=%d"
+	reasonPrefix       = "reason: "
+	nextPrefix         = "next: "
+	handoffReadyFormat = "handoff: ready (step %d)"
+	handoffWriteFormat = "handoff: write %s with Phase: %s and Step: %d, then end the turn"
+	noActiveRun        = "active: no"
+	missingFlagMsg     = "required flag %q not set"
+	pairedFlagsMsg     = "flags %q and %q go together"
+	unknownClass       = "unknown rework class %q"
+	planningHint       = "write the plan in %s, then harness run plan"
 )
 
 var reworkClasses = []domain.ReworkClass{
@@ -107,7 +109,17 @@ func Lines(s status.Status) []string {
 	if s.Reason != "" {
 		lines = append(lines, reasonPrefix+s.Reason)
 	}
+	if s.Step > 0 && s.HandoffStep == s.Step {
+		lines = append(lines, fmt.Sprintf(handoffReadyFormat, s.Step))
+	}
 	return append(lines, nextPrefix+hint(s))
+}
+
+func HandoffWriteLine(s status.Status) string {
+	if !s.Phase.HoldsTheTurn() {
+		return ""
+	}
+	return fmt.Sprintf(handoffWriteFormat, shareddomain.RunHandoffFile(s.ID), s.Phase, s.Step)
 }
 
 func hint(s status.Status) string {
@@ -127,7 +139,7 @@ func startCommand(connect Connect) *cobra.Command {
 				if err := h.Start.Handle(ctx, start.Command{Key: h.Key, Prompt: args[0]}); err != nil {
 					return err
 				}
-				if err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}); err != nil {
+				if _, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}); err != nil {
 					return err
 				}
 				return printRepeatClasses(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), h)
@@ -143,7 +155,7 @@ func statusCommand(connect Connect) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
-				err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key})
+				_, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key})
 				if errors.Is(err, domain.ErrRunNotFound) {
 					_, err = fmt.Fprintln(cmd.OutOrStdout(), noActiveRun)
 				}
@@ -197,7 +209,14 @@ func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {
 				if err = h.Transition.Handle(ctx, command); err != nil {
 					return err
 				}
-				return printStatus(ctx, cmd.OutOrStdout(), h, status.Query{RunID: current.ID})
+				after, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{RunID: current.ID})
+				if err != nil {
+					return err
+				}
+				if line := HandoffWriteLine(after); line != "" {
+					_, err = fmt.Fprintln(cmd.OutOrStdout(), line)
+				}
+				return err
 			})
 		},
 	}
@@ -231,15 +250,15 @@ func withHandlers(cmd *cobra.Command, connect Connect, run func(context.Context,
 	return run(cmd.Context(), handlers)
 }
 
-func printStatus(ctx context.Context, out io.Writer, h Handlers, query status.Query) error {
+func printStatus(ctx context.Context, out io.Writer, h Handlers, query status.Query) (status.Status, error) {
 	current, err := h.Status.Handle(ctx, query)
 	if err != nil {
-		return err
+		return current, err
 	}
 	for _, line := range Lines(current) {
 		if _, err := fmt.Fprintln(out, line); err != nil {
-			return err
+			return current, err
 		}
 	}
-	return nil
+	return current, nil
 }

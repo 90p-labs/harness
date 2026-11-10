@@ -99,3 +99,14 @@ func TestStatusQuery(t *testing.T) {
 		}
 	})
 }
+
+func TestStatusHandoffReady(t *testing.T) {
+	open := domain.Run{ID: "r1", Key: key, Phase: domain.PhaseWorking, Step: 3, HandoffStep: 3}
+	handler := status.NewHandler(&fakeRepository{open: &open})
+
+	got, err := handler.Handle(context.Background(), status.Query{Key: key})
+
+	if err != nil || got.Step != 3 || got.HandoffStep != 3 {
+		t.Fatalf("got %+v, %v, want Step 3 and HandoffStep 3", got, err)
+	}
+}
