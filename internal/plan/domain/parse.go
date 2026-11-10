@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	shared "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (
@@ -29,7 +31,6 @@ const (
 	fenceMermaid   = "mermaid"
 	dependsNone    = "none"
 	wordTo         = "to"
-	cellEscape     = "\x00"
 	sentenceStop   = "."
 	currentDir     = "./"
 	frontMatter    = "---"
@@ -55,7 +56,6 @@ var (
 	ownedPath      = regexp.MustCompile("`([^`]+)`")
 	leadingNumber  = regexp.MustCompile(`^\d+`)
 	followingNum   = regexp.MustCompile(`^(,\s*and\s+|,\s*|\s+and\s+|\s+to\s+)(\d+)`)
-	separatorCell  = regexp.MustCompile(`^:?-+:?$`)
 	commitTaskNoun = []string{"task ", "tasks "}
 )
 
@@ -88,25 +88,17 @@ func Parse(text string) (Document, []Problem) {
 	return p.doc, p.problems
 }
 
-func opensFence(line string) bool {
-	return strings.HasPrefix(line, fenceMark)
-}
-
-func closesFence(line string) bool {
-	return line == fenceMark
-}
-
 func (p *parser) problem(line int, rule RuleID, format string, args ...any) {
 	p.problems = append(p.problems, Problem{Line: line, Rule: rule, Message: fmt.Sprintf(format, args...)})
 }
 
 func (p *parser) line(line string, n int) {
 	switch {
-	case p.fence != nil && closesFence(line):
+	case p.fence != nil && shared.IsFenceClose(line):
 		p.closeFence()
 	case p.fence != nil:
 		p.fence.body = append(p.fence.body, line)
-	case opensFence(line):
+	case shared.IsFenceOpen(line):
 		p.fence = &fence{info: strings.TrimSpace(strings.TrimPrefix(line, fenceMark)), line: n}
 	case strings.HasPrefix(line, "### "):
 		p.heading(3, strings.TrimPrefix(line, "### "), n)
@@ -141,7 +133,7 @@ func isFinalHeading(text string) bool {
 }
 
 func (p *parser) content(line string, n int) {
-	for _, m := range sketchLink.FindAllStringSubmatch(codeSpan.ReplaceAllString(line, codeSpanWord), -1) {
+	for _, m := range sketchLink.FindAllStringSubmatch(shared.MaskCodeSpans(line), -1) {
 		p.doc.Sketches = append(p.doc.Sketches, Sketch{Title: m[1], Path: path.Clean(m[2]), Line: n})
 	}
 	switch p.section {
@@ -185,34 +177,15 @@ func (p *parser) specsContent(line string, n int) {
 	}
 }
 
-func cells(line string) []string {
-	line = strings.TrimSpace(line)
-	line = strings.TrimSuffix(strings.TrimPrefix(line, "|"), "|")
-	parts := strings.Split(strings.ReplaceAll(line, `\|`, cellEscape), "|")
-	for i, part := range parts {
-		parts[i] = strings.TrimSpace(strings.ReplaceAll(part, cellEscape, "|"))
-	}
-	return parts
-}
-
-func isSeparator(c []string) bool {
-	for _, cell := range c {
-		if !separatorCell.MatchString(cell) {
-			return false
-		}
-	}
-	return true
-}
-
 func (p *parser) row(t *Table, line string, n int, rule RuleID, width int, add func(c []string, n int)) {
 	if !strings.HasPrefix(line, "|") {
 		return
 	}
-	c := cells(line)
+	c := shared.TableCells(line)
 	switch {
 	case t.Header == nil:
 		t.Header, t.Line = c, n
-	case isSeparator(c):
+	case shared.IsTableSeparator(c):
 	case len(c) != width:
 		p.problem(n, rule, "row has %d cells, want %d", len(c), width)
 	default:

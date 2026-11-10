@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	shared "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const (
@@ -63,8 +65,8 @@ func IsProgram(text string) bool {
 		line := strings.TrimRight(raw, trailingSpace)
 		switch {
 		case inFence:
-			inFence = !closesFence(line)
-		case opensFence(line):
+			inFence = !shared.IsFenceClose(line)
+		case shared.IsFenceOpen(line):
 			inFence = true
 		case line == "## "+HeadingRuns:
 			return true
@@ -87,8 +89,8 @@ func ParseProgram(text string) (Program, []Problem) {
 		line := strings.TrimRight(raw, trailingSpace)
 		switch {
 		case inFence:
-			inFence = !closesFence(line)
-		case opensFence(line):
+			inFence = !shared.IsFenceClose(line)
+		case shared.IsFenceOpen(line):
 			inFence = true
 		case strings.HasPrefix(line, "### "):
 			p.heading(3, strings.TrimPrefix(line, "### "), i+1)
@@ -143,11 +145,11 @@ func (p *programParser) measurement(line string) {
 	if !strings.HasPrefix(line, "|") {
 		return
 	}
-	c := cells(line)
+	c := shared.TableCells(line)
 	switch {
 	case p.prog.MeasurementHeader == nil:
 		p.prog.MeasurementHeader = c
-	case !isSeparator(c):
+	case !shared.IsTableSeparator(c):
 		p.prog.MeasurementRows = append(p.prog.MeasurementRows, c)
 	}
 }

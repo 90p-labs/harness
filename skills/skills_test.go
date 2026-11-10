@@ -30,9 +30,26 @@ const (
 	skillKind           = "skill"
 	agentKind           = "agent"
 	modelFieldText      = "`model` field"
+
+	workingItemStart      = "4. `working`"
+	reviewingItemStart    = "5. `reviewing`"
+	verifyCommitsText     = "harness verify --commits"
+	runReviewText         = "harness run review"
+	selfCheckFileText     = "`self-check.md`"
+	reviewerChecklistText = "lens checklists of `agents/reviewer.md`"
+	proofCommandText      = "proof command"
+	proofPipeEscapeText   = "A `|` in a proof command is written `\\|` in the proof table."
+	selfCheckHeadText     = "Head: <full sha of HEAD>"
+	selfCheckProofHeader  = "| # | Proof | Exit |"
+	selfCheckWorkerText   = "the first model of the `worker` role"
+	selfCheckEvidenceText = "<criterion or file:line>"
+	resultPass            = "`pass`"
+	resultFixed           = "`fixed`"
+	resultOpen            = "`open`"
 )
 
 var (
+	selfCheckIDs       = []string{"spec-proof", "spec-scope", "spec-text", "standards-rules", "standards-judgement"}
 	roleAgents         = []string{"explorer", "advisor", "worker", "reviewer", "verifier"}
 	crossReference     = regexp.MustCompile("`([a-z][a-z-]*)` (" + skillKind + "|" + agentKind + ")\\b")
 	roleAgentLine      = regexp.MustCompile("`(" + strings.Join(roleAgents, "|") + ")` agents?\\b|model of the (?:`(?:" + strings.Join(roleAgents, "|") + ")` )?role\\b")
@@ -130,6 +147,32 @@ func TestSkillsNoEmDash(t *testing.T) {
 	for path, doc := range docs {
 		if strings.Contains(doc, repository.EmDash) {
 			t.Errorf("%s has an em dash", path)
+		}
+	}
+}
+
+func TestSkillSelfCheckStep(t *testing.T) {
+	doc := repository.Read(t, skillFile)
+	start := strings.Index(doc, workingItemStart)
+	end := strings.Index(doc, reviewingItemStart)
+	if start < 0 || end < start {
+		t.Fatalf("%s has no phase working item before the phase reviewing item", skillFile)
+	}
+	item := doc[start:end]
+	verify := strings.Index(item, verifyCommitsText)
+	review := strings.Index(item, runReviewText)
+	selfCheck := strings.Index(item, selfCheckFileText)
+	if verify < 0 || selfCheck < verify || review < 0 || review < selfCheck {
+		t.Errorf("the working item must name %q, then %s, then %q", verifyCommitsText, selfCheckFileText, runReviewText)
+	}
+	pins := []string{
+		reviewerChecklistText, proofCommandText, proofPipeEscapeText,
+		selfCheckHeadText, selfCheckProofHeader, selfCheckWorkerText, selfCheckEvidenceText,
+		resultPass, resultFixed, resultOpen,
+	}
+	for _, want := range append(pins, selfCheckIDs...) {
+		if !strings.Contains(item, want) {
+			t.Errorf("the working item does not name %q", want)
 		}
 	}
 }
