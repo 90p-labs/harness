@@ -24,6 +24,9 @@ These terms have one meaning in the code, the docs and the plans.
 - **Re-review**: a `reviewer` agent that reads one fixup diff and answers `closed` or `open`. It runs in `working` and writes no review record.
 - **Final panel**: the common list on the final `HEAD` after a rework, with every listed `reviewer` model.
 - **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`.
+- **Tree-only amend**: an `amend` that skips the approval. It starts in `working` with no live round, and changes only the tree fences or the test paths of an `Owned files` line.
+- **Review risk**: a line of `## Review risks` that names a risk. It points to a test name or to a decision.
+- **Threat model**: the section that names the attacker, the input forms and the fail-closed rule. A tree path with a `guard` or `security` folder needs it.
 
 ## Plugin terms
 

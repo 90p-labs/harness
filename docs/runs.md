@@ -43,6 +43,10 @@ next: ask the Plan question; when the user picks Approve, run harness run approv
 
 Before the plan, the `explorer` agent reads `CONTEXT.md`, `docs/adr/` and the touched code. Each decision that the code cannot make goes under `## Open questions` in `plan.md`. After `harness run plan`, the agent grills the user in rounds through the question tool of the host (`AskUserQuestion` on Claude Code, `request_user_input` on Codex). Each answer moves to `## Decisions`.
 
+The plan also needs `## Review risks`. Write `- none`, or one risk on each line with `Test:` and a backticked test name, or `Decision:` and text. The rule `risk-unanchored` checks it. A tree path with a `guard` or `security` folder needs `## Threat model` with the bullets `Attacker`, `Input forms` and `Fail closed`. The rule `threat-model` checks it.
+
+A single-run plan has 6 tasks at most, and the rule `plan-size` checks it. Split a larger change into a multi-run plan. The template `skills/harness/references/plan-template.md` lists every plan check rule.
+
 When no question is open, the agent asks the `Plan` question with the options `Approve` and `Change the plan`. On `Approve`, the `post-tool-use` hook records the approval for the hash of the current `plan.md`. A plain reply in the chat records nothing.
 
 ```console
@@ -186,7 +190,7 @@ stateDiagram-v2
     abandoned --> [*]
 ```
 
-With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes to `working`. A plan with only `docs` commits and `- none` under `## Open questions` also skips the approval on `submit-plan`, but never on `amend`. `docs/go-live.md` describes `releasing` and `observing`.
+With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes to `working`. A plan with only `docs` commits and `- none` under `## Open questions` also skips the approval on `submit-plan`. An `amend` skips it only as a tree-only amend. Only an `amend` in the `working` phase takes this waiver. `DESIGN.md` states the conditions. `docs/go-live.md` describes `releasing` and `observing`.
 
 | Part | Where it acts |
 |---|---|
