@@ -4,6 +4,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -629,4 +630,97 @@ func TestCheckMarksLinkStyles(t *testing.T) {
 			}
 		})
 	}
+}
+
+var mermaidKeywords = []string{
+	"style", "linkStyle", "classDef", "class", "click", "call",
+	"href", "interpolate", "end", "subgraph", "graph", "flowchart",
+}
+
+type keywordRow struct {
+	name, body string
+	line       int
+	word       string
+}
+
+func keywordRows() (refused, passed []keywordRow) {
+	for _, k := range mermaidKeywords {
+		refused = append(refused,
+			keywordRow{k + " after a marked link", lines("flowchart TD", `    count -->|"(new)"| `+k+"[x]"), 2, k},
+			keywordRow{k + " after an unmarked link", lines("flowchart TD", "    a --> "+k), 2, k},
+			keywordRow{k + " before a link", lines("flowchart TD", "    "+k+"[x] --> b"), 2, k},
+		)
+	}
+	refused = append(refused,
+		keywordRow{"group", lines("flowchart TD", "    a --> b & class"), 2, "class"},
+		keywordRow{"text label", lines("flowchart TD", "    a -- t --> style"), 2, "style"},
+		keywordRow{"data shape", lines("flowchart TD", "    style@{ shape: rect }"), 2, "style"},
+		keywordRow{"class shorthand", lines("flowchart TD", "    style:::new"), 2, "style"},
+		keywordRow{"header link", lines("flowchart TD; a --> style"), 1, "style"},
+		keywordRow{"after a semicolon", lines("flowchart TD", "    a --> b; c --> end"), 2, "end"},
+	)
+	passed = []keywordRow{
+		{name: "class statement", body: lines("flowchart TD", "    class a new; a --> b")},
+		{name: "subgraph statement", body: lines("flowchart TD", "    subgraph x; a --> b; end")},
+		{name: "style statement", body: lines("flowchart TD", "    style a fill:#f00")},
+		{name: "label word", body: lines("flowchart TD", "    a -- end --> b")},
+		{name: "end line", body: lines("flowchart TD", "    subgraph x", "    a --> b", "    end")},
+		{name: "mixed case", body: lines("flowchart TD", "    Style[x] --> End")},
+		{name: "longer ids", body: lines("flowchart TD", "    endpoint[y] --> end-x")},
+		{name: "text label", body: lines("flowchart TD", `    a -->|"style"| b[class]`)},
+	}
+	return refused, passed
+}
+
+func TestMarkDiagramKeywordIDs(t *testing.T) {
+	refused, passed := keywordRows()
+	refused = append(refused, keywordRow{"marked bare node", lines("flowchart TD", "    style +"), 2, "style"})
+	for _, c := range refused {
+		t.Run("refuses "+c.name, func(t *testing.T) {
+			body := c.body
+			if !strings.HasSuffix(body, " +") {
+				body += "\n    ok +"
+			}
+			_, err := domain.MarkDiagram(body)
+			want := "line " + strconv.Itoa(c.line) + ": node id " + c.word + " is a mermaid keyword"
+			if !errors.Is(err, domain.ErrDiagramRefused) || !strings.HasSuffix(err.Error(), want) {
+				t.Fatalf("err = %v, want it to end with %q", err, want)
+			}
+		})
+	}
+	for _, c := range passed {
+		t.Run("passes "+c.name, func(t *testing.T) {
+			if _, err := domain.MarkDiagram(c.body + "\n    ok +"); err != nil {
+				t.Fatalf("MarkDiagram error: %v", err)
+			}
+		})
+	}
+}
+
+func TestCheckMarksKeywordIDs(t *testing.T) {
+	refused, passed := keywordRows()
+	for _, c := range refused {
+		t.Run("reports "+c.name, func(t *testing.T) {
+			want := "line " + strconv.Itoa(c.line) + " uses the keyword " + c.word + " as a node id"
+			if got := domain.CheckMarks(c.body); !slices.Contains(got, want) {
+				t.Fatalf("CheckMarks = %q, want it to hold %q", got, want)
+			}
+		})
+	}
+	for _, c := range passed {
+		t.Run("passes "+c.name, func(t *testing.T) {
+			for _, p := range domain.CheckMarks(c.body) {
+				if strings.Contains(p, "as a node id") {
+					t.Fatalf("CheckMarks problem %q, want none about a node id", p)
+				}
+			}
+		})
+	}
+	t.Run("old pr 69 block", func(t *testing.T) {
+		body := lines("flowchart TD", `    count -->|"(new)"| style[linkStyle n]`)
+		want := "line 2 uses the keyword style as a node id"
+		if got := domain.CheckMarks(body); !slices.Contains(got, want) {
+			t.Fatalf("CheckMarks = %q, want it to hold %q", got, want)
+		}
+	})
 }
