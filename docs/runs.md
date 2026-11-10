@@ -113,9 +113,15 @@ A reviewer that finds a problem sends the run back with `harness run rework --fi
 
 ## Multi-run plan
 
-A coordinator shows a program of runs as one page. The plan has `## Runs` and one `### R<n> slug` heading for each run. Each run has the fields Wave, Depends on, Branch, Owned files and Done when.
+A coordinator shows a program of runs as one page. The plan has `## Runs` and one `### R<n> slug` heading for each run. Each run has the fields Wave, Depends on, Branch, Owned files and Done when. A numbered scope list follows the bullets, with one step on each line.
 
 ```markdown
+# Guard and coordinator plan
+
+## Goal
+
+Two runs make the guard exact and let the lead watch all runs.
+
 ## Runs
 
 ### R1 guard-precision
@@ -126,6 +132,9 @@ A coordinator shows a program of runs as one page. The plan has `## Runs` and on
 - Owned files: `internal/guard/domain/shell.go`
 - Done when: a replay of the denied commands matches the expected result.
 
+1. Follow `cd` before the source-path check.
+2. Name the resolved file in each deny.
+
 ### R2 coordinator
 
 - Wave: 2
@@ -133,6 +142,8 @@ A coordinator shows a program of runs as one page. The plan has `## Runs` and on
 - Branch: feat/coordinator
 - Owned files: `internal/run/ui/cli/list.go`
 - Done when: the lead watches all runs with 1 command.
+
+1. Add the list command for all runs.
 ```
 
 - `harness plan check --file plan.md` lists each problem of the plan.

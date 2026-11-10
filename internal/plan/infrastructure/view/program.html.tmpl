@@ -39,7 +39,7 @@
 <p class="branch"><em>Branch</em><code>{{.Branch}}</code></p>
 <ul class="owned">{{range .Owned}}<li><code>{{.}}</code></li>{{end}}</ul>
 <ol class="scope">{{range .Scope}}<li>{{.}}</li>{{end}}</ol>
-<p class="done"><em>Done when</em>{{.DoneWhen}}</p>
+<p class="done-when"><em>Done when</em>{{.DoneWhen}}</p>
 {{if .After}}<div class="links"><span class="lk"><em>After</em>{{range .After}}{{if .Href}}<a class="chip" href="#{{.Href}}">{{.Label}}</a>{{else}}<span class="chip broken" title="No such run">{{.Label}}</span>{{end}}{{end}}</span></div>
 {{end}}</article>
 {{end}}</div>

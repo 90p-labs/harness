@@ -23,7 +23,11 @@ var (
 	waveLane   = regexp.MustCompile(`class="wave"`)
 	planData   = regexp.MustCompile(`(?s)<script type="application/json" id="plan-data">(.*?)</script>`)
 	networkURL = regexp.MustCompile(`\b(?:src|href)="https?://`)
+	cssRule    = regexp.MustCompile(`([^{}]+)\{`)
+	bareDone   = regexp.MustCompile(`\.done(?:[^\w-]|$)`)
 )
+
+const copyDone = ".copy.done"
 
 func programInput(t *testing.T) (domain.Program, domain.ViewInput) {
 	t.Helper()
@@ -122,6 +126,23 @@ func TestProgramPage(t *testing.T) {
 		}
 	})
 
+	t.Run("the diagram draws no edge for an unknown dependency", func(t *testing.T) {
+		unknown := prog
+		unknown.Runs = append([]domain.ProgramRun{}, prog.Runs...)
+		unknown.Runs[1].DependsOn = append([]string{"R99"}, unknown.Runs[1].DependsOn...)
+		chart := diagramsOf(t, render(t, domain.ViewInput{Program: &unknown}))[0]
+		if strings.Contains(chart, "R99") {
+			t.Errorf("the diagram names the unknown run: %s", chart)
+		}
+		for _, r := range prog.Runs {
+			for _, d := range r.DependsOn {
+				if !strings.Contains(chart, d+" --> "+r.ID) {
+					t.Errorf("no edge %s --> %s", d, r.ID)
+				}
+			}
+		}
+	})
+
 	t.Run("the measurement table and the decisions", func(t *testing.T) {
 		text := html.UnescapeString(page)
 		want := append(append([]string{}, prog.MeasurementHeader...), prog.Decisions...)
@@ -172,4 +193,19 @@ func TestProgramPage(t *testing.T) {
 			t.Error("plan text reached the page as markup")
 		}
 	})
+}
+
+func TestPageCSSHasNoBareDone(t *testing.T) {
+	raw, err := os.ReadFile("view.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range cssRule.FindAllStringSubmatch(string(raw), -1) {
+		for _, selector := range strings.Split(m[1], ",") {
+			selector = strings.TrimSpace(selector)
+			if bareDone.MatchString(selector) && selector != copyDone {
+				t.Errorf("selector %q hits the bare class done", selector)
+			}
+		}
+	}
 }

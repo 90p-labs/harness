@@ -173,8 +173,15 @@ func dependencyChart(runs []domain.ProgramRun) string {
 	for _, r := range runs {
 		fmt.Fprintf(&b, nodeFormat, r.ID, r.ID, r.Slug)
 	}
+	known := map[string]bool{}
+	for _, r := range runs {
+		known[r.ID] = true
+	}
 	for _, r := range runs {
 		for _, d := range r.DependsOn {
+			if !known[d] {
+				continue
+			}
 			fmt.Fprintf(&b, edgeFormat, d, r.ID)
 		}
 	}

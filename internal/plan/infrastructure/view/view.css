@@ -162,8 +162,8 @@ table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 .owned::before { content: "Owned files"; }
 .owned code { font-size: 0.76rem; background: none; padding: 0; color: var(--ink-2); overflow-wrap: anywhere; }
 .task .links { gap: 0.45rem 0.9rem; padding-top: 0.75rem; border-top: 1px dashed var(--rule); }
-.branch, .done { margin: 0 0 0.75rem; font-size: 0.92rem; color: var(--ink-2); overflow-wrap: anywhere; }
-.branch em, .done em { display: block; font: 500 0.66rem/1 var(--mono); font-style: normal; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); margin-bottom: 0.35rem; }
+.branch, .done-when { margin: 0 0 0.75rem; font-size: 0.92rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.branch em, .done-when em { display: block; font: 500 0.66rem/1 var(--mono); font-style: normal; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); margin-bottom: 0.35rem; }
 .branch code { font-size: 0.76rem; background: none; padding: 0; overflow-wrap: anywhere; }
 .scope { margin: 0 0 0.85rem; padding-left: 1.2rem; display: grid; gap: 0.3rem; font-size: 0.92rem; color: var(--ink-2); overflow-wrap: anywhere; }
 

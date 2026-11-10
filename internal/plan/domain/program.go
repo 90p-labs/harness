@@ -22,6 +22,7 @@ const (
 	FormRunDepends = "none, R1, R1 and R3 or R1, R2 and R3"
 	FormWave       = "a positive number"
 	FormBranch     = "type/slug"
+	FormScope      = "a numbered list after the bullets, one step on each line"
 )
 
 var (
@@ -173,6 +174,9 @@ func (p *programParser) runLine(line string, n int) {
 	case FieldWave:
 		r.Wave, _ = strconv.Atoi(value)
 	case FieldDependsOn:
+		if value == "" {
+			p.problems = append(p.problems, Problem{Line: n, Rule: RuleRunField, Message: FieldDependsOn + " must be " + FormRunDepends})
+		}
 		r.DependsOn = runIDs(value)
 	case FieldBranch:
 		r.Branch = value

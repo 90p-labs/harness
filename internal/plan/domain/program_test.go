@@ -122,6 +122,7 @@ func TestCheckProgram(t *testing.T) {
 		{"bad branch", valid, []edit{{"feat/guard-precision", "guard-precision"}}, domain.RuleRunField, func(s string) int { return lineOf(t, s, "Branch: guard-precision") }},
 		{"no owned path", valid, []edit{{r5Owned, "- Owned files: none"}}, domain.RuleRunField, func(s string) int { return lineOf(t, s, "Owned files: none") }},
 		{"no scope step", valid, []edit{{r7Scope, ""}}, domain.RuleRunField, func(s string) int { return lineOf(t, s, "### R7 lead-cost") }},
+		{"blank dependency", valid, []edit{{r1Fields, strings.Replace(r1Fields, "Depends on: none", "Depends on:", 1)}}, domain.RuleRunField, func(s string) int { return lineOf(t, s, "Depends on:") }},
 		{"unknown dependency", valid, []edit{{"Depends on: R2\n", "Depends on: R9\n"}}, domain.RuleRunDepends, func(s string) int { return lineOf(t, s, "Depends on: R9") }},
 		{"same wave dependency", valid, []edit{{"Depends on: R1 and R3a", "Depends on: R1 and R5"}}, domain.RuleRunDepends, func(s string) int { return lineOf(t, s, "Depends on: R1 and R5") }},
 		{"later wave dependency", valid, []edit{{"Depends on: R2\n", "Depends on: R7\n"}}, domain.RuleRunDepends, func(s string) int { return lineOf(t, s, "Depends on: R7") }},
