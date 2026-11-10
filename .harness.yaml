@@ -16,3 +16,5 @@ gates:
   - id: go-test
     run: go test ./...
     needs: [go-fmt, go-vet]
+  - id: prose
+    run: HARNESS_PROSE_BASE=main go test -count=1 -run '^TestChangedProse$' ./skills/
