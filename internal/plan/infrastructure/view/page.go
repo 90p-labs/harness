@@ -497,7 +497,7 @@ func (b *builder) criteria() []criterionRow {
 
 func (b *builder) notes() []noteBlock {
 	var blocks []noteBlock
-	for _, name := range []string{domain.HeadingDecisions, headingRisks, headingNonGoals, headingEdgeCases} {
+	for _, name := range []string{domain.HeadingDecisions, domain.HeadingReviewRisks, domain.HeadingThreatModel, headingRisks, headingNonGoals, headingEdgeCases} {
 		block := noteBlock{Title: name}
 		for _, item := range proseOf(b.in.Doc, name) {
 			block.Items = append(block.Items, inline(item))
