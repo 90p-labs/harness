@@ -40,7 +40,7 @@ func TestCodexDecode(t *testing.T) {
 		{"stop", hostdomain.HookStop, codexStopInput, shareddomain.EventTurnStopping, `{"stop_hook_active":true,"background_agents":0}`},
 		{"stop with tasks", hostdomain.HookStop, codexStopTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":2}`},
 		{"subagent start", hostdomain.HookSubagentStart, codexSubagentStartIn, shareddomain.EventSubagentStarted, `{"agent_id":"a1","agent_type":"explorer"}`},
-		{"subagent stop", hostdomain.HookSubagentStop, codexSubagentStopIn, shareddomain.EventSubagentStopped, `{"agent_id":"a1","agent_type":"explorer"}`},
+		{"subagent stop", hostdomain.HookSubagentStop, codexSubagentStopIn, shareddomain.EventSubagentStopped, `{"agent_id":"a1","agent_type":"explorer","agent_transcript_path":"/tmp/a.jsonl"}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

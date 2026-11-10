@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"model":"claude-haiku-5-5","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/work/tool-results/diff.txt"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"     1\tdiff --git a/a.go b/a.go\n     2\tindex 1..2 100644\n     3\t--- a/a.go\n     4\t+++ b/a.go\n    12\tdiff --git a/b.go b/b.go\n"}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"see diff --git a/c.go b/c.go in the text\n"}]}}

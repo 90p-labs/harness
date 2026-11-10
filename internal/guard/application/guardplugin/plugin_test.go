@@ -63,6 +63,8 @@ func deps(stop domain.StopDecider) guardplugin.Deps {
 		DefaultBranch: func(context.Context, string) (string, error) { return "main", nil },
 		Stop:          stop,
 		CommitChecked: func(context.Context, string) (bool, error) { return true, nil },
+		PatchID:       func(context.Context, string, string) (string, error) { return "", nil },
+		ReworkReasons: func(context.Context, string, string) ([]string, error) { return nil, nil },
 		Models:        map[shareddomain.Host]map[string][]string{},
 		Meter:         metricnoop.NewMeterProvider().Meter("test"),
 	}
@@ -128,11 +130,12 @@ func TestGuardPluginNames(t *testing.T) {
 	for _, rule := range domain.Rules() {
 		want = append(want, pluginPrefix+rule.ID)
 	}
-	want = append(want, pluginPrefix+domain.RuleStopHoldsTurn, pluginReviewRecorder, pluginPrefix+domain.RuleReviewModels)
+	want = append(want, pluginPrefix+domain.RuleStopHoldsTurn, pluginReviewRecorder, pluginPrefix+domain.RuleReviewModels, pluginPrefix+domain.RuleReviewFindings)
 	events := map[string]shareddomain.EventName{
-		pluginPrefix + domain.RuleStopHoldsTurn: shareddomain.EventTurnStopping,
-		pluginReviewRecorder:                    shareddomain.EventToolAfter,
-		pluginPrefix + domain.RuleReviewModels:  shareddomain.EventRunTransitionBefore,
+		pluginPrefix + domain.RuleStopHoldsTurn:  shareddomain.EventTurnStopping,
+		pluginReviewRecorder:                     shareddomain.EventSubagentStopped,
+		pluginPrefix + domain.RuleReviewModels:   shareddomain.EventRunTransitionBefore,
+		pluginPrefix + domain.RuleReviewFindings: shareddomain.EventRunTransitionBefore,
 	}
 	var got []string
 	for _, p := range plugins {
@@ -145,16 +148,16 @@ func TestGuardPluginNames(t *testing.T) {
 			t.Errorf("%s subscribes to %v, want only %s", p.Name(), p.Subscribes(), event)
 		}
 	}
-	if len(want) != 16 || !slices.Equal(got, want) {
-		t.Fatalf("names = %v, want the 16 %v", got, want)
+	if len(want) != 17 || !slices.Equal(got, want) {
+		t.Fatalf("names = %v, want the 17 %v", got, want)
 	}
 }
 
 func TestGuardDisabled(t *testing.T) {
 	plugins := build(t, []string{domain.RuleGitNoForce, domain.RuleStopHoldsTurn}, deps(&fakeStop{}))
 
-	if len(plugins) != 14 {
-		t.Fatalf("plugins = %d, want 14", len(plugins))
+	if len(plugins) != 15 {
+		t.Fatalf("plugins = %d, want 15", len(plugins))
 	}
 	for _, p := range plugins {
 		if p.Name() == pluginPrefix+domain.RuleGitNoForce || p.Name() == pluginPrefix+domain.RuleStopHoldsTurn {
@@ -417,7 +420,7 @@ func TestDefaultBranchOverride(t *testing.T) {
 	})
 
 	t.Run("configured value skips git", func(t *testing.T) {
-		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil }, nil, nil)
+		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil }, nil, nil, nil, false)
 		if err != nil {
 			t.Fatalf("new plugins: %v", err)
 		}

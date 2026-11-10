@@ -44,6 +44,11 @@ func readReasons(t *testing.T) []reasonRow {
 
 func seedReworks(t *testing.T, s store, repo string, rows []reasonRow) {
 	t.Helper()
+	seedEvents(t, s, repo, domain.EventRequestRework, rows)
+}
+
+func seedEvents(t *testing.T, s store, repo string, event domain.Event, rows []reasonRow) {
+	t.Helper()
 	runs := map[string]bool{}
 	for _, row := range rows {
 		if !runs[row.Run] {
@@ -54,9 +59,118 @@ func seedReworks(t *testing.T, s store, repo string, rows []reasonRow) {
 			save(t, s, run)
 		}
 		_, err := s.db.Exec("INSERT INTO run_transitions (run_id, at, from_phase, event, to_phase, reason, rework_class) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			row.Run, clock.UTC(), domain.PhaseReviewing, domain.EventRequestRework, domain.PhaseWorking, "reason", row.Class)
+			row.Run, clock.UTC(), domain.PhaseReviewing, event, domain.PhaseWorking, "reason", row.Class)
 		if err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+func TestLastReworkAt(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			save(t, s, newRun(t, "r1", domain.EventStart))
+			other := newRun(t, "r2", domain.EventStart)
+			other.Key.Worktree = "/other"
+			save(t, s, other)
+
+			if got, err := s.repo.LastReworkAt(ctx, "r1"); err != nil || !got.IsZero() {
+				t.Fatalf("no rework: got %v, %v, want the zero time", got, err)
+			}
+
+			amend, rework := clock.Add(time.Minute).UTC(), clock.Add(3*time.Minute).UTC()
+			for _, row := range []struct {
+				run   string
+				at    time.Time
+				event domain.Event
+			}{
+				{"r1", amend, domain.EventAmend},
+				{"r1", rework, domain.EventRequestRework},
+				{"r1", clock.Add(5 * time.Minute).UTC(), domain.EventReworkMinor},
+				{"r2", clock.Add(9 * time.Minute).UTC(), domain.EventRequestRework},
+			} {
+				if _, err := s.db.Exec("INSERT INTO run_transitions (run_id, at, from_phase, event, to_phase, reason, rework_class) VALUES (?, ?, ?, ?, ?, ?, ?)",
+					row.run, row.at, domain.PhaseReviewing, row.event, domain.PhaseWorking, "", ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got, err := s.repo.LastReworkAt(ctx, "r1")
+
+			if err != nil || !got.Equal(rework) {
+				t.Fatalf("got %v, %v, want %v, the last request-rework or amend of the run", got, err, rework)
+			}
+		})
+	}
+}
+
+func TestReworkReasons(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			save(t, s, newRun(t, "r1", domain.EventStart))
+			other := newRun(t, "r2", domain.EventStart)
+			other.Key.Worktree = "/other"
+			save(t, s, other)
+			for i, row := range []struct {
+				run    string
+				event  domain.Event
+				reason string
+			}{
+				{"r1", domain.EventRequestRework, "F1, major, fix the pong"},
+				{"r1", domain.EventReworkMinor, "F2, minor, tidy"},
+				{"r1", domain.EventRequestRework, "F3, blocker, fix the ping"},
+				{"r2", domain.EventRequestRework, "F9, major, other run"},
+				{"r1", domain.EventRegress, "new plan"},
+				{"r1", domain.EventRequestRework, "F1, major, fix the new pong"},
+				{"r1", domain.EventAmend, "amend"},
+			} {
+				if _, err := s.db.Exec("INSERT INTO run_transitions (run_id, at, from_phase, event, to_phase, reason, rework_class) VALUES (?, ?, ?, ?, ?, ?, ?)",
+					row.run, clock.Add(time.Duration(i)*time.Minute).UTC(), domain.PhaseReviewing, row.event, domain.PhaseWorking, row.reason, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got, err := s.repo.ReworkReasons(ctx, "r1")
+
+			want := []string{"F1, major, fix the pong", "F3, blocker, fix the ping", "F1, major, fix the new pong"}
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %v, %v, want %v, every request-rework reason of the run, also before a regress", got, err, want)
+			}
+		})
+	}
+}
+
+func TestLastReworkAtLastEvent(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range dialectCases {
+		for _, last := range []domain.Event{domain.EventAmend, domain.EventRegress} {
+			t.Run(c.name+"/"+string(last), func(t *testing.T) {
+				s := openStore(t, c)
+				save(t, s, newRun(t, "r1", domain.EventStart))
+				want := clock.Add(5 * time.Minute).UTC()
+				for _, row := range []struct {
+					at    time.Time
+					event domain.Event
+				}{
+					{clock.Add(time.Minute).UTC(), domain.EventRequestRework},
+					{want, last},
+				} {
+					if _, err := s.db.Exec("INSERT INTO run_transitions (run_id, at, from_phase, event, to_phase, reason, rework_class) VALUES (?, ?, ?, ?, ?, ?, ?)",
+						"r1", row.at, domain.PhaseReviewing, row.event, domain.PhaseWorking, "", ""); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				got, err := s.repo.LastReworkAt(ctx, "r1")
+
+				if err != nil || !got.Equal(want) {
+					t.Fatalf("got %v, %v, want %v, the time of the last %s", got, err, want, last)
+				}
+			})
 		}
 	}
 }
@@ -98,6 +212,23 @@ func TestRepeatClassesCount(t *testing.T) {
 					t.Fatalf("got %+v, %v, want %+v", got, err, want)
 				}
 			})
+		})
+	}
+}
+
+func TestRepeatClassesCountMinorReworks(t *testing.T) {
+	for _, c := range dialectCases {
+		t.Run(c.name, func(t *testing.T) {
+			s := openStore(t, c)
+			seedEvents(t, s, key.Repo, domain.EventRequestRework, []reasonRow{{Run: "a", Class: domain.ReworkMinor}})
+			seedEvents(t, s, key.Repo, domain.EventReworkMinor, []reasonRow{{Run: "b", Class: domain.ReworkMinor}})
+
+			got, err := s.repo.RepeatClasses(context.Background(), key.Repo)
+
+			want := []domain.ClassCount{{Class: domain.ReworkMinor, Count: 2}}
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %+v, %v, want %+v", got, err, want)
+			}
 		})
 	}
 }

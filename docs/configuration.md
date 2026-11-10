@@ -144,6 +144,7 @@ The policy of the run loop. `harness run` reads it on each transition.
 | `go_live` | bool | `false` | `HARNESS_RUN_GO_LIVE` | `true` adds the phases `releasing` and `observing` after the merge. See [go-live](go-live.md) |
 | `max_review_rounds` | int, 1 or more | `3` | `HARNESS_RUN_MAX_REVIEW_ROUNDS` | The review rounds of a run. A rework request in the last round moves the run to `blocked` |
 | `max_live_rounds` | int, 1 or more | `3` | `HARNESS_RUN_MAX_LIVE_ROUNDS` | The production regressions that send the run back to `planning`. The last one moves the run to `blocked` |
+| `strict_minor` | bool | `false` | `HARNESS_RUN_STRICT_MINOR` | `false` counts a review round only for a real open blocker or major finding. A minor finding moves the run to `working` and keeps the round. `true` counts a minor finding like a major one |
 | `max_stop_blocks` | int, 1 or more | `3` | `HARNESS_RUN_MAX_STOP_BLOCKS` | How many times in a row the guard refuses the end of an agent turn in a phase that holds the turn |
 
 A plan with only `docs` commits and no open question skips the approval, also with `approval: true`.
@@ -164,7 +165,7 @@ Your own commands on the event bus. The harness writes the event envelope as JSO
 | `command` | list of strings | required | none | The program and its arguments. The harness runs it with no shell |
 | `events` | list of strings | required | none | One event name or more, from the table below. An unknown name is an error |
 | `timeout` | duration | `5s` | none | The longest run of one call. `0` gives `5s`. A negative value is an error |
-| `transition` | list of strings | none | none | Optional. Only for the events `run.transition.before` and `run.transition.after`; any other event with it is an error. The plugin runs only for these transitions: `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume`, `abandon`. A value in one key is an OR. The three keys together are an AND |
+| `transition` | list of strings | none | none | Optional. Only for the events `run.transition.before` and `run.transition.after`; any other event with it is an error. The plugin runs only for these transitions: `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `rework-minor`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume`, `abandon`. A value in one key is an OR. The three keys together are an AND |
 | `from` | list of strings | none | none | Optional. Same rules as `transition`. The plugin runs only when the run leaves one of these phases: `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done`, `abandoned`. The transition `start` has no phase before it, so `from` never matches it |
 | `to` | list of strings | none | none | Optional. Same rules as `transition`. The plugin runs only when the run enters one of these phases: `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done`, `abandoned` |
 
@@ -202,7 +203,7 @@ plugins:
 
 ### Filter a transition
 
-The keys `transition`, `from` and `to` pick the run transitions that a plugin sees. The transition names are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phase names are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`.
+The keys `transition`, `from` and `to` pick the run transitions that a plugin sees. The transition names are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `rework-minor`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phase names are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`.
 
 - Values in one key are an OR. The keys together are an AND.
 - A plugin with no filter sees all transitions.
@@ -237,7 +238,7 @@ plugins:
 
 The models of each agent role on each host. A host maps to a list of models, and a single model still loads as a list of one. The guard rule `agent-model-routing` denies an agent call whose model is not in the list of its role. A role with no model for the host is not checked.
 
-The rule `review-models` needs a review record of every reviewer model of the host list on `HEAD`, and at least 2 models. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host that lists a `reviewer` role needs 2 or more models there, or `review-models` in `guard.disabled`. With one listed model, `harness run ship` is denied and the next step names `roles.reviewer`.
+The rule `review-models` needs a counted review of every reviewer model of the host list, and at least 2 models. A review counts when it read a changed file and it matches `HEAD`, the patch id, or the current run. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host that lists a `reviewer` role needs 2 or more models there, or `review-models` in `guard.disabled`. With one listed model, `harness run ship` is denied and the next step names `roles.reviewer`.
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
@@ -300,7 +301,8 @@ The rule ids:
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` before `harness verify --commits` passes for `HEAD` |
 | `approval-no-forge` | `tool.before` | A question tool call with answers in its input, or a shell call of `harness hook` |
 | `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`) |
-| `review-models` | `run.transition.before` | `harness run ship` when a reviewer model of the host list has no record on `HEAD`, or fewer than 2 models have a record. The rule picks the host list with the most recorded models. A hook records the model of each `reviewer` agent call in the reviewing phase, in the common list and in the final panel. A verifier call and a re-review write no record. A Codex repository turns it off, because Codex sends no model in an agent call |
+| `review-models` | `run.transition.before` | `harness run ship` when a reviewer model of the host list has no counted review, or fewer than 2 models have a record. The rule picks the host list with the most recorded models. A hook records the review when a `reviewer` agent stops in the reviewing phase, in the common list and in the final panel. A review counts only when its transcript shows a read of a changed file, and the deny names the model that did not. A verifier call and a re-review write no record. A Codex repository turns it off, because Codex sends no model in an agent call |
+| `review-findings` | `run.transition.before` | `harness run ship` while `findings.md` of the run has a real open blocker or major finding. With `run.strict_minor` on, a real open minor finding also denies. A missing file allows |
 
 ```yaml
 guard:

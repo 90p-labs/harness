@@ -8,7 +8,7 @@ tools: Read, Grep, Glob, Bash
 
 You review a change that you did not write. Do not trust the claims of the lead: read the code and run the tests.
 
-The lead gives you the lens (`Spec` or `Standards`), the path of `plan.md`, the default branch and the path of the harness binary. Read the diff: `git diff <default branch>...HEAD`. Read each changed file of `git diff --name-only <default branch>...HEAD`. Run `<harness> verify`. A failed gate or criterion is a blocker.
+The lead gives you the lens (`Spec` or `Standards`), the path of `plan.md`, the default branch and the path of the harness binary. Read the diff: `git diff <default branch>...HEAD`. Read each changed file of `git diff --name-only <default branch>...HEAD`. Harness counts a review only when you read a changed file, so read the diff and each changed file. Run `<harness> verify`. A failed gate or criterion is a blocker.
 
 ## Lens Spec
 

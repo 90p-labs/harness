@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
+	"io/fs"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/90p-labs/harness/internal/guard/application/guardplugin"
 	"github.com/90p-labs/harness/internal/guard/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
@@ -28,34 +31,38 @@ const (
 
 type reviewStore struct {
 	models  []string
-	saved   []string
+	unread  []string
+	saved   []domain.Review
 	saveErr error
+	scope   domain.ReviewScope
 }
 
-func (s *reviewStore) save(_ context.Context, _, model string) error {
+func (s *reviewStore) save(_ context.Context, _ string, review domain.Review) error {
 	if s.saveErr != nil {
 		return s.saveErr
 	}
-	s.saved = append(s.saved, model)
+	s.saved = append(s.saved, review)
 	return nil
 }
 
-func (s *reviewStore) read(context.Context, string) ([]string, error) { return s.models, nil }
+func (s *reviewStore) read(_ context.Context, _ string, scope domain.ReviewScope) ([]domain.Review, error) {
+	s.scope = scope
+	var reviews []domain.Review
+	for _, model := range s.models {
+		reviews = append(reviews, domain.Review{Model: model, FilesRead: []string{changedFile}})
+	}
+	for _, model := range s.unread {
+		reviews = append(reviews, domain.Review{Model: model})
+	}
+	return reviews, nil
+}
 
 func reviewPlugins(t *testing.T, disabled []string, store *reviewStore) []shareddomain.Plugin {
 	t.Helper()
 	d := deps(&fakeStop{})
 	d.SaveReview = store.save
-	d.ReviewModels = store.read
+	d.Reviews = store.read
 	return build(t, disabled, d)
-}
-
-func agentAfter(t *testing.T, phase, agentType, model string) shareddomain.Envelope {
-	t.Helper()
-	env := toolEnvelope(t, shareddomain.HostClaude, t.TempDir(), toolAgent, map[string]string{"subagent_type": agentType, "model": model})
-	env.Event = shareddomain.EventToolAfter
-	env.Run = shareddomain.RunRef{ID: "r1", Phase: phase}
-	return env
 }
 
 func transitionEnvelope(t *testing.T, event string) shareddomain.Envelope {
@@ -67,27 +74,78 @@ func transitionEnvelope(t *testing.T, event string) shareddomain.Envelope {
 	return shareddomain.Envelope{Event: shareddomain.EventRunTransitionBefore, Payload: payload}
 }
 
-func TestReviewRecorded(t *testing.T) {
+const (
+	changedFile    = "a.go"
+	otherFile      = "b.go"
+	reviewWorktree = "/work/repo"
+	reviewPatchID  = "p1"
+	transcriptFile = "/t/agent.jsonl"
+	haikuModelID   = "claude-haiku-5-5"
+)
+
+func transcriptReading(model, file string) string {
+	return `{"type":"assistant","message":{"model":"` + model + `","content":[{"type":"tool_use","name":"Read","input":{"file_path":"` + reviewWorktree + `/` + file + `"}}]}}` + "\n"
+}
+
+func subagentStopped(t *testing.T, host shareddomain.Host, phase, agentType, transcript string) shareddomain.Envelope {
+	t.Helper()
+	payload, err := json.Marshal(shareddomain.SubagentPayload{AgentID: "a1", AgentType: agentType, TranscriptPath: transcript})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return shareddomain.Envelope{
+		Event: shareddomain.EventSubagentStopped, Host: host, Payload: payload,
+		Run: shareddomain.RunRef{ID: "r1", Phase: phase},
+	}
+}
+
+func recorderDeps(store *reviewStore, transcript string) guardplugin.Deps {
+	d := deps(&fakeStop{})
+	d.SaveReview = store.save
+	d.Reviews = store.read
+	d.Worktree = reviewWorktree
+	d.ReadFile = func(path string) ([]byte, error) {
+		if path != transcriptFile {
+			return nil, fs.ErrNotExist
+		}
+		return []byte(transcript), nil
+	}
+	d.ChangedFiles = func(context.Context, string, string) ([]string, error) { return []string{changedFile, otherFile}, nil }
+	d.PatchID = func(context.Context, string, string) (string, error) { return reviewPatchID, nil }
+	d.Models = map[shareddomain.Host]map[string][]string{
+		shareddomain.HostClaude: {string(shareddomain.RoleReviewer): {modelSonnet, modelHaiku, modelOpus}},
+	}
+	return d
+}
+
+func TestReviewRecorder(t *testing.T) {
+	haikuRead := transcriptReading(haikuModelID, changedFile)
 	cases := []struct {
-		name  string
-		phase string
-		agent string
-		model string
-		want  []string
+		name       string
+		phase      string
+		agent      string
+		path       string
+		transcript string
+		want       []domain.Review
 	}{
-		{"reviewer", shareddomain.PhaseReviewing, agentReviewer, modelOpus, []string{modelOpus}},
-		{"advisor", shareddomain.PhaseReviewing, agentAdvisor, modelOpus, nil},
-		{"worker", shareddomain.PhaseReviewing, agentWorker, modelOpus, nil},
-		{"explorer", shareddomain.PhaseReviewing, agentExplorer, modelOpus, nil},
-		{"reviewer outside reviewing", shareddomain.PhaseWorking, agentReviewer, modelOpus, nil},
-		{"reviewer without model", shareddomain.PhaseReviewing, agentReviewer, "", nil},
+		{"reviewer", shareddomain.PhaseReviewing, agentReviewer, transcriptFile, haikuRead,
+			[]domain.Review{{Model: modelHaiku, PatchID: reviewPatchID, RunID: "r1", FilesRead: []string{changedFile}}}},
+		{"reviewer that read no changed file", shareddomain.PhaseReviewing, agentReviewer, transcriptFile, transcriptReading(haikuModelID, "c.go"),
+			[]domain.Review{{Model: modelHaiku, PatchID: reviewPatchID, RunID: "r1"}}},
+		{"advisor", shareddomain.PhaseReviewing, agentAdvisor, transcriptFile, haikuRead, nil},
+		{"worker", shareddomain.PhaseReviewing, agentWorker, transcriptFile, haikuRead, nil},
+		{"reviewer outside reviewing", shareddomain.PhaseWorking, agentReviewer, transcriptFile, haikuRead, nil},
+		{"model not listed", shareddomain.PhaseReviewing, agentReviewer, transcriptFile, transcriptReading("claude-fable-5", changedFile), nil},
+		{"transcript without a model", shareddomain.PhaseReviewing, agentReviewer, transcriptFile, "not json\n", nil},
+		{"no transcript path", shareddomain.PhaseReviewing, agentReviewer, "", haikuRead, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			store := &reviewStore{}
-			v := dispatch(t, newBus(reviewPlugins(t, nil, store)), agentAfter(t, c.phase, c.agent, c.model))
-			if !slices.Equal(store.saved, c.want) {
-				t.Errorf("saved = %v, want %v", store.saved, c.want)
+			bus := newBus(build(t, nil, recorderDeps(store, c.transcript)))
+			v := dispatch(t, bus, subagentStopped(t, shareddomain.HostClaude, c.phase, c.agent, c.path))
+			if !reflect.DeepEqual(store.saved, c.want) {
+				t.Errorf("saved = %+v, want %+v", store.saved, c.want)
 			}
 			if v.Kind == shareddomain.VerdictDeny {
 				t.Errorf("verdict = %+v, want no deny", v)
@@ -95,13 +153,94 @@ func TestReviewRecorded(t *testing.T) {
 		})
 	}
 
-	t.Run("failed write", func(t *testing.T) {
-		store := &reviewStore{saveErr: errors.New(writeFailure)}
-		v := dispatch(t, newBus(reviewPlugins(t, nil, store)), agentAfter(t, shareddomain.PhaseReviewing, agentReviewer, modelOpus))
-		if !strings.Contains(v.Context, writeFailure) {
-			t.Errorf("verdict = %+v, want context naming %q", v, writeFailure)
-		}
-	})
+	failures := map[string]func(d *guardplugin.Deps){
+		"save": func(d *guardplugin.Deps) { d.SaveReview = (&reviewStore{saveErr: errors.New(writeFailure)}).save },
+		"transcript": func(d *guardplugin.Deps) {
+			d.ReadFile = func(string) ([]byte, error) { return nil, errors.New(writeFailure) }
+		},
+		"changed": func(d *guardplugin.Deps) {
+			d.ChangedFiles = func(context.Context, string, string) ([]string, error) { return nil, errors.New(writeFailure) }
+		},
+	}
+	for name, fail := range failures {
+		t.Run("failed "+name, func(t *testing.T) {
+			d := recorderDeps(&reviewStore{}, haikuRead)
+			fail(&d)
+			var recorder shareddomain.Plugin
+			for _, p := range build(t, nil, d) {
+				if p.Name() == pluginReviewRecorder {
+					recorder = p
+				}
+			}
+			_, err := recorder.Handle(context.Background(), subagentStopped(t, shareddomain.HostClaude, shareddomain.PhaseReviewing, agentReviewer, transcriptFile))
+			if err == nil || !strings.Contains(err.Error(), writeFailure) {
+				t.Errorf("error = %v, want one that names %q", err, writeFailure)
+			}
+		})
+	}
+}
+
+func TestReviewShipScope(t *testing.T) {
+	cases := []struct {
+		name     string
+		strict   bool
+		findings bool
+		want     domain.ReviewScope
+	}{
+		{"default rule matches the run with findings", false, true, domain.ReviewScope{PatchID: reviewPatchID, RunID: "r1"}},
+		{"default rule drops the run match without findings", false, false, domain.ReviewScope{PatchID: reviewPatchID}},
+		{"strict rule drops the run match", true, true, domain.ReviewScope{PatchID: reviewPatchID}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := &reviewStore{models: []string{modelOpus, modelSonnet, modelHaiku}}
+			d := recorderDeps(store, "")
+			d.StrictMinor = c.strict
+			d.ReadFile = func(path string) ([]byte, error) {
+				if c.findings && path == filepath.Join(reviewWorktree, shareddomain.RunFindingsFile("r1")) {
+					return []byte(findingsTable()), nil
+				}
+				return nil, fs.ErrNotExist
+			}
+			env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+			env.Run = shareddomain.RunRef{ID: "r1"}
+			if v := dispatch(t, newBus(build(t, nil, d)), env); v.Kind == shareddomain.VerdictDeny {
+				t.Fatalf("verdict = %+v, want allow", v)
+			}
+			if store.scope != c.want {
+				t.Errorf("scope = %+v, want %+v", store.scope, c.want)
+			}
+		})
+	}
+}
+
+func TestReviewShipFindingsReadError(t *testing.T) {
+	store := &reviewStore{models: []string{modelOpus, modelSonnet, modelHaiku}}
+	d := recorderDeps(store, "")
+	d.ReadFile = func(string) ([]byte, error) { return nil, errors.New(findingsRead) }
+	env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+	env.Run = shareddomain.RunRef{ID: "r1"}
+	if v := dispatch(t, newBus(build(t, []string{domain.RuleReviewFindings}, d)), env); v.Kind == shareddomain.VerdictDeny {
+		t.Fatalf("verdict = %+v, want allow", v)
+	}
+	if want := (domain.ReviewScope{PatchID: reviewPatchID}); store.scope != want {
+		t.Errorf("scope = %+v, want %+v", store.scope, want)
+	}
+}
+
+func TestReviewShipWithoutPatchID(t *testing.T) {
+	store := &reviewStore{models: []string{modelOpus, modelSonnet, modelHaiku}}
+	d := recorderDeps(store, "")
+	d.PatchID = func(context.Context, string, string) (string, error) { return "", errors.New("no merge base") }
+	d.ReadFile = func(string) ([]byte, error) { return []byte(findingsTable()), nil }
+	env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+	env.Run = shareddomain.RunRef{ID: "r1"}
+	if v := dispatch(t, newBus(build(t, nil, d)), env); v.Kind == shareddomain.VerdictDeny {
+		t.Fatalf("verdict = %+v, want allow", v)
+	}
+	if want := (domain.ReviewScope{RunID: "r1"}); store.scope != want {
+		t.Errorf("scope = %+v, want %+v", store.scope, want)
+	}
 }
 
 func TestReviewModelsShip(t *testing.T) {
@@ -141,7 +280,7 @@ func TestReviewModelsShip(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			d := deps(&fakeStop{})
 			hostStore := &reviewStore{models: c.models}
-			d.ReviewModels = hostStore.read
+			d.Reviews = hostStore.read
 			d.Models = map[shareddomain.Host]map[string][]string{
 				shareddomain.HostClaude: {string(shareddomain.RoleReviewer): {modelSonnet, modelHaiku, modelOpus}},
 				shareddomain.HostCodex:  {string(shareddomain.RoleReviewer): {modelSol, modelTerra, modelAstra}},
@@ -173,7 +312,7 @@ func TestReviewModelsShip(t *testing.T) {
 func TestReviewModelsShipOneListedModel(t *testing.T) {
 	d := deps(&fakeStop{})
 	store := &reviewStore{models: []string{modelOpus}}
-	d.ReviewModels = store.read
+	d.Reviews = store.read
 	d.Models = map[shareddomain.Host]map[string][]string{
 		shareddomain.HostClaude: {string(shareddomain.RoleReviewer): {modelOpus}},
 	}

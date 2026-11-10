@@ -84,6 +84,7 @@ stateDiagram-v2
     working --> reviewing: submit-for-review
     reviewing --> working: request-rework [rounds left]
     reviewing --> blocked: request-rework [last round]
+    reviewing --> working: rework-minor
     reviewing --> shipping: approve-review
     shipping --> done: complete [go-live off]
     shipping --> releasing: complete [go-live on]
@@ -119,13 +120,16 @@ stateDiagram-v2
     abandoned --> [*]
 ```
 
+The `rework` command reads `findings.md` of the run folder. A real open blocker or major finding gives `request-rework`. Only minor findings give `rework-minor`, or `request-rework` when `run.strict_minor` is on. No real open finding is an error. The command also refuses a `--findings` text that does not name each real open blocker or major ID. The parser reads every table of the file.
+
 The effects of each event on the run, besides the phase:
 
 | Event | Effect |
 |---|---|
 | any | `StopBlocks` goes to 0 |
-| `approve-plan` | `Track` keeps the stricter of the run track and the plan track, `ReviewRound` goes to 0 |
+| `approve-plan` | `Track` keeps the stricter of the run track and the plan track |
 | `request-rework` into `working` | `ReviewRound` goes up by 1, `Reason` holds the findings |
+| `rework-minor` | `ReviewRound` stays, `Reason` holds the findings |
 | any event into `blocked` | `BlockedFrom` holds the old phase, `Reason` holds the reason or the findings |
 | `resume` | `BlockedFrom` and `Reason` are cleared |
 | `regress` into `planning` | `LiveRound` goes up by 1, `ReviewRound` goes to 0, `Reason` holds the regression findings |
@@ -137,9 +141,10 @@ The Go types are in `internal/run/domain`:
 | `phase.go` | `Phase`, one constant for each phase, `Phase.HoldsTheTurn()` |
 | `event.go` | `Event`, one constant for each event of the diagram |
 | `command.go` | `Command{Event, Reason}` |
-| `policy.go` | `Policy{ApprovalNeeded, MaxReviewRounds, GoLive, MaxLiveRounds, MaxStopBlocks}` |
+| `policy.go` | `Policy{ApprovalNeeded, MaxReviewRounds, GoLive, MaxLiveRounds, MaxStopBlocks, StrictMinor}` |
 | `guard.go` | `Guard{Name, Holds}`, one variable for each guard |
 | `transition.go` | `Transition{From, Event, Guard, To}`, `Transitions()` returns a copy of the table |
+| `rework_round.go` | `ReworkEvent(findings, policy)` picks `request-rework` or `rework-minor`, and the `FindingsReader` port |
 | `run.go` | `Run`, `Run.Apply(cmd, policy) (Run, error)` |
 | `stop.go` | `StopVerdict{Block, Reason}`, `DecideStop(run, policy, agentRunning)` |
 | `errors.go` | `ErrIllegalTransition`, wrapped with the phase and the event |
@@ -188,6 +193,7 @@ classDiagram
         +GoLive bool
         +MaxLiveRounds int
         +MaxStopBlocks int
+        +StrictMinor bool
     }
     class StopVerdict {
         +Block bool
@@ -219,12 +225,19 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `shell-write-source` | `tool.before` | A shell write to a source file. The rule expands variables and follows the `cd` of the same command only on a flat line. A flat line is simple commands joined by `;`, `&&`, `\|\|`, `\|`, `&` or a newline. The rule expands a variable or follows a `cd` only when the assignment or `cd` surely runs. A word such as `set`, `export` or `eval`, a subshell, a substitution or an unquoted heredoc makes a line not flat. A write command with an option outside its allow list, such as `cp -t`, makes a line not flat. A write command with a word that the rule cannot resolve also makes a line not flat. The deny names the file. On any other line, or for a target it cannot resolve, the deny asks for a literal absolute path. |
 | `writing-style` | `tool.before` | An em dash, an emoji or a Co-Authored-By line in commit or PR text |
 | `agent-model-routing` | `tool.before` | An agent call whose model is not in the list of its role for the host, or that has no model |
-| `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 models have a record on `HEAD`. Also when a reviewer model of the host list has no record |
+| `review-models` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when fewer than 2 models have a counted review. Also when a reviewer model of the host list has no counted review |
+| `review-findings` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when `findings.md` of the run has an open real finding of severity blocker or major. With `run.strict_minor` on, an open real minor finding also denies. It also denies when a real blocker or major finding, open or closed, has an ID that no `request-rework` reason names. An ID matches as a whole word. A missing file allows. A file that does not parse denies. A lead that edits `findings.md` can still pass the rule |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD`. A push that only deletes remote refs is allowed |
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
 
-After each Agent call of the `reviewer` role, a hook writes a review record: the repo, `HEAD` and the model, in the gate state beside the commit checks. The rule `review-models` reads the models of `HEAD` and needs every reviewer model of one host list, and at least 2 models. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host list of one model still gets the deny, with the `roles.reviewer` next step. A background agent sends `tool.after` at dispatch, so a record proves a dispatch, not a finished review. `subagent.stopped` carries no model, so this limit stays. A repository on Codex sets `guard.disabled: [review-models]`, because Codex sends no Agent call with a model. A `verifier` call writes no review record, because `verifier` is not a reviewer agent type. A re-review runs in `working`, so it writes no record either.
+When a `reviewer` agent stops in `reviewing`, a hook writes a review record on `subagent.stopped`, in the gate state beside the commit checks. The record holds the repo, `HEAD`, the model, the patch id, the files read and the run id. The hook reads `HEAD` at that moment, so the lead does not commit while a reviewer runs. The files read come from the transcript: a `Read` call, a diff header in a tool result or a shell command that names the file.
+
+The rule `review-models` counts a review only when it read a changed file and it matches one of three things. The three are `HEAD`, the patch id of the diff from the merge base, and (without `run.strict_minor`) the run. The run match ends at the last `request-rework`, `amend` or `regress`. It needs `findings.md` in the run folder. The patch id is `git patch-id --verbatim`.
+
+The rule needs every reviewer model of one host list, and 2 models or more. The deny names the model with no counted review. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host list of one model still gets the deny.
+
+Codex sends no model in an agent call, so it records no review. This limit stays. A repository on Codex sets `guard.disabled: [review-models]`. A `verifier` call writes no review record, because `verifier` is not a reviewer agent type. A re-review runs in `working`, so it writes no record either.
 
 Event kinds:
 
@@ -277,7 +290,7 @@ An exec plugin writes a verdict on stdout, so the gate line is a JSON string ins
 
 Only one plugin renders a chart. An exec plugin on `chart.render` while `helm` is on is a config error. With no renderer, the chart rules stop with `no plugin rendered the chart`. A document with no `# Source:` comment also stops them, so a render in another format cannot pass as clean.
 
-A plugin on `run.transition.before` or `run.transition.after` can filter by `transition`, `from` and `to`. The transitions are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phases are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`. Values in one key are an OR, and the keys together are an AND. No filter matches all transitions.
+A plugin on `run.transition.before` or `run.transition.after` can filter by `transition`, `from` and `to`. The transitions are `start`, `submit-plan`, `approve-plan`, `amend`, `request-rework`, `rework-minor`, `submit-for-review`, `approve-review`, `complete`, `deploy`, `close`, `regress`, `block`, `resume` and `abandon`. The phases are `planning`, `awaiting_approval`, `working`, `reviewing`, `shipping`, `releasing`, `observing`, `blocked`, `done` and `abandoned`. Values in one key are an OR, and the keys together are an AND. No filter matches all transitions.
 
 The payload is `{"event","from","to","reason"}`. In the `run.transition.before` payload `to` is the phase that the transition would reach. On `run.transition.after`, the envelope `run.phase` is the source phase, so a plugin reads `payload.to`. The transition `start` has an empty `from`.
 
@@ -554,6 +567,7 @@ A contract test suite, `TestRunRepositoryContract`, runs for each dialect. A rem
 | `run.max_review_rounds` | `3` | 1 or more |
 | `run.max_live_rounds` | `3` | 1 or more |
 | `run.max_stop_blocks` | `3` | 1 or more |
+| `run.strict_minor` | `false` | `true` counts a minor finding as a review round |
 | `live.environment` | `production` | The GitHub deployment environment |
 | `live.rollback` | empty | The rollback line of the findings |
 | `plugins` | empty list | A name, unique, a command, one event or more; `timeout` is a duration string of 0 or more, such as `750ms`, and 0 gives `5s` |
@@ -596,7 +610,7 @@ Exit codes:
 | `approve` | `--by` and `--reason`, both or neither | `approve-plan` |
 | `amend` | none | `amend` |
 | `review` | none | `submit-for-review` |
-| `rework` | `--findings`, required | `request-rework` |
+| `rework` | `--findings`, required | `request-rework`, or `rework-minor` when the real open findings of `findings.md` are all minor |
 | `ship` | none | `approve-review` |
 | `done` | none | `complete` |
 | `block` | `--reason`, required | `block` |

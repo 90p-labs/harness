@@ -136,7 +136,9 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 		stopAdapter{cfg: cfg, state: state, key: key},
 		commitCheckAdapter{cfg: cfg}.Passed,
 		reviewRecordAdapter{cfg: cfg}.Save,
-		reviewRecordAdapter{cfg: cfg}.Models)
+		reviewRecordAdapter{cfg: cfg}.Reviews,
+		reviewRecordAdapter{cfg: cfg}.ReworkReasons,
+		cfg.Run.StrictMinor)
 	if err != nil {
 		return environment{}, err
 	}

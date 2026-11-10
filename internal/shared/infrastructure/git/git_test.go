@@ -287,3 +287,89 @@ func TestHead(t *testing.T) {
 		t.Fatalf("Head = %q, %v, want %q", got, err, want)
 	}
 }
+
+func gitCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	full := append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)
+	if out, err := exec.Command("git", full...).CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
+}
+
+func commitFile(t *testing.T, dir, name string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand(t, dir, "add", name)
+	gitCommand(t, dir, "commit", "-q", "-m", name)
+}
+
+func TestPatchIDAndChangedFiles(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "base.txt")
+
+	empty, err := git.PatchID(ctx, root, "main")
+	if err != nil || empty != "" {
+		t.Fatalf("PatchID on the base = %q, %v, want empty", empty, err)
+	}
+	if files, err := git.ChangedFiles(ctx, root, "main"); err != nil || len(files) != 0 {
+		t.Fatalf("ChangedFiles on the base = %v, %v, want none", files, err)
+	}
+
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	commitFile(t, root, "one.txt")
+	commitFile(t, root, "two.txt")
+	before, err := git.PatchID(ctx, root, "main")
+	if err != nil || before == "" {
+		t.Fatalf("PatchID = %q, %v, want an id", before, err)
+	}
+	files, err := git.ChangedFiles(ctx, root, "main")
+	if err != nil || !slices.Equal(files, []string{"one.txt", "two.txt"}) {
+		t.Fatalf("ChangedFiles = %v, %v, want one.txt and two.txt", files, err)
+	}
+
+	gitCommand(t, root, "checkout", "-q", "main")
+	commitFile(t, root, "unrelated.txt")
+	gitCommand(t, root, "checkout", "-q", "feature")
+	gitCommand(t, root, "rebase", "-q", "main")
+	after, err := git.PatchID(ctx, root, "main")
+	if err != nil || after != before {
+		t.Fatalf("PatchID after a clean rebase = %q, %v, want %q", after, err, before)
+	}
+
+	commitFile(t, root, "three.txt")
+	changed, err := git.PatchID(ctx, root, "main")
+	if err != nil || changed == "" || changed == before {
+		t.Fatalf("PatchID after a new commit = %q, %v, want a new id", changed, err)
+	}
+}
+
+func TestPatchIDSeesWhitespace(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "base.txt")
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	writeFile := func(content string) {
+		if err := os.WriteFile(filepath.Join(root, "x.py"), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile("if x:\n  y()\n")
+	gitCommand(t, root, "add", "x.py")
+	gitCommand(t, root, "commit", "-q", "-m", "x")
+	before, err := git.PatchID(ctx, root, "main")
+	if err != nil || before == "" {
+		t.Fatalf("PatchID = %q, %v, want an id", before, err)
+	}
+
+	writeFile("if x:\n    y()\n")
+	gitCommand(t, root, "commit", "-q", "-a", "--amend", "--no-edit")
+	after, err := git.PatchID(ctx, root, "main")
+	if err != nil || after == "" || after == before {
+		t.Fatalf("PatchID after a re-indent = %q, %v, want an id other than %q", after, err, before)
+	}
+}

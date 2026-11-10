@@ -100,6 +100,7 @@ type ChartRenderPayload struct {
 }
 
 type SubagentPayload struct {
-	AgentID   string `json:"agent_id"`
-	AgentType string `json:"agent_type"`
+	AgentID        string `json:"agent_id"`
+	AgentType      string `json:"agent_type"`
+	TranscriptPath string `json:"agent_transcript_path,omitempty"`
 }

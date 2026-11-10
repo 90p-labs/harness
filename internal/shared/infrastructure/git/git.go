@@ -139,9 +139,45 @@ func Files(ctx context.Context, dir string, globs ...string) ([]string, error) {
 	return files, nil
 }
 
+func PatchID(ctx context.Context, dir, base string) (string, error) {
+	mergeBase, err := Run(ctx, dir, nil, "merge-base", base, "HEAD")
+	if err != nil {
+		return "", err
+	}
+	diff, err := run(ctx, dir, nil, "", "diff", mergeBase, "HEAD")
+	if err != nil || diff == "" {
+		return "", err
+	}
+	out, err := run(ctx, dir, nil, diff, "patch-id", "--verbatim")
+	id, _, _ := strings.Cut(out, " ")
+	return id, err
+}
+
+func ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
+	out, err := run(ctx, dir, nil, "", "diff", "--name-only", "-z", base+"...HEAD")
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, name := range strings.Split(out, nulSeparator) {
+		if name != "" {
+			files = append(files, name)
+		}
+	}
+	return files, nil
+}
+
 func Run(ctx context.Context, dir string, env []string, args ...string) (string, error) {
+	out, err := run(ctx, dir, env, "", args...)
+	return strings.TrimSpace(out), err
+}
+
+func run(ctx context.Context, dir string, env []string, stdin string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 	// git translates its messages, and the C locale keeps the matched text stable.
 	cmd.Env = append(append(os.Environ(), "LC_ALL=C"), env...)
 	out, err := cmd.Output()
@@ -155,5 +191,5 @@ func Run(ctx context.Context, dir string, env []string, args ...string) (string,
 	if err != nil {
 		return "", fmt.Errorf("git %s in %s: %w", args[0], dir, err)
 	}
-	return string(bytes.TrimSpace(out)), nil
+	return string(out), nil
 }

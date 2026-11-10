@@ -1,0 +1,8 @@
+{"type":"user","message":{"role":"user","content":"Review the diff of branch feat/x against main."}}
+{"type":"attachment","attachment":{"type":"hook_success"}}
+{"type":"assistant","message":{"model":"claude-haiku-5-5","role":"assistant","content":[{"type":"text","text":"I read the diff."},{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git diff main...HEAD"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"diff --git a/b.go b/b.go\nindex 1..2 100644\n--- a/b.go\n+++ b/b.go\n@@ -1 +1 @@\n-old\n+new\n"}]}}
+this line is not json
+{"type":"assistant","message":{"model":"claude-haiku-5-5","role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/work/repo/a.go"}},{"type":"tool_use","id":"t3","name":"Read","input":{"file_path":"sub/e.go"}},{"type":"tool_use","id":"t4","name":"Bash","input":{"command":"cat c.go | head -20"}},{"type":"tool_use","id":"t5","name":"Bash","input":{"command":"git diff main...HEAD -- f.go"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t5","content":[{"type":"text","text":"diff --git a/f.go b/f.go\nindex 3..4 100644\n"},{"type":"text","text":"+added\n"}]}]}}
+{"type":"assistant","message":{"model":"claude-haiku-5-5","role":"assistant","content":[{"type":"tool_use","id":"t6","name":"Read","input":{"file_path":"/other/d.go"}},{"type":"text","text":"No findings."}]}}

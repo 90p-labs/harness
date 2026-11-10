@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09. It replaces the round rule of ADR 0016 and the pre-ship panel rule of ADR 0017. The ship rule `review-models` and the floor of 2 models stay.
+Accepted, 2026-11-09. It replaces the round rule of ADR 0016 and the pre-ship panel rule of ADR 0017. The ship rule `review-models` and the floor of 2 models stay. Superseded in part by ADR 0020, 2026-11-10: the strict minor rule and the item R3b.
 
 ## Context
 

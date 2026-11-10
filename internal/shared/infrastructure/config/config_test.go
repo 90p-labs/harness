@@ -573,6 +573,24 @@ func TestLoadRejectsBadFilterName(t *testing.T) {
 	}
 }
 
+func TestStrictMinor(t *testing.T) {
+	got, err := load(t, "")
+	if err != nil || got.Run.StrictMinor {
+		t.Fatalf("default: got %v, %v, want false", got.Run.StrictMinor, err)
+	}
+
+	got, err = load(t, "run:\n  strict_minor: true\n")
+	if err != nil || !got.Run.StrictMinor {
+		t.Fatalf("file: got %v, %v, want true", got.Run.StrictMinor, err)
+	}
+
+	t.Setenv("HARNESS_RUN_STRICT_MINOR", "true")
+	got, err = load(t, "")
+	if err != nil || !got.Run.StrictMinor {
+		t.Fatalf("env: got %v, %v, want true", got.Run.StrictMinor, err)
+	}
+}
+
 func TestLoadRejectsFilterOnOtherEvent(t *testing.T) {
 	_, err := load(t, `plugins:
   - {name: mixed, command: [a], events: [run.transition.after, tool.before], to: [working]}

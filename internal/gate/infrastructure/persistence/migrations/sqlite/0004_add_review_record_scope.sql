@@ -1,0 +1,3 @@
+ALTER TABLE review_records ADD COLUMN patch_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE review_records ADD COLUMN files_read TEXT NOT NULL DEFAULT '';
+ALTER TABLE review_records ADD COLUMN run_id TEXT NOT NULL DEFAULT '';

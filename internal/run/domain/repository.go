@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type RunKey struct {
 	Repo     string
@@ -15,6 +18,11 @@ type ClassCount struct {
 type TransitionLog interface {
 	Transitions(ctx context.Context, runID string) ([]Transitioned, error)
 	RepeatClasses(ctx context.Context, repo string) ([]ClassCount, error)
+}
+
+type ReworkLog interface {
+	LastReworkAt(ctx context.Context, runID string) (time.Time, error)
+	ReworkReasons(ctx context.Context, runID string) ([]string, error)
 }
 
 type RunRepository interface {

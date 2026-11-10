@@ -10,6 +10,7 @@ const (
 	EventApprovePlan     = Event(shareddomain.TransitionApprovePlan)
 	EventAmend           = Event(shareddomain.TransitionAmend)
 	EventRequestRework   = Event(shareddomain.TransitionRequestRework)
+	EventReworkMinor     = Event(shareddomain.TransitionReworkMinor)
 	EventSubmitForReview = Event(shareddomain.TransitionSubmitForReview)
 	EventApproveReview   = Event(shareddomain.TransitionApproveReview)
 	EventComplete        = Event(shareddomain.TransitionComplete)
@@ -20,3 +21,7 @@ const (
 	EventResume          = Event(shareddomain.TransitionResume)
 	EventAbandon         = Event(shareddomain.TransitionAbandon)
 )
+
+func (e Event) IsRework() bool {
+	return e == EventRequestRework || e == EventReworkMinor
+}

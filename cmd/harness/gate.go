@@ -21,11 +21,14 @@ import (
 	gatedomain "github.com/90p-labs/harness/internal/gate/domain"
 	"github.com/90p-labs/harness/internal/gate/infrastructure/toolchain"
 	gatecli "github.com/90p-labs/harness/internal/gate/ui/cli"
+	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
 	lintdomain "github.com/90p-labs/harness/internal/lint/domain"
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	plancli "github.com/90p-labs/harness/internal/plan/ui/cli"
+	runmodule "github.com/90p-labs/harness/internal/run"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
@@ -198,41 +201,59 @@ type reviewRecordAdapter struct {
 	cfg config.Config
 }
 
-func (a reviewRecordAdapter) Models(ctx context.Context, dir string) (models []string, err error) {
-	head, repo, records, closeState, err := a.open(ctx, dir)
+func (a reviewRecordAdapter) Reviews(ctx context.Context, dir string, scope guarddomain.ReviewScope) (reviews []guarddomain.Review, err error) {
+	head, repo, db, err := a.open(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { err = errors.Join(err, closeState()) }()
-	return records.Models(ctx, repo, head)
+	defer func() { err = errors.Join(err, db.Close()) }()
+	query := gatedomain.ReviewScope{Repo: repo, HeadSHA: head, PatchID: scope.PatchID, RunID: scope.RunID}
+	if scope.RunID != "" {
+		if query.RunSince, err = runmodule.NewReworkLog(db, time.Now).LastReworkAt(ctx, scope.RunID); err != nil {
+			return nil, err
+		}
+	}
+	records, err := gatemodule.NewReviewRecords(db).Matching(ctx, query)
+	for _, record := range records {
+		reviews = append(reviews, guarddomain.Review{Model: record.Model, PatchID: record.PatchID, RunID: record.RunID, FilesRead: record.FilesRead})
+	}
+	return reviews, err
 }
 
-func (a reviewRecordAdapter) Save(ctx context.Context, dir, model string) (err error) {
-	head, repo, records, closeState, err := a.open(ctx, dir)
+func (a reviewRecordAdapter) ReworkReasons(ctx context.Context, dir, runID string) (reasons []string, err error) {
+	_, _, db, err := a.open(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, db.Close()) }()
+	return runmodule.NewReworkLog(db, time.Now).ReworkReasons(ctx, runID)
+}
+
+func (a reviewRecordAdapter) Save(ctx context.Context, dir string, review guarddomain.Review) (err error) {
+	head, repo, db, err := a.open(ctx, dir)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, closeState()) }()
-	return records.Save(ctx, gatedomain.ReviewRecord{Repo: repo, HeadSHA: head, Model: model, At: time.Now()})
+	defer func() { err = errors.Join(err, db.Close()) }()
+	return gatemodule.NewReviewRecords(db).Save(ctx, gatedomain.ReviewRecord{
+		Repo: repo, HeadSHA: head, Model: review.Model, PatchID: review.PatchID, FilesRead: review.FilesRead, RunID: review.RunID, At: time.Now(),
+	})
 }
 
-func (a reviewRecordAdapter) open(ctx context.Context, dir string) (head, repo string, records gatedomain.ReviewRecordRepository, closeState func() error, err error) {
+func (a reviewRecordAdapter) open(ctx context.Context, dir string) (head, repo string, db *dbal.DB, err error) {
 	if dir, err = filepath.Abs(dir); err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, err
 	}
 	if head, err = git.Head(ctx, dir); err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, err
 	}
 	if repo, _, err = git.RepoKey(ctx, dir); err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, err
 	}
 	commonDir, err := git.CommonDir(ctx, dir)
 	if err != nil {
-		return "", "", nil, nil, err
+		return "", "", nil, err
 	}
-	db, err := openState(ctx, a.cfg, commonDir)
-	if err != nil {
-		return "", "", nil, nil, err
-	}
-	return head, repo, gatemodule.NewReviewRecords(db), db.Close, nil
+	db, err = openState(ctx, a.cfg, commonDir)
+	return head, repo, db, err
 }

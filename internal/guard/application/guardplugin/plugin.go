@@ -25,16 +25,20 @@ type Deps struct {
 	DefaultBranch func(ctx context.Context, dir string) (string, error)
 	Stop          domain.StopDecider
 	CommitChecked func(ctx context.Context, dir string) (bool, error)
-	SaveReview    func(ctx context.Context, dir, model string) error
-	ReviewModels  func(ctx context.Context, dir string) ([]string, error)
+	ChangedFiles  func(ctx context.Context, dir, base string) ([]string, error)
+	PatchID       func(ctx context.Context, dir, base string) (string, error)
+	SaveReview    func(ctx context.Context, dir string, review domain.Review) error
+	Reviews       func(ctx context.Context, dir string, scope domain.ReviewScope) ([]domain.Review, error)
+	ReworkReasons func(ctx context.Context, dir, runID string) ([]string, error)
 	Models        map[shareddomain.Host]map[string][]string
 	Worktree      string
+	StrictMinor   bool
 	Meter         metric.Meter
 }
 
 func Plugins(disabled []string, deps Deps) ([]shareddomain.Plugin, error) {
 	rules := domain.Rules()
-	known := []string{domain.RuleStopHoldsTurn, domain.RuleReviewModels}
+	known := []string{domain.RuleStopHoldsTurn, domain.RuleReviewModels, domain.RuleReviewFindings}
 	for _, rule := range rules {
 		known = append(known, rule.ID)
 	}
@@ -59,6 +63,9 @@ func Plugins(disabled []string, deps Deps) ([]shareddomain.Plugin, error) {
 	}
 	if !slices.Contains(disabled, domain.RuleReviewModels) {
 		plugins = append(plugins, reviewRecorder{deps: deps}, reviewShip{deps: deps, denies: denies})
+	}
+	if !slices.Contains(disabled, domain.RuleReviewFindings) {
+		plugins = append(plugins, findingsShip{deps: deps, denies: denies})
 	}
 	return plugins, nil
 }
