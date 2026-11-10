@@ -45,6 +45,26 @@
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderDiagrams);
 
+  document.querySelectorAll('[data-copy]').forEach((btn) => btn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent = 'Copied'; btn.classList.add('done'); } catch { btn.textContent = 'Select'; }
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1400);
+  }));
+
+  const openLine = () => {
+    if (location.hash.startsWith('#L')) {
+      document.getElementById('source-details').open = true;
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'center' });
+    }
+  };
+  addEventListener('hashchange', openLine);
+  openLine();
+
+  const tracer = document.getElementById('tracer');
+  if (!tracer) {
+    renderDiagrams();
+    return;
+  }
+
   const neighbours = (key) => data.graph[key] || [];
   const traceOf = (key) => {
     const kind = kindOf(key);
@@ -56,7 +76,6 @@
     return lit;
   };
 
-  const tracer = document.getElementById('tracer');
   const body = document.getElementById('tracer-body');
   let pinned = null;
   const clear = () => {
@@ -126,20 +145,6 @@
   });
   document.getElementById('tracer-close').addEventListener('click', () => { pinned = null; show(null); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { pinned = null; show(null); } });
-
-  document.querySelectorAll('[data-copy]').forEach((btn) => btn.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent = 'Copied'; btn.classList.add('done'); } catch { btn.textContent = 'Select'; }
-    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1400);
-  }));
-
-  const openLine = () => {
-    if (location.hash.startsWith('#L')) {
-      document.getElementById('source-details').open = true;
-      document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'center' });
-    }
-  };
-  addEventListener('hashchange', openLine);
-  openLine();
 
   renderDiagrams();
 })();

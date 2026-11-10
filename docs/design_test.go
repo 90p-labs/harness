@@ -10,6 +10,7 @@ import (
 
 	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
 	"github.com/90p-labs/harness/internal/lint/infrastructure/packs"
+	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	rundomain "github.com/90p-labs/harness/internal/run/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/testsupport/repository"
@@ -29,6 +30,10 @@ const (
 	lintHeading      = "\n### Lint packs\n"
 	readmeFile       = "README.md"
 	configDocFile    = "docs/configuration.md"
+	runsDocFile      = "docs/runs.md"
+	multiRunHeading  = "\n## Multi-run plan\n"
+	multiRunDesign   = "\n### Multi-run plan\n"
+	markdownFence    = "```markdown\n"
 	beforePayload    = "`run.transition.before` payload `to`"
 )
 
@@ -189,4 +194,30 @@ func phaseName(label string) string {
 		return string(rundomain.PhaseNone)
 	}
 	return label
+}
+
+func TestMultiRunPlanExample(t *testing.T) {
+	_, rest, found := strings.Cut(repository.Read(t, runsDocFile), multiRunHeading)
+	if !found {
+		t.Fatalf("%s has no Multi-run plan section", runsDocFile)
+	}
+	_, rest, found = strings.Cut(rest, markdownFence)
+	if !found {
+		t.Fatalf("%s has no markdown example", runsDocFile)
+	}
+	example, _, found := strings.Cut(rest, diagramClose)
+	if !found {
+		t.Fatalf("%s has an unclosed markdown example", runsDocFile)
+	}
+	if !plandomain.IsProgram(example) {
+		t.Fatal("the example is not a multi-run plan")
+	}
+	prog, problems := plandomain.ParseProgram(example)
+	problems = append(problems, plandomain.CheckProgram(prog)...)
+	if len(problems) != 0 {
+		t.Errorf("the example has problems: %v", problems)
+	}
+	if !strings.Contains(repository.Read(t, designFile), multiRunDesign) {
+		t.Errorf("%s has no Multi-run plan heading", designFile)
+	}
 }

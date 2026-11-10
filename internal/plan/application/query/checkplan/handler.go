@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -58,6 +57,12 @@ func (h Handler) Handle(ctx context.Context, q Query) (report domain.Report, err
 	if err != nil {
 		return domain.Report{}, err
 	}
+	if domain.IsProgram(string(text)) {
+		program, problems := domain.ParseProgram(string(text))
+		problems = append(problems, domain.CheckProgram(program)...)
+		domain.SortProblems(problems)
+		return domain.Report{Problems: problems, Program: &program}, nil
+	}
 	archived, err := archivedPlans(q.Path)
 	if err != nil {
 		return domain.Report{}, err
@@ -70,12 +75,7 @@ func (h Handler) Handle(ctx context.Context, q Query) (report domain.Report, err
 	problems = append(problems, domain.Check(doc, domain.CheckInput{
 		LiveRound: q.LiveRound, ArchivedPlans: archived, Diagrams: h.parser, Sketches: sketches,
 	})...)
-	slices.SortStableFunc(problems, func(a, b domain.Problem) int {
-		if a.Line != b.Line {
-			return a.Line - b.Line
-		}
-		return strings.Compare(string(a.Rule), string(b.Rule))
-	})
+	domain.SortProblems(problems)
 	return domain.Report{Problems: problems, Notes: notes(doc), Track: domain.Classify(doc), Doc: doc}, nil
 }
 

@@ -314,3 +314,31 @@ func TestRenderViewSpan(t *testing.T) {
 		}
 	})
 }
+
+func TestProgramKind(t *testing.T) {
+	program, err := os.ReadFile("../../../domain/testdata/program.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newFixture(t, func(context.Context) (string, error) {
+		t.Error("the default branch is read for a program")
+		return "trunk", nil
+	})
+	write(t, f.plan, string(program))
+
+	out, err := f.handler.Handle(t.Context(), renderview.Command{Path: f.plan, RunID: "run-1", Proofs: true})
+
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if want := filepath.Join(f.dir, "plan.html"); out != want {
+		t.Errorf("out = %q, want %q", out, want)
+	}
+	in := f.renderer.input
+	if in.Program == nil || len(in.Program.Runs) != 8 || len(in.Problems) != 0 {
+		t.Errorf("input = %+v, want the program with 8 runs and no problem", in)
+	}
+	if f.branches.base != "" || f.proofs.called || in.Branch != nil || in.Proofs != nil {
+		t.Errorf("base = %q, proofs called = %v, branch = %+v, proofs = %v, want none", f.branches.base, f.proofs.called, in.Branch, in.Proofs)
+	}
+}

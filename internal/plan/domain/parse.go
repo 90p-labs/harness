@@ -252,6 +252,14 @@ func (p *parser) startTask(text string, n int) {
 	p.task = len(p.doc.Tasks) - 1
 }
 
+func ownedPaths(value string) []string {
+	var paths []string
+	for _, m := range ownedPath.FindAllStringSubmatch(value, -1) {
+		paths = append(paths, strings.TrimPrefix(m[1], currentDir))
+	}
+	return paths
+}
+
 func (p *parser) taskField(line string, n int) {
 	bullet, ok := strings.CutPrefix(line, bulletMark)
 	if p.task < 0 || !ok {
@@ -267,9 +275,7 @@ func (p *parser) taskField(line string, n int) {
 	case FieldSide:
 		t.Side = value
 	case FieldOwned:
-		for _, m := range ownedPath.FindAllStringSubmatch(value, -1) {
-			t.Owned = append(t.Owned, strings.TrimPrefix(m[1], currentDir))
-		}
+		t.Owned = append(t.Owned, ownedPaths(value)...)
 	case FieldTestFirst:
 		t.TestFirst = value
 	case FieldModel:

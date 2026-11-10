@@ -111,6 +111,47 @@ A reviewer that finds a problem sends the run back with `harness run rework --fi
 
 ![The files, the tasks, the commits and the traceability matrix](images/plan-view-tasks.png)
 
+## Multi-run plan
+
+A coordinator shows a program of runs as one page. The plan has `## Runs` and one `### R<n> slug` heading for each run. Each run has the fields Wave, Depends on, Branch, Owned files and Done when. A numbered scope list follows the bullets, with one step on each line.
+
+```markdown
+# Guard and coordinator plan
+
+## Goal
+
+Two runs make the guard exact and let the lead watch all runs.
+
+## Runs
+
+### R1 guard-precision
+
+- Wave: 1
+- Depends on: none
+- Branch: feat/guard-precision
+- Owned files: `internal/guard/domain/shell.go`
+- Done when: a replay of the denied commands matches the expected result.
+
+1. Follow `cd` before the source-path check.
+2. Name the resolved file in each deny.
+
+### R2 coordinator
+
+- Wave: 2
+- Depends on: R1
+- Branch: feat/coordinator
+- Owned files: `internal/run/ui/cli/list.go`
+- Done when: the lead watches all runs with 1 command.
+
+1. Add the list command for all runs.
+```
+
+- `harness plan check --file plan.md` lists each problem of the plan.
+- `harness plan view --file plan.md` writes the page with the wave lanes, the dependency flowchart and the measurement.
+- Each dependency names a run in an earlier wave.
+- Runs in one wave own no common path.
+- `harness run plan` refuses a multi-run plan with the rule `plan-kind`.
+
 ## Run phases
 
 The phases and the events come from the transition table in `internal/run/domain`. A label in brackets is the guard that picks the row.

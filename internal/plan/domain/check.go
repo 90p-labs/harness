@@ -19,6 +19,7 @@ type Report struct {
 	Notes    []string
 	Track    shareddomain.Track
 	Doc      Document
+	Program  *Program
 }
 
 const (
@@ -68,9 +69,7 @@ type report func(line int, rule RuleID, format string, args ...any)
 
 func Check(doc Document, in CheckInput) []Problem {
 	var problems []Problem
-	add := func(line int, rule RuleID, format string, args ...any) {
-		problems = append(problems, Problem{Line: line, Rule: rule, Message: fmt.Sprintf(format, args...)})
-	}
+	add := reporter(&problems)
 	checkHeadings(doc, add)
 	checkCriteria(doc, add)
 	checkTasks(doc, add)
@@ -84,13 +83,23 @@ func Check(doc Document, in CheckInput) []Problem {
 	checkSentences(doc, add)
 	checkTrace(doc, add)
 	checkOpenQuestions(doc, add)
+	SortProblems(problems)
+	return problems
+}
+
+func reporter(problems *[]Problem) report {
+	return func(line int, rule RuleID, format string, args ...any) {
+		*problems = append(*problems, Problem{Line: line, Rule: rule, Message: fmt.Sprintf(format, args...)})
+	}
+}
+
+func SortProblems(problems []Problem) {
 	slices.SortStableFunc(problems, func(a, b Problem) int {
 		if a.Line != b.Line {
 			return a.Line - b.Line
 		}
 		return strings.Compare(string(a.Rule), string(b.Rule))
 	})
-	return problems
 }
 
 func headingLine(doc Document, level int, text string) int {
