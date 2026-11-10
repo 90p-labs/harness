@@ -52,8 +52,8 @@ func TestMarkDiagramQuery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Handle: %v", err)
 		}
-		if !strings.Contains(body, "classDef new") || !strings.Contains(body, `|"(new)"|`) {
-			t.Errorf("body = %q, want the new classDef and a marked edge", body)
+		if !strings.Contains(body, "linkStyle 0 ") || !strings.Contains(body, `|"(new)"|`) {
+			t.Errorf("body = %q, want a link style and a marked edge", body)
 		}
 		if strings.Contains(body, "\n\n") || strings.HasSuffix(body, "\n") {
 			t.Errorf("body = %q, want no blank line", body)

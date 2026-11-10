@@ -15,6 +15,10 @@ const (
 	defChanged = "classDef changed stroke:#e0a84a,stroke-width:3px,color:#e0a84a"
 	defRemoved = "classDef removed stroke:#e2001f,stroke-width:3px,color:#e2001f,stroke-dasharray:5 5"
 
+	styleNew     = "stroke:#00b34e,stroke-width:3px,color:#00b34e"
+	styleChanged = "stroke:#e0a84a,stroke-width:3px,color:#e0a84a"
+	styleRemoved = "stroke:#e2001f,stroke-width:3px,color:#e2001f,stroke-dasharray:5 5"
+
 	noMarkReason       = "no mark: end a line with + (new), * (changed) or - (removed)"
 	noMarkInPlanReason = "no mark: draw the marks with harness diagram"
 )
@@ -63,6 +67,23 @@ func TestMarkDiagramNodes(t *testing.T) {
 				"    class c removed",
 				"    class d new",
 			),
+		},
+		{
+			"a link mark defines no class",
+			lines("flowchart TD", "    a[x] +", "    a --> b *"),
+			lines(
+				"flowchart TD",
+				"    "+defNew,
+				"    a[x]",
+				`    a -->|"(changed)"| b`,
+				"    class a new",
+				"    linkStyle 0 "+styleChanged,
+			),
+		},
+		{
+			"state link mark defines no class",
+			lines("stateDiagram-v2", "    A --> B +", "    state C *"),
+			lines("stateDiagram-v2", "    "+defChanged, "    A --> B : (new)", "    state C", "    class C changed"),
 		},
 		{
 			"trailing newline and CRLF",
@@ -141,14 +162,16 @@ func TestMarkDiagramEdges(t *testing.T) {
 			),
 			lines(
 				"flowchart LR",
-				"    "+defNew,
-				"    "+defChanged,
-				"    "+defRemoved,
 				`    a -->|"(new)"| b`,
 				`    b -->|"ok (changed)"| c`,
 				`    c -.->|"(removed)"| d`,
 				`    d --->|"(new)"| e`,
 				`    e -->|"x (new)"| f`,
+				"    linkStyle 0 "+styleNew,
+				"    linkStyle 1 "+styleChanged,
+				"    linkStyle 2 "+styleRemoved,
+				"    linkStyle 3 "+styleNew,
+				"    linkStyle 4 "+styleNew,
 			),
 		},
 		{
@@ -161,12 +184,12 @@ func TestMarkDiagramEdges(t *testing.T) {
 			),
 			lines(
 				"flowchart LR",
-				"    "+defNew,
-				"    "+defChanged,
-				"    "+defRemoved,
 				`    a -- "yes (new)" --> b`,
 				`    b == "heavy (changed)" ==> c`,
 				`    c -. "dot (removed)" .-> d`,
+				"    linkStyle 0 "+styleNew,
+				"    linkStyle 1 "+styleChanged,
+				"    linkStyle 2 "+styleRemoved,
 			),
 		},
 		{
@@ -179,9 +202,6 @@ func TestMarkDiagramEdges(t *testing.T) {
 			),
 			lines(
 				"stateDiagram-v2",
-				"    "+defNew,
-				"    "+defChanged,
-				"    "+defRemoved,
 				"    [*] --> Idle : (new)",
 				"    Idle --> Busy : start (changed)",
 				"    Busy --> Idle: retry (removed)",
@@ -195,7 +215,6 @@ func TestMarkDiagramEdges(t *testing.T) {
 			),
 			lines(
 				"classDiagram",
-				"    "+defRemoved,
 				"    A <|-- B : (removed)",
 			),
 		},
@@ -245,6 +264,9 @@ func TestMarkDiagramRefuses(t *testing.T) {
 		{"flowchart block end", lines("flowchart TD", "    subgraph X", "    a --> b", "    end +"), "line 4:", "a block end takes no mark"},
 		{"no accepted form", lines("flowchart TD", "    a[ok] *", "    subgraph X +"), "line 3:", "line has no accepted form"},
 		{"chain edge", lines("flowchart TD", "    a --> b --> c +"), "line 2:", "a chain edge takes no mark"},
+		{"accessibility title", lines("flowchart TD", "    accTitle: a --> b +"), "line 2:", "an accessibility line takes no mark"},
+		{"accessibility description", lines("flowchart TD", "    accDescr: a --> b *"), "line 2:", "an accessibility line takes no mark"},
+		{"invisible link", lines("flowchart TD", "    a ~~~ b +"), "line 2:", "an invisible link takes no mark"},
 		{"two marks on one node", lines("flowchart TD", "    a[x] +", "    a[y] *"), "line 3:", "a has a second mark"},
 	}
 	for _, c := range cases {
@@ -408,6 +430,196 @@ func TestCheckMarks(t *testing.T) {
 			"missing classDef reported once",
 			lines("flowchart TD", "    class a new", "    class b new"),
 			[]string{"classDef new is missing"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := domain.CheckMarks(c.body); !slices.Equal(got, c.want) {
+				t.Fatalf("CheckMarks = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestMarkDiagramLinkStyles(t *testing.T) {
+	input := lines(
+		"flowchart TD",
+		"    cmd[shell command] --> parse[Commands: parse and expand NAME=value] *",
+		"    parse --> walk[follow cd: known or unknown folder] +",
+		"    walk --> target[write target: resolved path or unresolved text] *",
+		"    target --> check[isSourcePath in the worktree] *",
+		"    check --> deny[deny names the file, or says use a literal absolute path] *",
+		"    body[PR body text] --> problems[BodyProblems: every problem with its line] +",
+		"    problems --> guard[pr-body-shape deny] *",
+		"    problems --> cli[harness pr check --body-file] +",
+	)
+	want := lines(
+		"flowchart TD",
+		`    cmd[shell command] -->|"(changed)"| parse[Commands: parse and expand NAME=value]`,
+		`    parse -->|"(new)"| walk[follow cd: known or unknown folder]`,
+		`    walk -->|"(changed)"| target[write target: resolved path or unresolved text]`,
+		`    target -->|"(changed)"| check[isSourcePath in the worktree]`,
+		`    check -->|"(changed)"| deny[deny names the file, or says use a literal absolute path]`,
+		`    body[PR body text] -->|"(new)"| problems[BodyProblems: every problem with its line]`,
+		`    problems -->|"(changed)"| guard[pr-body-shape deny]`,
+		`    problems -->|"(new)"| cli[harness pr check --body-file]`,
+		"    linkStyle 0 "+styleChanged,
+		"    linkStyle 1 "+styleNew,
+		"    linkStyle 2 "+styleChanged,
+		"    linkStyle 3 "+styleChanged,
+		"    linkStyle 4 "+styleChanged,
+		"    linkStyle 5 "+styleNew,
+		"    linkStyle 6 "+styleChanged,
+		"    linkStyle 7 "+styleNew,
+	)
+	assertMarked(t, input, want)
+
+	if problems := domain.CheckMarks(want); len(problems) != 0 {
+		t.Fatalf("CheckMarks = %q, want none", problems)
+	}
+}
+
+func TestMarkDiagramLinkIndex(t *testing.T) {
+	const last = "    z --> w +"
+	cases := []struct {
+		name   string
+		header string
+		body   []string
+		want   []string
+	}{
+		{"links after the header", "; a --> b", []string{"    c --> d +"}, []string{"1", "2"}},
+		{"chain", "", []string{"    a --> b --> c"}, []string{"2"}},
+		{"group on the left", "", []string{"    a & b --> c"}, []string{"2"}},
+		{"group on both sides of a chain", "", []string{"    a --> b & c --> d"}, []string{"4"}},
+		{"statements", "", []string{"    a --> b; c --> d"}, []string{"2"}},
+		{"marked group", "", []string{"    a & b --> c +"}, []string{"0,1", "2"}},
+		{"node text with a link", "", []string{"    n[A & B --> C]"}, []string{"0"}},
+		{"marked node text with a link", "", []string{"    n[A --> B] +"}, []string{"0"}},
+		{"asymmetric node text with a link", "", []string{"    a>x --> y] --> b"}, []string{"1"}},
+		{"round node text with a link", "", []string{"    a(x --> y) --> b"}, []string{"1"}},
+		{"group in a pipe label", "", []string{"    a -->|x & y| b"}, []string{"1"}},
+		{"group in a text label", "", []string{"    a -- p & q --> b"}, []string{"1"}},
+		{"double dash in a text label", "", []string{"    a -- pre--order --> b"}, []string{"1"}},
+		{"invisible link", "", []string{"    a ~~~ b"}, []string{"1"}},
+		{"trailing comment", "", []string{"    a --> b %% a --> c"}, []string{"1"}},
+		{"accessibility title", "", []string{"    accTitle: a --> b"}, []string{"0"}},
+		{"comment line", "", []string{"    %% a --> b"}, []string{"0"}},
+		{"accessibility block", "", []string{"    accDescr {", "    a --> b", "    }"}, []string{"0"}},
+		{"subgraph block", "", []string{"    subgraph s", "    a --> b", "    end"}, []string{"1"}},
+		{"dotted link", "", []string{"    a -.-> b"}, []string{"1"}},
+		{"thick link", "", []string{"    a ==> b"}, []string{"1"}},
+		{"quoted text", "", []string{`    a["x --> y"] --> b`}, []string{"1"}},
+		{"line break in node text", "", []string{"    a[x<br>y] --> b +"}, []string{"0", "1"}},
+		{"generic in node text", "", []string{"    a[List<T>] --> b +"}, []string{"0", "1"}},
+		{"angle in a text label", "", []string{"    a -- x>y --> b +"}, []string{"0", "1"}},
+		{"line break before a link", "", []string{"    a[x<br>y] --> b", "    c --> d +"}, []string{"1", "2"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := domain.MarkDiagram(lines(append(append([]string{"flowchart TD" + c.header}, c.body...), last)...))
+			if err != nil {
+				t.Fatalf("MarkDiagram error: %v", err)
+			}
+			var indexes []string
+			for _, l := range strings.Split(got, "\n") {
+				if rest, ok := strings.CutPrefix(l, "    linkStyle "); ok {
+					index, style, _ := strings.Cut(rest, " ")
+					if style != styleNew {
+						t.Fatalf("style of %q = %q, want %q", l, style, styleNew)
+					}
+					indexes = append(indexes, index)
+				}
+			}
+			if !slices.Equal(indexes, c.want) {
+				t.Fatalf("link indexes = %q, want %q in\n%s", indexes, c.want, got)
+			}
+		})
+	}
+}
+
+func TestCheckMarksLinkStyles(t *testing.T) {
+	const (
+		newLink     = `    a -->|"(new)"| b`
+		changedLink = `    c -->|"(changed)"| d`
+	)
+	cases := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{"matching style", lines("flowchart TD", newLink, "    linkStyle 0 "+styleNew), nil},
+		{"another style", lines("flowchart TD", newLink, "    linkStyle 0 stroke:red"), nil},
+		{"default style", lines("flowchart TD", newLink, "    linkStyle default stroke:red"), nil},
+		{"style with a semicolon", lines("flowchart TD", newLink, "    linkStyle 0 "+styleNew+";"), nil},
+		{
+			"group line",
+			lines("flowchart TD", `    a & b -->|"(new)"| c`, "    linkStyle 0,1 "+styleNew),
+			nil,
+		},
+		{
+			"two lines",
+			lines("flowchart TD", newLink, changedLink, "    linkStyle 0 "+styleNew, "    linkStyle 1 "+styleChanged),
+			nil,
+		},
+		{
+			"label in node text",
+			lines("flowchart TD", "    a[x (new)] --> b", "    linkStyle 0 "+styleNew),
+			[]string{"linkStyle 0 is not a new link"},
+		},
+		{
+			"unlabelled second link of a semicolon line",
+			lines("flowchart TD", `    a -->|"(new)"| b; c --> d`, "    linkStyle 1 "+styleNew),
+			[]string{"linkStyle 1 is not a new link"},
+		},
+		{
+			"labelled second link of a semicolon line",
+			lines("flowchart TD", `    a --> b; c -->|"(new)"| d`, "    linkStyle 1 "+styleNew),
+			nil,
+		},
+		{
+			"style of another mark",
+			lines("flowchart TD", newLink, "    linkStyle 0 "+styleChanged),
+			[]string{"linkStyle 0 is not a changed link"},
+		},
+		{
+			"index past the last link",
+			lines("flowchart TD", newLink, "    linkStyle 3 "+styleNew),
+			[]string{"linkStyle 3 is not a new link"},
+		},
+		{
+			"index of an unmarked link",
+			lines("flowchart TD", "    x --> y", newLink, "    linkStyle 0 "+styleNew),
+			[]string{"linkStyle 0 is not a new link"},
+		},
+		{
+			"one bad index in a list",
+			lines("flowchart TD", newLink, changedLink, "    linkStyle 0,1 "+styleNew),
+			[]string{"linkStyle 1 is not a new link"},
+		},
+		{
+			"link of the header line",
+			lines("flowchart TD; a --> b", `    c -->|"(new)"| d`, "    linkStyle 1 "+styleNew),
+			nil,
+		},
+		{
+			"index of the header link",
+			lines("flowchart TD; a --> b", `    c -->|"(new)"| d`, "    linkStyle 0 "+styleNew),
+			[]string{"linkStyle 0 is not a new link"},
+		},
+		{
+			"accessibility block",
+			lines("flowchart TD", "    accDescr {", "    x --> y", "    }", newLink, "    linkStyle 0 "+styleNew),
+			nil,
+		},
+		{
+			"index too large",
+			lines("flowchart TD", newLink, "    linkStyle 99999999999999999999999 "+styleNew),
+			[]string{"linkStyle 99999999999999999999999 is not a new link"},
+		},
+		{
+			"style before the links",
+			lines("flowchart TD", "    linkStyle 0 "+styleNew, newLink),
+			nil,
 		},
 	}
 	for _, c := range cases {

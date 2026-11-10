@@ -10,9 +10,6 @@ A draft now goes to review, an approval merges it, and a rejection no longer sen
 
 ```mermaid
 stateDiagram-v2
-    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e
-    classDef changed stroke:#e0a84a,stroke-width:3px,color:#e0a84a
-    classDef removed stroke:#e2001f,stroke-width:3px,color:#e2001f,stroke-dasharray:5 5
     [*] --> Draft
     Draft --> Review : request review (new)
     Review --> Merged : approve (changed)
@@ -27,13 +24,13 @@ The command now checks its input before it stores, and the legacy step is gone.
 
 ```mermaid
 flowchart TD
-    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e
-    classDef changed stroke:#e0a84a,stroke-width:3px,color:#e0a84a
     classDef removed stroke:#e2001f,stroke-width:3px,color:#e2001f,stroke-dasharray:5 5
     cmd[Command] -->|"(new)"| check[Check input]
     check -->|"(changed)"| store[Store]
     legacy[Legacy]
     class legacy removed
+    linkStyle 0 stroke:#00b34e,stroke-width:3px,color:#00b34e
+    linkStyle 1 stroke:#e0a84a,stroke-width:3px,color:#e0a84a
 ```
 
 ## Sequence diagram

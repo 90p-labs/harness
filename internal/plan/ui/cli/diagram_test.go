@@ -16,7 +16,7 @@ import (
 const (
 	markedInput   = "flowchart TD\n    a[start] --> b[end] +\n"
 	unmarkedInput = "flowchart TD\n    a --> b\n"
-	fencedOutput  = "```mermaid\nflowchart TD\n    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n    a[start] -->|\"(new)\"| b[end]\n```\n"
+	fencedOutput  = "```mermaid\nflowchart TD\n    a[start] -->|\"(new)\"| b[end]\n    linkStyle 0 stroke:#00b34e,stroke-width:3px,color:#00b34e\n```\n"
 )
 
 func executeDiagram(t *testing.T, input string) (string, error) {
