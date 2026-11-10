@@ -217,7 +217,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
 | `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
 
-After each Agent call of the `reviewer` role, a hook writes a review record: the repo, `HEAD` and the model, in the gate state beside the commit checks. The rule `review-models` reads the models of `HEAD` and needs every reviewer model of one host list, and at least 2 models. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host list of one model still gets the deny, with the `roles.reviewer` next step. A background agent sends `tool.after` at dispatch, so a record proves a dispatch, not a finished review. `subagent.stopped` carries no model, so this limit stays. A repository on Codex sets `guard.disabled: [review-models]`, because Codex sends no Agent call with a model.
+After each Agent call of the `reviewer` role, a hook writes a review record: the repo, `HEAD` and the model, in the gate state beside the commit checks. The rule `review-models` reads the models of `HEAD` and needs every reviewer model of one host list, and at least 2 models. The ship transition carries no host, so the rule picks the host list with the most recorded models. A host list of one model still gets the deny, with the `roles.reviewer` next step. A background agent sends `tool.after` at dispatch, so a record proves a dispatch, not a finished review. `subagent.stopped` carries no model, so this limit stays. A repository on Codex sets `guard.disabled: [review-models]`, because Codex sends no Agent call with a model. A `verifier` call writes no review record, because `verifier` is not a reviewer agent type. A re-review runs in `working`, so it writes no record either.
 
 Event kinds:
 
@@ -1285,7 +1285,7 @@ The plugin ships the skills and the agents that the loop uses:
 
 - The user starts the skills `harness`, `pr-open`, `lint-setup` and `report`. Each one runs a workflow.
 - The model loads the skill `ddd` when a change touches a bounded context. It holds the DDD layout of the packs ddd and ddd-es, with the rule id of each rule, and one reference file for each language.
-- The agents `explorer`, `reviewer` and `linter` return a report of 400 words at most to the lead. The `linter` agent adds the last output of `harness lint canaries --proof lint/proof`.
+- The agents `explorer` and `linter` return a report of 400 words at most to the lead. The `linter` agent adds the last output of `harness lint canaries --proof lint/proof`. The `verifier` agent answers in 60 words at most. The `reviewer` agent gives one line of 50 words at most for each finding.
 - Each `SKILL.md` starts with `## Decision tree`, which routes the reader to the one section or reference file that it needs.
 - A file names a skill or an agent by its name, such as the `ddd` skill, never by a file path. The tests in `skills/` check that each name exists.
 

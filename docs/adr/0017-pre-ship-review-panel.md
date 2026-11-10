@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09. It replaces the third-reviewer rule of ADR 0016. The ship rule needs every listed model of the host, and the floor of 2 models stays.
+Accepted, 2026-11-09. It replaces the third-reviewer rule of ADR 0016. ADR 0018 replaces its pre-ship panel rule. The ship rule needs every listed model of the host, and the floor of 2 models stays.
 
 ## Context
 

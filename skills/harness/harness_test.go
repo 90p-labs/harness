@@ -21,10 +21,15 @@ const (
 	runPlanCommand    = "harness run plan"
 	initLintSetupLine = "next: run the lint-setup skill"
 	prOpenSkill       = "skills/pr-open/SKILL.md"
+	verifierFile      = "agents/verifier.md"
+	reviewingItem     = "5. `reviewing`"
+	shippingItem      = "6. `shipping`"
+	fixupFlag         = "--fixup"
 )
 
 var (
-	grillViews = []string{"Product", "QA", "Tech specs"}
+	grillViews   = []string{"Product", "QA", "Tech specs"}
+	reviewLabels = []string{"**Common list**", "**Verify**", "**Fix**", "**Re-review**", "**Final panel**"}
 )
 
 func TestHarnessSkillGrill(t *testing.T) {
@@ -61,7 +66,7 @@ func TestHarnessSkillGrill(t *testing.T) {
 		}
 		last = at
 	}
-	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer, advisorFile: repository.Read(t, advisorFile), workerFile: repository.Read(t, workerFile), prOpenSkill: repository.Read(t, prOpenSkill)} {
+	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer, advisorFile: repository.Read(t, advisorFile), workerFile: repository.Read(t, workerFile), prOpenSkill: repository.Read(t, prOpenSkill), verifierFile: repository.Read(t, verifierFile)} {
 		if strings.Contains(text, repository.EmDash) || strings.ContainsFunc(text, repository.IsEmoji) {
 			t.Errorf("%s has an em dash or an emoji", path)
 		}
@@ -75,5 +80,28 @@ func TestLintSetupStartsAfterInit(t *testing.T) {
 		if !strings.Contains(skill, want) {
 			t.Errorf("%s does not name %q", skillFile, want)
 		}
+	}
+}
+
+func TestHarnessSkillReviewRound(t *testing.T) {
+	skill := repository.Read(t, skillFile)
+	_, round, found := strings.Cut(skill, reviewingItem)
+	if !found {
+		t.Fatalf("%s has no item %q", skillFile, reviewingItem)
+	}
+	round, _, found = strings.Cut(round, shippingItem)
+	if !found {
+		t.Fatalf("%s has no item %q", skillFile, shippingItem)
+	}
+	last := -1
+	for _, label := range reviewLabels {
+		at := strings.Index(round, label)
+		if at <= last {
+			t.Errorf("%s: the label %s is missing or out of order in the item %q", skillFile, label, reviewingItem)
+		}
+		last = max(last, at)
+	}
+	if !strings.Contains(round, fixupFlag) {
+		t.Errorf("%s does not name %q in the item %q", skillFile, fixupFlag, reviewingItem)
 	}
 }

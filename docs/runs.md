@@ -95,7 +95,7 @@ run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=done review_r
 next: the run is closed, start the next with harness run start
 ```
 
-A reviewer that finds a problem sends the run back with `harness run rework --findings "..."`. The guard acts on each tool call of the agent. For example, a merge goes to `harness hook --host claude pre-tool-use`, and the hook denies it:
+The lead merges the findings of the reviewers and starts a verifier for each one. For the real findings, the lead sends the run back once with `harness run rework --findings "..."`. The guard acts on each tool call of the agent. For example, a merge goes to `harness hook --host claude pre-tool-use`, and the hook denies it:
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"guard.pr-no-merge: a pull request merge is for the user. leave it to the user"}}
@@ -194,7 +194,7 @@ With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes 
 | Plan check | `submit-plan`, `amend` and `approve-plan`: the plan rules, then the `plan.submitted` plugins |
 | Gates | `harness verify` in `working`; the review needs a passing proof of each criterion |
 | Trace check | `submit-for-review`: the trees, the commits and the owned files against the branch |
-| Reviewers | `reviewing`: the agents of the `reviewer` role review the work. Each round runs lens Spec on the first model and lens Standards on the second. With no finding, the pre-ship panel runs every other reviewer model. Then the phase goes to `ship` or `rework`. `ship` needs every listed model of the host on `HEAD` |
+| Reviewers | `reviewing`: the agents of the `reviewer` role review the work. The common list runs on every listed model. Lens Spec runs on the first model, lens Standards on the second, and lens Spec on every other model. A verifier checks each finding. With real findings, the lead runs `harness run rework` once with the verified list. A worker fixes each finding and a re-review checks each fix, both in `working`. The final panel then runs the common list on the final `HEAD`. Then the phase goes to `ship` or `rework`. `ship` needs every listed model of the host on `HEAD` |
 | Guard | each tool call (`tool.before` and `tool.after`), each stop (`turn.stopping`) of the agent and each run transition (`run.transition.before`), in every phase |
 | Plugins | every transition (`run.transition.before`, `run.transition.after`), each gate, each plan, each host hook, gate detection, lint and live signals |
 | Live check | `releasing` and `observing`: `harness live check` reads the deploy and the signals |

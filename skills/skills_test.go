@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	roleAgents         = []string{"explorer", "advisor", "worker", "reviewer"}
+	roleAgents         = []string{"explorer", "advisor", "worker", "reviewer", "verifier"}
 	crossReference     = regexp.MustCompile("`([a-z][a-z-]*)` (" + skillKind + "|" + agentKind + ")\\b")
 	roleAgentLine      = regexp.MustCompile("`(" + strings.Join(roleAgents, "|") + ")` agents?\\b|model of the (?:`(?:" + strings.Join(roleAgents, "|") + ")` )?role\\b")
 	requiredReferences = map[string][]string{
