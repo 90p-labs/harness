@@ -74,14 +74,18 @@ func renderProgram(in domain.ViewInput, a assets) ([]byte, error) {
 
 func newProgramModel(in domain.ViewInput) programModel {
 	prog := *in.Program
+	known := map[string]bool{}
+	for _, r := range prog.Runs {
+		known[r.ID] = true
+	}
 	m := programModel{
 		Title:     strings.TrimPrefix(prog.Title, planPrefix),
 		GroupName: groupProgram,
 		GroupQA:   GroupQA,
-		Waves:     programWaves(prog),
+		Waves:     programWaves(prog, known),
 		Problems:  problemRows(in.Problems, len(prog.Lines)),
 		Source:    sourceLines(prog.Lines, in.Problems),
-		Data:      planData{Diagrams: []string{dependencyChart(prog.Runs)}},
+		Data:      planData{Diagrams: []string{dependencyChart(prog.Runs, known)}},
 	}
 	for _, line := range prog.Goal {
 		m.Goal = append(m.Goal, inline(line))
@@ -125,7 +129,7 @@ func programNav(m programModel) []navGroup {
 	}
 }
 
-func programWaves(prog domain.Program) []programWave {
+func programWaves(prog domain.Program, known map[string]bool) []programWave {
 	var numbers []int
 	for _, r := range prog.Runs {
 		if !slices.Contains(numbers, r.Wave) {
@@ -133,10 +137,6 @@ func programWaves(prog domain.Program) []programWave {
 		}
 	}
 	slices.Sort(numbers)
-	known := map[string]bool{}
-	for _, r := range prog.Runs {
-		known[r.ID] = true
-	}
 	waves := make([]programWave, len(numbers))
 	for i, n := range numbers {
 		waves[i].Number = n
@@ -167,15 +167,11 @@ func runCardOf(r domain.ProgramRun, known map[string]bool) runCard {
 	return card
 }
 
-func dependencyChart(runs []domain.ProgramRun) string {
+func dependencyChart(runs []domain.ProgramRun, known map[string]bool) string {
 	var b strings.Builder
 	b.WriteString(flowchartHead + "\n")
 	for _, r := range runs {
 		fmt.Fprintf(&b, nodeFormat, r.ID, r.ID, r.Slug)
-	}
-	known := map[string]bool{}
-	for _, r := range runs {
-		known[r.ID] = true
 	}
 	for _, r := range runs {
 		for _, d := range r.DependsOn {
