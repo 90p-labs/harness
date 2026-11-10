@@ -10,36 +10,37 @@ import (
 )
 
 const (
-	skillFile         = "skills/harness/SKILL.md"
-	grillFile         = "skills/harness/references/grill.md"
-	explorerFile      = "agents/explorer.md"
-	advisorFile       = "agents/advisor.md"
-	workerFile        = "agents/worker.md"
-	advisorRole       = "`advisor`"
-	grillingSource    = "https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md"
-	mitLicense        = "MIT"
-	explorerRole      = "`explorer`"
-	runPlanCommand    = "harness run plan"
-	initLintSetupLine = "next: run the lint-setup skill"
-	prOpenSkill       = "skills/pr-open/SKILL.md"
-	verifierFile      = "agents/verifier.md"
-	reviewingItem     = "5. `reviewing`"
-	shippingItem      = "6. `shipping`"
-	fixupFlag         = "--fixup"
-	templateFile      = "skills/harness/references/plan-template.md"
-	ruleSourceGlob    = "internal/plan/domain/*.go"
-	threatModelADR    = "ADR 0019"
-	reviewRisksHead   = "## Review risks"
-	planningItem      = "2. `planning`"
-	approvalItem      = "3. `awaiting_approval`"
-	advisorOnLine     = "advisor: on, model <m>"
-	modelsLine        = "`models:` line"
-	adrIndexText      = "`docs/adr/index.md` first"
-	configCommand     = "harness config"
-	advisorOffLine    = "advisor: off"
-	decisionsHead     = "## Decisions"
-	handoffFile       = "handoff.md"
-	statusRouteStart  = "- `status` or empty"
+	skillFile          = "skills/harness/SKILL.md"
+	grillFile          = "skills/harness/references/grill.md"
+	explorerFile       = "agents/explorer.md"
+	advisorFile        = "agents/advisor.md"
+	workerFile         = "agents/worker.md"
+	advisorRole        = "`advisor`"
+	grillingSource     = "https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md"
+	mitLicense         = "MIT"
+	explorerRole       = "`explorer`"
+	runPlanCommand     = "harness run plan"
+	initLintSetupLine  = "next: run the lint-setup skill"
+	prOpenSkill        = "skills/pr-open/SKILL.md"
+	verifierFile       = "agents/verifier.md"
+	reviewingRef       = "skills/harness/references/reviewing.md"
+	reviewingRefText   = "references/reviewing.md"
+	findingsRowExample = "| F1 | major | real | open |"
+	fixupFlag          = "--fixup"
+	templateFile       = "skills/harness/references/plan-template.md"
+	ruleSourceGlob     = "internal/plan/domain/*.go"
+	threatModelADR     = "ADR 0019"
+	reviewRisksHead    = "## Review risks"
+	planningItem       = "2. `planning`"
+	approvalItem       = "3. `awaiting_approval`"
+	advisorOnLine      = "advisor: on, model <m>"
+	modelsLine         = "`models:` line"
+	adrIndexText       = "`docs/adr/index.md` first"
+	configCommand      = "harness config"
+	advisorOffLine     = "advisor: off"
+	decisionsHead      = "## Decisions"
+	handoffFile        = "handoff.md"
+	statusRouteStart   = "- `status` or empty"
 )
 
 // The handoff phrases of SKILL.md.
@@ -108,26 +109,34 @@ func TestLintSetupStartsAfterInit(t *testing.T) {
 	}
 }
 
-func TestHarnessSkillReviewRound(t *testing.T) {
+func TestHarnessSkillReadsReviewingReference(t *testing.T) {
 	skill := repository.Read(t, skillFile)
-	_, round, found := strings.Cut(skill, reviewingItem)
-	if !found {
-		t.Fatalf("%s has no item %q", skillFile, reviewingItem)
+	reviewing := repository.Read(t, reviewingRef)
+	for _, want := range []string{"findings.md", "Final panel", "| Status | Model | File:line |", "`Model` cell"} {
+		if !strings.Contains(reviewing, want) {
+			t.Errorf("%s does not name %q", reviewingRef, want)
+		}
 	}
-	round, _, found = strings.Cut(round, shippingItem)
-	if !found {
-		t.Fatalf("%s has no item %q", skillFile, shippingItem)
+	if !strings.Contains(skill, reviewingRefText) {
+		t.Errorf("%s does not name %q", skillFile, reviewingRefText)
 	}
+	if strings.Contains(skill, findingsRowExample) {
+		t.Errorf("%s still holds the findings table example %q", skillFile, findingsRowExample)
+	}
+}
+
+func TestHarnessSkillReviewRound(t *testing.T) {
+	round := repository.Read(t, reviewingRef)
 	last := -1
 	for _, label := range reviewLabels {
 		at := strings.Index(round, label)
 		if at <= last {
-			t.Errorf("%s: the label %s is missing or out of order in the item %q", skillFile, label, reviewingItem)
+			t.Errorf("%s: the label %s is missing or out of order", reviewingRef, label)
 		}
 		last = max(last, at)
 	}
 	if !strings.Contains(round, fixupFlag) {
-		t.Errorf("%s does not name %q in the item %q", skillFile, fixupFlag, reviewingItem)
+		t.Errorf("%s does not name %q", reviewingRef, fixupFlag)
 	}
 }
 
