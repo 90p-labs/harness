@@ -770,7 +770,7 @@ gates:
     baseline: .harness-lint/baseline.json
 ```
 
-This repository's `go-test` gate runs `make cover` instead, so the coverage floor applies to the gate. `COVERAGE_FLOOR` sets the floor. The CI workflow `lint-engines.yml` runs `make check`, which runs `make cover`, so CI enforces the floor too.
+This repository's `go-test` gate runs `make cover` instead, so the coverage floor applies to the gate. `COVERAGE_FLOOR` sets the floor. The CI workflow `lint-engines.yml` runs the steps of `make check` as parallel jobs. Three jobs shard `go test -coverprofile`. A last job merges their profiles and checks them with `make floor`, so CI enforces the floor too. It also posts the total as a pull request comment.
 
 Needs and parallel runs:
 

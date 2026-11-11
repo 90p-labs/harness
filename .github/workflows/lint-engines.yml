@@ -5,20 +5,38 @@ on:
     branches: [main]
   pull_request:
 
-# pull-requests: write lets the coverage step post its comment on the pull request.
 permissions:
   contents: read
-  pull-requests: write
 
+# The jobs split `make check` so they run in parallel: lint is gofmt and go vet, test runs `go test -coverprofile`
+# in shards, and coverage merges the shard profiles and checks them with `make floor`. Locally, `make check` runs all three.
 jobs:
-  lint-engines:
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: go vet
+        run: go vet ./...
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # agents and cmd/harness are the two slowest packages; rest is every other package, so the shards cover ./... exactly.
+      matrix:
+        shard: [agents, cmd/harness, rest]
     # The tests commit in temporary repositories, and the runner has no git identity.
     env:
       GIT_AUTHOR_NAME: ci
       GIT_AUTHOR_EMAIL: ci@example.invalid
       GIT_COMMITTER_NAME: ci
       GIT_COMMITTER_EMAIL: ci@example.invalid
+      SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -31,10 +49,64 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: v3.16.4
-      - name: check
+      - name: go test
+        run: |
+          module=$(go list -m)
+          if [ "$SHARD" = rest ]; then
+            pkgs=$(go list ./... | grep -vxE "$module/(agents|cmd/harness)")
+          else
+            pkgs="$module/$SHARD"
+          fi
+          # shellcheck disable=SC2086 # $pkgs is a list of package paths, split on purpose.
+          go test -coverprofile="$RUNNER_TEMP/cover.out" $pkgs
+      - id: name
+        run: echo "artifact=cover-${SHARD//\//-}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.artifact }}
+          path: ${{ runner.temp }}/cover.out
+          retention-days: 1
+
+  coverage:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    # pull-requests: write lets the comment step post on the pull request.
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: needs.test.result == 'success'
+        with:
+          pattern: cover-*
+          path: ${{ runner.temp }}/shards
+      - name: floor
+        env:
+          TESTS: ${{ needs.test.result }}
         run: |
           set -o pipefail
-          make check 2>&1 | tee "$RUNNER_TEMP/check.log"
+          log="$RUNNER_TEMP/floor.log"
+          if [ "$TESTS" != success ]; then
+            echo "a test shard failed" | tee "$log"
+            exit 1
+          fi
+          merged="$RUNNER_TEMP/cover.out"
+          set -- "$RUNNER_TEMP"/shards/*/cover.out
+          if [ "$#" -ne 3 ] || [ ! -f "$1" ]; then
+            echo "expected 3 shard profiles, found: $*" | tee "$log"
+            exit 1
+          fi
+          mode=$(head -n 1 "$1")
+          for f in "$@"; do
+            if [ "$(head -n 1 "$f")" != "$mode" ]; then
+              echo "shard profiles disagree on the mode line: $f" | tee "$log"
+              exit 1
+            fi
+          done
+          { echo "$mode"; for f in "$@"; do tail -n +2 "$f"; done; } > "$merged"
+          make floor PROFILE="$merged" 2>&1 | tee "$log"
       # One comment per pull request, found by its marker and updated on each push.
       # A pull request from a fork gets a read-only token, so the step skips it.
       - name: coverage comment
@@ -49,11 +121,11 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           marker='<!-- coverage-floor -->'
-          log="$RUNNER_TEMP/check.log"
+          log="$RUNNER_TEMP/floor.log"
           body="$RUNNER_TEMP/coverage-comment.md"
           line=$(grep -E '^coverage: ' "$log" 2>/dev/null | tail -n 1 || true)
           if [ -z "$line" ]; then
-            result='not measured: `make check` failed before `make cover` ran'
+            result='not measured: a test shard failed before the floor check'
           elif grep -q '^coverfloor: coverage .* is below the floor' "$log"; then
             result="below the floor: ${line#coverage: }"
           else
@@ -74,5 +146,25 @@ jobs:
           else
             gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$body"
           fi
+
+  engines:
+    runs-on: ubuntu-latest
+    env:
+      GIT_AUTHOR_NAME: ci
+      GIT_AUTHOR_EMAIL: ci@example.invalid
+      GIT_COMMITTER_NAME: ci
+      GIT_COMMITTER_EMAIL: ci@example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
       - name: engine tests
         run: go test -tags linters ./internal/lint/... -count=1

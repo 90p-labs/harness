@@ -98,9 +98,10 @@ func TestCoverWiring(t *testing.T) {
 	t.Run("the effective floor is 85", func(t *testing.T) {
 		requireMake(t)
 		dir := filepath.Dir(repository.Path(t, "Makefile"))
-		// cover is the recipe; check is the CI entry point, and an exported target-specific variable on check reaches its nested make cover only.
-		for _, target := range []string{"cover", "check"} {
-			cmd := exec.Command("make", "-C", dir, "-n", target)
+		// cover is the recipe; check is the local entry point, and an exported target-specific variable on check reaches its nested make cover only.
+		// floor checks the merged profile of the CI test shards.
+		for _, target := range []string{"cover", "check", "floor"} {
+			cmd := exec.Command("make", "-C", dir, "-n", target, "PROFILE=merged.out")
 			cmd.Env = makeEnv()
 			out, err := cmd.CombinedOutput()
 			if err != nil {

@@ -6,7 +6,7 @@ PLUGIN := 90p@$(MARKETPLACE)
 
 COVERAGE_FLOOR ?= 85
 
-.PHONY: build dist test cover check install-claude
+.PHONY: build dist test cover floor check install-claude
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o dist/harness ./cmd/harness
@@ -29,6 +29,11 @@ cover:
 	trap 'exit 143' TERM; \
 	go test -coverprofile="$$profile" ./... || exit 1; \
 	sh scripts/coverfloor.sh "$$profile" "$(COVERAGE_FLOOR)"
+
+# CI shards the tests, merges their profiles and checks the merged one here, so the floor stays in one place.
+floor:
+	@test -n "$(PROFILE)" || { echo "floor: set PROFILE to a coverage profile" >&2; exit 2; }
+	sh scripts/coverfloor.sh "$(PROFILE)" "$(COVERAGE_FLOOR)"
 
 check:
 	test -z "$$(gofmt -l .)"
