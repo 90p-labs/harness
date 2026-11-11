@@ -256,3 +256,86 @@ func TestTransitionResetsStopBlocks(t *testing.T) {
 		t.Fatalf("got %d", got)
 	}
 }
+
+func TestWaitOnPR(t *testing.T) {
+	const first, second = "https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"
+	policy := domain.Policy{MaxReviewRounds: 3}
+
+	t.Run("shipping records a valid URL", func(t *testing.T) {
+		run := domain.Run{Phase: domain.PhaseShipping}
+		next, err := run.WaitOnPR(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next.PRURL != first || next.Phase != domain.PhaseShipping || run.PRURL != "" {
+			t.Fatalf("got %+v, old %+v", next, run)
+		}
+	})
+	for _, phase := range []domain.Phase{domain.PhaseWorking, domain.PhasePlanning, domain.PhaseReviewing} {
+		t.Run("refuses "+string(phase), func(t *testing.T) {
+			run := domain.Run{Phase: phase}
+			next, err := run.WaitOnPR(first)
+			if !errors.Is(err, domain.ErrNotShipping) {
+				t.Fatalf("err = %v, want ErrNotShipping", err)
+			}
+			if next.PRURL != "" || run.PRURL != "" {
+				t.Fatalf("state changed: %+v, %+v", next, run)
+			}
+		})
+	}
+	t.Run("refuses an invalid URL", func(t *testing.T) {
+		run := domain.Run{Phase: domain.PhaseShipping}
+		next, err := run.WaitOnPR("not a url")
+		if !errors.Is(err, shareddomain.ErrInvalidPRURL) {
+			t.Fatalf("err = %v, want ErrInvalidPRURL", err)
+		}
+		if next.PRURL != "" || run.PRURL != "" {
+			t.Fatalf("state changed: %+v, %+v", next, run)
+		}
+	})
+	for _, event := range []domain.Event{domain.EventBlock, domain.EventAmend, domain.EventAbandon} {
+		t.Run("clears the URL on "+string(event), func(t *testing.T) {
+			run, err := domain.Run{Phase: domain.PhaseShipping}.WaitOnPR(first)
+			if err != nil {
+				t.Fatal(err)
+			}
+			next, err := run.Apply(domain.Command{Event: event, Reason: "r"}, policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if next.PRURL != "" {
+				t.Fatalf("PRURL = %q, want empty", next.PRURL)
+			}
+		})
+	}
+	t.Run("resume back into shipping leaves the URL empty", func(t *testing.T) {
+		run, err := domain.Run{Phase: domain.PhaseShipping}.WaitOnPR(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+		blocked, err := run.Apply(domain.Command{Event: domain.EventBlock, Reason: "r"}, policy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, err := blocked.Apply(domain.Command{Event: domain.EventResume}, policy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next.Phase != domain.PhaseShipping || next.PRURL != "" {
+			t.Fatalf("got phase %q, PRURL %q, want shipping and empty", next.Phase, next.PRURL)
+		}
+	})
+	t.Run("complete sets the new URL", func(t *testing.T) {
+		run, err := domain.Run{Phase: domain.PhaseShipping}.WaitOnPR(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, err := run.Apply(domain.Command{Event: domain.EventComplete, PRURL: second}, policy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next.PRURL != second {
+			t.Fatalf("PRURL = %q, want %q", next.PRURL, second)
+		}
+	})
+}
