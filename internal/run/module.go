@@ -8,6 +8,7 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/command/recordapproval"
 	"github.com/90p-labs/harness/internal/run/application/command/start"
 	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/command/waitpr"
 	"github.com/90p-labs/harness/internal/run/application/query/report"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
@@ -73,6 +74,7 @@ func NewModule(db *dbal.DB, bus shareddomain.Dispatcher, gate domain.PlanGate, c
 		Key:        key,
 		Start:      start.NewHandler(repo, flow, now),
 		Transition: transition.NewHandler(repo, flow, findings.File{}, policy),
+		WaitPR:     waitpr.NewHandler(repo, tracer),
 		Status:     status.NewHandler(repo),
 		Report:     report.NewHandler(repo, repo, now, telemetry.TraceIDOf, tracer),
 	}
