@@ -33,7 +33,7 @@ const (
 	reasonPrefix       = "reason: "
 	nextPrefix         = "next: "
 	handoffReadyFormat = "handoff: ready (step %d)"
-	handoffWriteFormat = "handoff: write %s with Phase: %s and Step: %d, then end the turn"
+	handoffWriteFormat = "handoff: write %s with Phase: %s and Step: %d, then continue"
 	noActiveRun        = "active: no"
 	missingFlagMsg     = "required flag %q not set"
 	pairedFlagsMsg     = "flags %q and %q go together"
@@ -126,7 +126,7 @@ type transitionSpec struct {
 var transitionSpecs = []transitionSpec{
 	{"plan", "Submit the plan", domain.EventSubmitPlan, ""},
 	{"approve", "Approve the plan", domain.EventApprovePlan, ""},
-	{"amend", "Reopen the plan", domain.EventAmend, ""},
+	{"amend", "Amend the approved plan", domain.EventAmend, ""},
 	{"review", "Submit the change for review", domain.EventSubmitForReview, ""},
 	{"rework", "Send the change back with findings", domain.EventRequestRework, flagFindings},
 	{"ship", "Approve the review", domain.EventApproveReview, ""},

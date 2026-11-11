@@ -302,14 +302,35 @@ func TestHandoffLines(t *testing.T) {
 	}
 
 	t.Run("write line", func(t *testing.T) {
-		want := "handoff: write .harness/runs/r1/handoff.md with Phase: working and Step: 3, then end the turn"
-		if got := cli.HandoffWriteLine(ready); got != want {
+		want := "handoff: write .harness/runs/r1/handoff.md with Phase: working and Step: 3, then continue"
+		got := cli.HandoffWriteLine(ready)
+		if got != want {
 			t.Errorf("line = %q, want %q", got, want)
 		}
-		if got := cli.HandoffWriteLine(status.Status{ID: "r1", Phase: domain.PhaseAwaitingApproval, Step: 3}); got != "" {
-			t.Errorf("line = %q, want none for a phase that releases the turn", got)
+		if strings.Contains(got, "end the turn") {
+			t.Errorf("line = %q, must not tell the lead to end the turn", got)
+		}
+		if none := cli.HandoffWriteLine(status.Status{ID: "r1", Phase: domain.PhaseAwaitingApproval, Step: 3}); none != "" {
+			t.Errorf("line = %q, want none for a phase that releases the turn", none)
 		}
 	})
+}
+
+func TestAmendHelp(t *testing.T) {
+	cmd := cli.NewCommand(nil)
+	for _, sub := range cmd.Commands() {
+		if sub.Name() != "amend" {
+			continue
+		}
+		if sub.Short != "Amend the approved plan" {
+			t.Errorf("amend help = %q, want %q", sub.Short, "Amend the approved plan")
+		}
+		if strings.Contains(sub.Short, "Reopen") {
+			t.Errorf("amend help = %q, must not contain Reopen", sub.Short)
+		}
+		return
+	}
+	t.Fatal("amend command not found")
 }
 
 func TestTransitionDoesNotPrintModels(t *testing.T) {
