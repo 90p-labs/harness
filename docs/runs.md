@@ -89,6 +89,7 @@ Write the code, commit, and verify again. `verify --commits` checks each commit 
 $ harness verify
 PASS gates=5 cached=0
 $ harness verify --commits main
+base origin/main 0a83514a6119
 PASS commits=1
 ```
 

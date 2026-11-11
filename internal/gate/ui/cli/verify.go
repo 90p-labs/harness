@@ -27,6 +27,9 @@ const (
 	passGatesFormat   = "%s gates=%d cached=%d\n"
 	failGatesFormat   = "%s gates=%d failed=%d\n"
 	passCommitsFormat = "%s commits=%d\n"
+	baseFormat        = "base %s %s\n"
+	failedGateFormat  = "  %s %s %s\n"
+	tailLabelFormat   = "%s %s"
 	shortSHALength    = 12
 )
 
@@ -55,7 +58,7 @@ func NewVerifyCommand(connect Connect) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().String(flagCommits, "", "check each commit of BASE..HEAD")
+	cmd.Flags().String(flagCommits, "", "check each commit from the merge base of BASE, or of origin/BASE when newer, to HEAD")
 	return cmd
 }
 
@@ -120,6 +123,11 @@ func verifyCommits(ctx context.Context, out io.Writer, h Handlers, base string) 
 	if err != nil && !errors.Is(err, domain.ErrCommitRule) {
 		return err
 	}
+	if result.Base.Ref != "" {
+		if _, werr := fmt.Fprintf(out, baseFormat, result.Base.Ref, shortSHA(result.Base.SHA)); werr != nil {
+			return werr
+		}
+	}
 	if err == nil {
 		_, werr := fmt.Fprintf(out, passCommitsFormat, domain.StatusPass, len(result.Commits))
 		return werr
@@ -129,15 +137,31 @@ func verifyCommits(ctx context.Context, out io.Writer, h Handlers, base string) 
 		if commit.Passed {
 			status = domain.StatusPass
 		}
-		sha := commit.SHA
-		if len(sha) > shortSHALength {
-			sha = sha[:shortSHALength]
-		}
-		if _, werr := fmt.Fprintf(out, lineFormat, status, sha, commit.Type); werr != nil {
+		if _, werr := fmt.Fprintf(out, lineFormat, status, shortSHA(commit.SHA), commit.Type); werr != nil {
 			return werr
+		}
+		for _, failed := range commit.Failed {
+			if _, werr := fmt.Fprintf(out, failedGateFormat, failed.Status, failed.Gate, failed.Duration.Round(time.Millisecond)); werr != nil {
+				return werr
+			}
+		}
+	}
+	for _, commit := range result.Commits {
+		for _, failed := range commit.Failed {
+			label := fmt.Sprintf(tailLabelFormat, shortSHA(commit.SHA), failed.Gate)
+			if _, werr := fmt.Fprintf(out, tailFormat, label, failed.Tail); werr != nil {
+				return werr
+			}
 		}
 	}
 	return err
+}
+
+func shortSHA(sha string) string {
+	if len(sha) > shortSHALength {
+		return sha[:shortSHALength]
+	}
+	return sha
 }
 
 func withHandlers(cmd *cobra.Command, connect Connect, run func(context.Context, Handlers) error) (err error) {
