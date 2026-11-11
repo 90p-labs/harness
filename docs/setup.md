@@ -10,6 +10,8 @@ The plugin starts the binary through `bin/harness`, which runs `dist/harness-OS-
 - A hook never builds, because it must not block the session. It starts the `gh` download in the background and skips itself. A skipped hook prints `{}`, so the guard is off until the binary is there. When the download fails, the next hooks print its error, and a hook tries again after 10 minutes.
 - On a machine with Go and no `gh`, start `/90p:harness status` once (Codex: `$90p:harness status`). The skill runs `bin/harness version`, which builds the binary.
 
+The release workflow sets the plugin version and the tag `v<plugin version>` together on each releasing push to `main`. So the download name matches the plugin version. The release assets appear a few minutes after the push. A download in that gap fails, and a hook tries again after 10 minutes.
+
 The plugin puts no `harness` command on the `PATH`. The setup commands below and a gate such as `harness lint --json` need one: build it from source, or download the asset `harness-OS-ARCH` of release `v<plugin version>` (`gh release download v<plugin version> -R 90p-labs/harness -p harness-OS-ARCH`), make it executable and put it on the `PATH` as `harness`.
 
 ## Move from the old plugin name
