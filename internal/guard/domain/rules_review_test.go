@@ -110,7 +110,7 @@ func TestDenyReviewModelsFloor(t *testing.T) {
 	}
 
 	reason, denied = DenyReviewModels(nil, nil, opusOnly, 1)
-	if !denied || !strings.Contains(reason, "needs 1 different models") {
+	if !denied || !strings.Contains(reason, "needs 1 different model,") {
 		t.Errorf("floor 1, no counted: denied = %v, reason %q, want a deny that needs 1 model", denied, reason)
 	}
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -273,8 +275,67 @@ func panelSource(cfg config.Config) guardplugin.PanelSource {
 		LastRework:    adapter.LastRework,
 		ReviewedByAll: adapter.ReviewedByAll,
 		FixupLines:    git.DiffLines,
+		LightReview:   func(ctx context.Context, dir, runID string) (bool, error) { return lightReview(ctx, cfg, dir, runID) },
 		Limit:         cfg.Run.PanelFixupLines,
 	}
+}
+
+// lightReview holds only when the plan, the approved copy and the changed files all give a light review.
+// A read, parse or git error is an error, so the caller keeps the full panel.
+func lightReview(ctx context.Context, cfg config.Config, dir, runID string) (bool, error) {
+	base := cfg.Git.DefaultBranch
+	if base == "" {
+		var err error
+		if base, err = git.DefaultBranch(ctx, dir); err != nil {
+			return false, err
+		}
+	}
+	baseRef, err := git.BranchRef(ctx, dir, base)
+	if err != nil {
+		return false, err
+	}
+	changed, err := git.ChangedFilesNoRenames(ctx, dir, baseRef)
+	if err != nil {
+		return false, err
+	}
+	for _, path := range []string{planPath(dir, runID), keptPlanPath(dir, runID)} {
+		var text []byte
+		text, err = os.ReadFile(path)
+		if err != nil {
+			return false, err
+		}
+		if path != planPath(dir, runID) {
+			var approved bool
+			approved, err = approvedCopy(ctx, cfg, dir, runID, text)
+			if err != nil || !approved {
+				return false, err
+			}
+		}
+		doc, problems := plandomain.Parse(string(text))
+		if len(problems) > 0 {
+			return false, fmt.Errorf("%w: %s", errPlanProblems, problems[0])
+		}
+		if !plandomain.LightReview(doc, changed) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// approvedCopy holds when the latest approval of the run is the sha256 of the approved copy.
+// An edit of approved-plan.md after the approval breaks it.
+func approvedCopy(ctx context.Context, cfg config.Config, dir, runID string, kept []byte) (matches bool, err error) {
+	_, _, db, err := reviewRecordAdapter{cfg: cfg}.open(ctx, dir)
+	if err != nil {
+		return false, err
+	}
+	defer func() { err = errors.Join(err, db.Close()) }()
+	hash, ok, err := runmodule.NewApprovals(db).Latest(ctx, runID)
+	if err != nil || !ok {
+		return false, err
+	}
+	sum := sha256.Sum256(kept)
+	return hash == hex.EncodeToString(sum[:]), nil
 }
 
 func (a reviewRecordAdapter) LastRework(ctx context.Context, dir, runID string) (last guarddomain.ReworkEvent, err error) {

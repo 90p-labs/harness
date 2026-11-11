@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +19,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
@@ -2128,5 +2131,104 @@ func TestReviewPanelCommand(t *testing.T) {
 	code, stdout, stderr := execute(t, "review", "panel")
 	if code != exitOK || !strings.HasPrefix(stdout, "panel: ") || !strings.Contains(stdout, "(full panel: ") {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+}
+
+// recordApproval saves the approval of a plan text, as `harness run approve` does.
+func recordApproval(t *testing.T, dir, runID, text string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", defaultStatePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	sum := sha256.Sum256([]byte(text))
+	_, err = db.ExecContext(context.Background(), "INSERT INTO plan_approvals (run_id, plan_sha256, at) VALUES (?, ?, ?)", runID, hex.EncodeToString(sum[:]), time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+const lightPlanBody = "# Plan: tweak the CLI\n\n## Goal\n\nTrack: %s\n\n## Tech specs\n\n### Final code tree\n\n```tree\nharness/\n└── cmd/\n    └── harness/\n        └── main.go    changed\n```\n"
+
+func TestReviewPanelCommandLight(t *testing.T) {
+	lightPlan := fmt.Sprintf(lightPlanBody, "light")
+	tweak := func(t *testing.T, dir string) {
+		commitFiles(t, dir, "feat: tweak", map[string]string{"cmd/harness/main.go": "package main\n"})
+	}
+	cases := []struct {
+		name     string
+		approved string
+		noKept   bool // leaves approved-plan.md out
+		change   func(t *testing.T, dir string)
+		light    bool
+		plan     string // plan.md body, lightPlan when empty
+		edited   string // rewrites approved-plan.md after the approval record
+		noRecord bool   // leaves the approval record out
+	}{
+		{name: "one non-risky file", approved: lightPlan, change: tweak, light: true},
+		{name: "approved copy edited after approval", approved: fmt.Sprintf(lightPlanBody, "full"), edited: lightPlan, change: tweak},
+		{name: "no approval record", approved: lightPlan, change: tweak, noRecord: true},
+		{name: "plan is full, approved copy is light", approved: lightPlan, plan: fmt.Sprintf(lightPlanBody, "full"), change: tweak},
+		{name: "guard file changed", approved: lightPlan, change: func(t *testing.T, dir string) {
+			commitFiles(t, dir, "feat: tweak", map[string]string{"internal/guard/x.go": "package guard\n// changed\n"})
+		}},
+		{name: "guard file renamed out", approved: lightPlan, change: func(t *testing.T, dir string) {
+			if err := os.MkdirAll(filepath.Join(dir, "other"), 0o750); err != nil {
+				t.Fatal(err)
+			}
+			gitIn(t, dir, "mv", "internal/guard/x.go", "other/x.go")
+			gitIn(t, dir, "-c", gitUserName, "-c", gitUserEmail, "commit", "--quiet", "-m", "refactor: move")
+		}},
+		{name: "base is not a branch", approved: lightPlan, change: func(t *testing.T, dir string) {
+			t.Setenv("HARNESS_GIT_DEFAULT_BRANCH", "HEAD~1")
+			commitFiles(t, dir, "feat: guard", map[string]string{"internal/guard/x.go": "package guard\n// changed\n"})
+			commitFiles(t, dir, "docs: note", map[string]string{"a.txt": "docs\n"})
+		}},
+		{name: "approved plan is full", approved: fmt.Sprintf(lightPlanBody, "full"), change: tweak},
+		{name: "approved plan is missing", noKept: true, change: tweak},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			clearHarnessEnv(t)
+			dir := initRepo(t)
+			gitIn(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
+			commitFiles(t, dir, "chore: seed", map[string]string{"a.txt": "a\n", "internal/guard/x.go": "package guard\n"})
+			gitIn(t, dir, "checkout", "--quiet", "-b", "feat/light")
+			c.change(t, dir)
+			_, stdout, _ := execute(t, commandRun, "start", "Tweak the CLI")
+			runID := startedRunID(t, stdout)
+			plan := c.plan
+			if plan == "" {
+				plan = lightPlan
+			}
+			writeRunPlan(t, dir, runID, plan)
+			if !c.noKept {
+				kept := filepath.Join(dir, ".harness", "runs", runID, keptPlanFile)
+				if err := os.WriteFile(kept, []byte(c.approved), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if !c.noRecord {
+					recordApproval(t, dir, runID, c.approved)
+				}
+				if c.edited != "" {
+					if err := os.WriteFile(kept, []byte(c.edited), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			code, out, stderr := execute(t, "review", "panel")
+			if code != exitOK || !strings.HasPrefix(out, "panel: ") {
+				t.Fatalf("code = %d, stdout = %q, stderr = %q", code, out, stderr)
+			}
+			models := strings.SplitN(strings.TrimPrefix(out, "panel: "), " (", 2)[0]
+			single := !strings.Contains(models, ", ")
+			if single != c.light || strings.Contains(out, "(light panel: ") != c.light {
+				t.Fatalf("stdout = %q, want light = %v", out, c.light)
+			}
+			if c.light && models != reviewerModels[0] {
+				t.Errorf("light panel model = %q, want the first reviewer model %q", models, reviewerModels[0])
+			}
+		})
 	}
 }

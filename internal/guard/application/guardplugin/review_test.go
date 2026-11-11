@@ -431,3 +431,44 @@ func TestReviewShipPanel(t *testing.T) {
 		})
 	}
 }
+
+func TestReviewShipLightPanel(t *testing.T) {
+	// Role order: sonnet, haiku, opus. A light panel is the first listed model, sonnet.
+	listed := []string{modelSonnet, modelHaiku, modelOpus}
+	yes := func(context.Context, string, string) (bool, error) { return true, nil }
+	no := func(context.Context, string, string) (bool, error) { return false, nil }
+	failed := func(context.Context, string, string) (bool, error) { return true, errors.New("plan unreadable") }
+	cases := []struct {
+		name     string
+		light    func(context.Context, string, string) (bool, error)
+		reviewed []string
+		deny     bool
+		reason   string
+	}{
+		{"light fact with the first model", yes, []string{modelSonnet}, false, ""},
+		{"light fact with another model", yes, []string{modelHaiku}, true, "needs every reviewer model"},
+		{"light fact with no review", yes, nil, true, "needs 1 different model,"},
+		{"false light fact", no, []string{modelSonnet}, true, "needs 2 different models"},
+		{"light fact error", failed, []string{modelSonnet}, true, "needs 2 different models"},
+		{"nil light fact", nil, []string{modelSonnet}, true, "needs 2 different models"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := &reviewStore{models: c.reviewed}
+			d := recorderDeps(store, "")
+			d.Models = map[shareddomain.Host]map[string][]string{
+				shareddomain.HostClaude: {string(shareddomain.RoleReviewer): listed},
+			}
+			d.Panel = guardplugin.PanelSource{LightReview: c.light}
+			env := transitionEnvelope(t, shareddomain.TransitionApproveReview)
+			env.Run = shareddomain.RunRef{ID: "r1"}
+			v := dispatch(t, newBus(build(t, nil, d)), env)
+			if (v.Kind == shareddomain.VerdictDeny) != c.deny {
+				t.Fatalf("verdict = %+v, want deny=%v", v, c.deny)
+			}
+			if !strings.Contains(v.Reason, c.reason) {
+				t.Fatalf("reason = %q, want it to contain %q", v.Reason, c.reason)
+			}
+		})
+	}
+}

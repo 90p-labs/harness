@@ -72,7 +72,11 @@ func DenyReviewModels(models, unread []string, listed map[shareddomain.Host][]st
 		}
 	}
 	if len(models) < floor {
-		reason := fmt.Sprintf("the review of this HEAD needs %d different models, and it has %s", floor, found)
+		noun := "models"
+		if floor == 1 {
+			noun = "model"
+		}
+		reason := fmt.Sprintf("the review of this HEAD needs %d different %s, and it has %s", floor, noun, found)
 		if len(missing) > 0 {
 			reason += fmt.Sprintf(" and misses %s of %s", strings.Join(missing, modelSeparator), host)
 		}
