@@ -23,6 +23,8 @@ const (
 	lintSetupSkill      = "skills/lint-setup/SKILL.md"
 	linterAgent         = "agents/linter.md"
 	reviewerAgent       = "agents/reviewer.md"
+	workerAgent         = "agents/worker.md"
+	verifierAgent       = "agents/verifier.md"
 	frontmatterEnd      = "\n---\n"
 	skillsDir           = "skills"
 	decisionTreeHeading = "## Decision tree"
@@ -60,6 +62,18 @@ const (
 	tailPipefailText      = "set -o pipefail; go test ./... 2>&1 | tail -n 40"
 	verifyForegroundText  = "Run `harness verify --commits <default branch>` in the foreground, with a Bash timeout of 600000 ms (600 s)."
 	verifyBackgroundText  = "When it does not fit in 600 s, run it in the background."
+
+	planningItemStart       = "1. `planning`"
+	planningSecondItemStart = "2. `planning`"
+	explorerBinaryText      = "Give it the prompt and the full path of the harness binary."
+	workerBinaryText        = "Give each worker, also a fix worker and a self-check worker, the full path of the harness binary."
+	reviewerLensBulletStart = "- Lens `Spec` runs on"
+	reviewerBinaryText      = "Give each reviewer, also of the final panel, its lens, the path of `plan.md`, the default branch and the full path of the harness binary."
+	fixBulletStart          = "- **Fix** (in `working`)"
+	fixBinaryText           = "Give each fix worker its finding lines, the path of `plan.md` and the full path of the harness binary."
+	reReviewBulletStart     = "- **Re-review** (in `working`)"
+	reReviewBinaryText      = "Give it the path of `plan.md`, the default branch and the full path of the harness binary."
+	tailPipefailRuleText    = "Read a long output through `tail` with `set -o pipefail` in the same command, so that the exit code stays: `" + tailPipefailText + "`."
 )
 
 var (
@@ -218,6 +232,59 @@ func TestSkillLeadCostLines(t *testing.T) {
 	}
 	if !strings.Contains(leadRow, lightLeadText) {
 		t.Errorf("the lead row of %s does not name %q", configurationDoc, lightLeadText)
+	}
+}
+
+func TestSkillBriefsNameBinaryPath(t *testing.T) {
+	doc := repository.Read(t, skillFile)
+	planStart := strings.Index(doc, planningItemStart)
+	planEnd := strings.Index(doc, planningSecondItemStart)
+	if planStart < 0 || planEnd < planStart {
+		t.Fatalf("%s has no first planning item before the second planning item", skillFile)
+	}
+	if !strings.Contains(doc[planStart:planEnd], explorerBinaryText) {
+		t.Errorf("the first planning item does not name %q", explorerBinaryText)
+	}
+	workStart := strings.Index(doc, workingItemStart)
+	workEnd := strings.Index(doc, reviewingItemStart)
+	if workStart < 0 || workEnd < workStart {
+		t.Fatalf("%s has no phase working item before the phase reviewing item", skillFile)
+	}
+	item := doc[workStart:workEnd]
+	planPath := strings.Index(item, selfCheckPlanPathText)
+	binary := strings.Index(item, workerBinaryText)
+	if planPath < 0 || binary < planPath {
+		t.Errorf("the working item must name %q, then %q", selfCheckPlanPathText, workerBinaryText)
+	}
+}
+
+func TestReviewingBriefsNameBinaryPath(t *testing.T) {
+	doc := repository.Read(t, reviewingFile)
+	for prefix, want := range map[string]string{
+		reviewerLensBulletStart: reviewerBinaryText,
+		fixBulletStart:          fixBinaryText,
+		reReviewBulletStart:     reReviewBinaryText,
+	} {
+		found := false
+		for _, line := range strings.Split(doc, "\n") {
+			if strings.HasPrefix(line, prefix) {
+				found = true
+				if !strings.Contains(line, want) {
+					t.Errorf("the bullet %q of %s does not name %q", prefix, reviewingFile, want)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s has no bullet that starts with %q", reviewingFile, prefix)
+		}
+	}
+}
+
+func TestAgentsTailPipefail(t *testing.T) {
+	for _, path := range []string{reviewerAgent, workerAgent, verifierAgent} {
+		if !strings.Contains(repository.Read(t, path), tailPipefailRuleText) {
+			t.Errorf("%s does not name %q", path, tailPipefailRuleText)
+		}
 	}
 }
 

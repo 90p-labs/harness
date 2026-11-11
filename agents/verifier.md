@@ -21,4 +21,6 @@ Answer with one line for each finding, each of at most 60 words:
 
 A finding with no verifier line counts as real, and the lead keeps it. So give a line for every finding.
 
+Read a long output through `tail` with `set -o pipefail` in the same command, so that the exit code stays: `set -o pipefail; go test ./... 2>&1 | tail -n 40`.
+
 Never edit a file. Do not commit or push.
