@@ -14,7 +14,7 @@ gates:
     run: go vet ./...
   # No paths: colocated tests also read the docs, the examples and the plugin files.
   - id: go-test
-    run: go test ./...
+    run: make cover
     needs: [go-fmt, go-vet]
   - id: prose
     run: HARNESS_PROSE_BASE=main go test -count=1 -run '^TestChangedProse$' ./skills/

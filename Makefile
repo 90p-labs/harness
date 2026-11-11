@@ -4,7 +4,9 @@ PLATFORMS ?= darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 MARKETPLACE := harness
 PLUGIN := 90p@$(MARKETPLACE)
 
-.PHONY: build dist test check install-claude
+COVERAGE_FLOOR ?= 85
+
+.PHONY: build dist test cover floor check install-claude
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o dist/harness ./cmd/harness
@@ -19,10 +21,24 @@ dist:
 test:
 	go test ./...
 
+# A failing test stops the target before the floor check. A trap removes the profile on exit and interrupt.
+cover:
+	profile=$$(mktemp) || exit 1; \
+	trap 'rm -f "$$profile"' EXIT; \
+	trap 'exit 130' INT; \
+	trap 'exit 143' TERM; \
+	go test -coverprofile="$$profile" ./... || exit 1; \
+	sh scripts/coverfloor.sh "$$profile" "$(COVERAGE_FLOOR)"
+
+# CI shards the tests, merges their profiles and checks the merged one here, so the floor stays in one place.
+floor:
+	@test -n "$(PROFILE)" || { echo "floor: set PROFILE to a coverage profile" >&2; exit 2; }
+	sh scripts/coverfloor.sh "$(PROFILE)" "$(COVERAGE_FLOOR)"
+
 check:
 	test -z "$$(gofmt -l .)"
 	go vet ./...
-	go test ./...
+	$(MAKE) cover
 
 # Claude Code copies the plugin folder into its cache, so the binary must be in dist/ before the install.
 install-claude:

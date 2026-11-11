@@ -31,6 +31,6 @@ Tests live beside the code or assets they check. The root keeps the module files
 | `docs/` | Documentation consistency checks; ADR checks live in `docs/adr/` |
 | `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/` | Plugin manifests and marketplaces, checked by host installation tests |
 
-From the repository root, run `make check` for formatting, vet and all tests, or `go test ./...` for all tests alone.
+From the repository root, run `make check` for formatting, vet and all tests. Its tests run through `make cover`, which fails below the statement coverage floor (`COVERAGE_FLOOR`, 85% by default). Run `go test ./...` for all tests alone.
 To focus on one area, run `go test ./skills/...`, `go test ./docs/...` or `go test ./bin`.
 Tests also run from their own folders, for example `cd skills/ddd && go test`.
