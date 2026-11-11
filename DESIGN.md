@@ -770,6 +770,8 @@ gates:
     baseline: .harness-lint/baseline.json
 ```
 
+This repository's `go-test` gate runs `make cover` instead, so the coverage floor applies to the gate. `COVERAGE_FLOOR` sets the floor. The CI workflow `lint-engines.yml` runs `make check`, which runs `make cover`, so CI enforces the floor too.
+
 Needs and parallel runs:
 
 - `verify.parallel` is the most gates that run at the same time. The default 1 runs one gate at a time, in file order.
