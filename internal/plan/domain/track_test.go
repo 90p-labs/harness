@@ -52,6 +52,52 @@ func TestClassifyTrack(t *testing.T) {
 	})
 }
 
+func TestLightReview(t *testing.T) {
+	cases := []struct {
+		name     string
+		declared string
+		plan     []string
+		changed  []string
+		want     bool
+	}{
+		{"light plan and light files", "", []string{"cmd/main.go"}, []string{"cmd/main.go", "cmd/main_test.go"}, true},
+		{"declared full plan", "full", []string{"cmd/main.go"}, []string{"cmd/main.go"}, false},
+		{"guard path in the plan", "", []string{"internal/guard/rules.go"}, []string{"cmd/main.go"}, false},
+		{"guard path in the changed files", "", []string{"cmd/main.go"}, []string{"internal/guard/rules.go"}, false},
+		{"security folder changed", "", []string{"cmd/main.go"}, []string{"internal/security/key.go"}, false},
+		{"hooks folder changed", "", []string{"cmd/main.go"}, []string{"internal/hooks/pre.go"}, false},
+		{"empty changed list", "", []string{"cmd/main.go"}, nil, false},
+		{"many folders changed", "", []string{"cmd/main.go"}, []string{"a/x.go", "b/y.go", "c/z.go"}, false},
+		{"domain folder changed", "", []string{"cmd/main.go"}, []string{"internal/ping/domain/pong.go"}, false},
+		{"sql file changed", "", []string{"cmd/main.go"}, []string{"db/schema.sql"}, false},
+		{"declared light", "light", []string{"cmd/main.go"}, []string{"cmd/main.go"}, true},
+		{"unknown track ful", "ful", []string{"cmd/main.go"}, []string{"cmd/main.go"}, false},
+		{"unknown track lite", "lite", []string{"cmd/main.go"}, []string{"cmd/main.go"}, false},
+		{"full folder only in the plan tree", "", []string{"internal/ping/domain/pong.go"}, []string{"cmd/main.go"}, false},
+		{"security folder only in the plan tree", "", []string{"internal/security/key.go"}, []string{"cmd/main.go"}, false},
+		{"hooks folder only in the plan tree", "", []string{"internal/hooks/pre.go"}, []string{"cmd/main.go"}, false},
+		{"light declared on a risky change", "light", []string{"cmd/main.go"}, []string{"internal/guard/rules.go"}, false},
+		{"light declared on a risky plan", "light", []string{"internal/guard/rules.go"}, []string{"cmd/main.go"}, false},
+		{"guard folder in mixed case", "", []string{"cmd/main.go"}, []string{"internal/GUARD/rules.go"}, false},
+		{"guard plugin path under a mixed case guard folder", "", []string{"cmd/main.go"}, []string{"internal/Guard/application/guardplugin/evil.go"}, false},
+		{"hooks folder in upper case", "", []string{"cmd/main.go"}, []string{"HOOKS/hooks.json"}, false},
+		{"security folder with a long s", "", []string{"cmd/main.go"}, []string{"ſecurity/x.go"}, false},
+		{"mixed case guard folder in the plan tree", "", []string{"internal/Guard/rules.go"}, []string{"cmd/main.go"}, false},
+		{"domain folder in mixed case", "", []string{"cmd/main.go"}, []string{"internal/ping/Domain/pong.go"}, false},
+		{"command folder in mixed case", "", []string{"cmd/main.go"}, []string{"internal/ping/application/Command/do.go"}, false},
+		{"sql file in upper case", "", []string{"cmd/main.go"}, []string{"db/schema.SQL"}, false},
+		{"migrations folder in mixed case", "", []string{"cmd/main.go"}, []string{"Migrations/001.go"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			doc := domain.Document{Track: c.declared, CodeTree: treeOf(c.plan...)}
+			if got := domain.LightReview(doc, c.changed); got != c.want {
+				t.Errorf("LightReview = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 func TestNeedsAdvisor(t *testing.T) {
 	cases := []struct {
 		name     string

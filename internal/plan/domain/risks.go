@@ -69,7 +69,9 @@ func hasThreatFolder(tree Tree) bool {
 			return false
 		}
 		segments := strings.Split(e.Path, "/")
-		return slices.ContainsFunc(segments[:len(segments)-1], func(s string) bool { return slices.Contains(ThreatFolders, s) })
+		return slices.ContainsFunc(segments[:len(segments)-1], func(s string) bool {
+			return containsFold(ThreatFolders, s)
+		})
 	})
 }
 

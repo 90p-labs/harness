@@ -81,6 +81,7 @@ func TestThreatModel(t *testing.T) {
 		{"no guard path and no section", nil, nil},
 		{"guard path without the section", []edit{guardPath("guard")}, []string{domain.HeadingThreatModel}},
 		{"security path without the section", []edit{guardPath("security")}, []string{domain.HeadingThreatModel}},
+		{"guard path in another case without the section", []edit{guardPath("Guard")}, []string{domain.HeadingThreatModel}},
 		{"guardrail does not trigger", []edit{guardPath("guardrail")}, nil},
 		{"guard path with the section", []edit{guardPath("guard"), threat(complete)}, nil},
 		{"no Attacker", []edit{guardPath("guard"), threat("- Input forms: a line.\n- Fail closed: ask.\n")}, []string{domain.ThreatAttacker}},
