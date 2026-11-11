@@ -41,6 +41,9 @@ const (
 	decisionsHead      = "## Decisions"
 	handoffFile        = "handoff.md"
 	statusRouteStart   = "- `status` or empty"
+	skillRewriteStep   = "After each edit of `plan.md`, run `harness plan view`"
+	changePlanStep     = "edit `plan.md`, run `harness plan view`"
+	grillRewriteStep   = "Run `harness plan check` and `harness plan view` after each change of `plan.md`"
 )
 
 // The handoff phrases of SKILL.md.
@@ -55,6 +58,7 @@ const (
 var (
 	ruleID       = regexp.MustCompile(`RuleID = "([a-z-]+)"`)
 	grillViews   = []string{"Product", "QA", "Tech specs"}
+	planViewOpen = regexp.MustCompile("harness plan view[^`\\n]*--open")
 	reviewLabels = []string{"**Common list**", "**Verify**", "**Fix**", "**Re-review**", "**Final panel**"}
 )
 
@@ -95,6 +99,20 @@ func TestHarnessSkillGrill(t *testing.T) {
 	for path, text := range map[string]string{skillFile: skill, grillFile: grill, explorerFile: explorer, advisorFile: repository.Read(t, advisorFile), workerFile: repository.Read(t, workerFile), prOpenSkill: repository.Read(t, prOpenSkill), verifierFile: repository.Read(t, verifierFile)} {
 		if strings.Contains(text, repository.EmDash) || strings.ContainsFunc(text, repository.IsEmoji) {
 			t.Errorf("%s has an em dash or an emoji", path)
+		}
+	}
+}
+
+func TestHarnessSkillOpensPlanOnce(t *testing.T) {
+	for path, steps := range map[string][]string{skillFile: {skillRewriteStep, changePlanStep}, grillFile: {grillRewriteStep}} {
+		text := repository.Read(t, path)
+		if open := planViewOpen.FindString(text); open != "" {
+			t.Errorf("%s still runs %q, and the plan.view plugin already opens the page", path, open)
+		}
+		for _, step := range steps {
+			if !strings.Contains(text, step) {
+				t.Errorf("%s does not rewrite the page after a plan edit: %q is missing", path, step)
+			}
 		}
 	}
 }
