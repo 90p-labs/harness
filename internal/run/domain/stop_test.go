@@ -180,3 +180,43 @@ func TestDecideStopHandoff(t *testing.T) {
 		}
 	})
 }
+
+func TestDecideStopWaitsOnPR(t *testing.T) {
+	const url = "https://github.com/o/r/pull/1"
+	policy := domain.Policy{MaxStopBlocks: 2}
+	refusal := errors.New("handoff.md has 5000 bytes, the limit is 4096")
+
+	cases := []struct {
+		name        string
+		run         domain.Run
+		handoff     error
+		wantBlock   bool
+		wantHandoff bool
+	}{
+		{"shipping with a URL and a ready handoff allows", domain.Run{Phase: domain.PhaseShipping, PRURL: url, Step: 3, HandoffStep: 3, StopBlocks: 1}, nil, false, false},
+		{"the first stop of a step still asks for the handoff", domain.Run{Phase: domain.PhaseShipping, PRURL: url, Step: 3, HandoffStep: 2}, nil, false, true},
+		{"a handoff refusal blocks", domain.Run{Phase: domain.PhaseShipping, PRURL: url, Step: 3, HandoffStep: 3}, refusal, true, false},
+		{"a missing handoff blocks", domain.Run{Phase: domain.PhaseShipping, PRURL: url, Step: 3, HandoffStep: 3}, domain.ErrHandoffMissing, true, false},
+		{"shipping with no URL blocks", domain.Run{Phase: domain.PhaseShipping, Step: 3, HandoffStep: 3}, nil, true, false},
+		{"working with a URL blocks", domain.Run{Phase: domain.PhaseWorking, PRURL: url, Step: 3, HandoffStep: 3}, nil, true, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			verdict, next := domain.DecideStop(c.run, policy, false, c.handoff)
+			if verdict.Block != c.wantBlock || verdict.Handoff != c.wantHandoff {
+				t.Fatalf("got %+v", verdict)
+			}
+			wantBlocks, wantTotal := c.run.StopBlocks, c.run.StopBlocksTotal
+			if c.wantBlock {
+				wantBlocks++
+				wantTotal++
+			}
+			if next.StopBlocks != wantBlocks || next.StopBlocksTotal != wantTotal {
+				t.Fatalf("stop blocks %d total %d, want %d and %d", next.StopBlocks, next.StopBlocksTotal, wantBlocks, wantTotal)
+			}
+			if next.PRURL != c.run.PRURL || next.Phase != c.run.Phase {
+				t.Fatalf("run changed: %+v", next)
+			}
+		})
+	}
+}

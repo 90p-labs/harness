@@ -19,6 +19,9 @@ func DecideStop(run Run, policy Policy, agentRunning bool, handoff error) (StopV
 		run.HandoffStep = run.Step
 		return StopVerdict{Handoff: true}, run
 	}
+	if run.Phase == PhaseShipping && run.PRURL != "" && handoff == nil {
+		return StopVerdict{}, run
+	}
 	run.StopBlocks++
 	run.StopBlocksTotal++
 	reason := fmt.Sprintf("phase %s; the hook sees no background agent or shell task. Run long commands in the background", run.Phase)
