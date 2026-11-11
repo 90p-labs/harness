@@ -182,10 +182,9 @@ func writeTargets(c Command) []string {
 	case cmdTee:
 		targets = append(targets, operands...)
 	case cmdSed:
-		if slices.ContainsFunc(c.Args, func(a string) bool {
-			return strings.HasPrefix(a, flagSedInPlace) || strings.HasPrefix(a, flagSedInPlaceLong)
-		}) {
-			targets = append(targets, operands...)
+		if sedInPlace(c) {
+			_, files := sedTargets(c.Args[1:])
+			targets = append(targets, files...)
 		}
 	case cmdPerl:
 		if slices.ContainsFunc(c.Args, perlInPlace.MatchString) {
@@ -197,6 +196,39 @@ func writeTargets(c Command) []string {
 		}
 	}
 	return targets
+}
+
+func sedInPlace(c Command) bool {
+	return len(c.Args) > 0 && c.Args[0] == cmdSed && slices.ContainsFunc(c.Args, func(a string) bool {
+		return strings.HasPrefix(a, flagSedInPlace) || strings.HasPrefix(a, flagSedInPlaceLong)
+	})
+}
+
+// sedTargets splits the arguments of an in-place sed into the script word and
+// the file operands. The BSD form passes an empty suffix word after -i,
+// which is not an operand.
+func sedTargets(args []string) (script string, files []string) {
+	kept := make([]string, 0, len(args))
+	for i, a := range args {
+		if a == "" && i > 0 && args[i-1] == flagSedInPlace {
+			continue
+		}
+		kept = append(kept, a)
+	}
+	operands := nonFlags(kept)
+	if len(operands) == 0 {
+		return "", nil
+	}
+	return operands[0], operands[1:]
+}
+
+// sedScript returns the script word of an in-place sed.
+func sedScript(c Command) (string, bool) {
+	if !sedInPlace(c) {
+		return "", false
+	}
+	script, _ := sedTargets(c.Args[1:])
+	return script, script != ""
 }
 
 func copyTargets(operands []string) []string {
@@ -220,7 +252,9 @@ func isSourcePath(path string, rc RuleContext) bool {
 
 func mainShellWriteSource(call ToolCall, rc RuleContext) bool {
 	for _, c := range invocations(call.Command) {
-		if slices.ContainsFunc(writeTargets(c), func(path string) bool { return isSourcePath(path, rc) }) {
+		script, hasScript := sedScript(c)
+		if hasScript && isSourcePath(script, rc) ||
+			slices.ContainsFunc(writeTargets(c), func(path string) bool { return isSourcePath(path, rc) }) {
 			return true
 		}
 	}
@@ -237,6 +271,12 @@ func denyShellWriteSource(call ToolCall, rc RuleContext) (string, bool) {
 	}
 	var firstUnresolved *string
 	for i, f := range walkFolders(commands) {
+		if script, ok := sedScript(commands[i]); ok {
+			// The script word is checked as a source file but never named as unresolved.
+			if rel, isSource := sourceFile(f.join(script), rc); isSource {
+				return deny(fmt.Sprintf(reasonWriteSource, rel), nextStepEditTool)
+			}
+		}
 		for _, target := range flatWriteTargets(commands[i]) {
 			if unresolvable(target) || !f.known && !filepath.IsAbs(target) {
 				if firstUnresolved == nil {

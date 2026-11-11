@@ -242,6 +242,47 @@ func TestShellWriteReason(t *testing.T) {
 	}
 }
 
+func TestShellWriteSedInPlace(t *testing.T) {
+	denied := []struct {
+		name string
+		line string
+		want []string
+	}{
+		{"empty suffix after a cd", "cd /x; sed -i '' 's/a/b/' docs/readme_test.go", []string{"`docs/readme_test.go`"}},
+		{"empty suffix", "sed -i '' 's/a/b/' docs/readme_test.go", []string{"`docs/readme_test.go`", "Edit or Write"}},
+		{"script word is a source file", "sed -i '' a.go", nil},
+		{"script word after a cd", "cd /x; sed -i '' a.go", nil},
+		{"w command in the script", "sed -i 's/a/b/w a.go' notes.txt", nil},
+	}
+	for _, tc := range denied {
+		t.Run(tc.name, func(t *testing.T) {
+			reason, ok := denyShellWriteSource(bash(tc.line), baseContext())
+			if !ok {
+				t.Fatalf("%q was allowed", tc.line)
+			}
+			if strings.Contains(reason, "``") {
+				t.Fatalf("reason %q names an empty target", reason)
+			}
+			for _, part := range tc.want {
+				if !strings.Contains(reason, part) {
+					t.Fatalf("reason %q lacks %q", reason, part)
+				}
+			}
+		})
+	}
+	allowed := []string{
+		"sed -i '' 's/a/b/' notes.txt",
+		"sed -i '' 's/a/b/' /work/repo/.harness/runs/r1/self-check.md",
+	}
+	for _, line := range allowed {
+		t.Run(line, func(t *testing.T) {
+			if reason, ok := denyShellWriteSource(bash(line), baseContext()); ok {
+				t.Fatalf("%q was denied: %s", line, reason)
+			}
+		})
+	}
+}
+
 func TestShellWriteOptions(t *testing.T) {
 	writesSource := []string{
 		"D=/tmp/gen; cp -t sub $D/a.go",
