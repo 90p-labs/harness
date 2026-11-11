@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# pull-requests: write lets the coverage step post its comment on the pull request.
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   lint-engines:
     runs-on: ubuntu-latest
@@ -27,6 +32,47 @@ jobs:
         with:
           version: v3.16.4
       - name: check
-        run: make check
+        run: |
+          set -o pipefail
+          make check 2>&1 | tee "$RUNNER_TEMP/check.log"
+      # One comment per pull request, found by its marker and updated on each push.
+      # A pull request from a fork gets a read-only token, so the step skips it.
+      - name: coverage comment
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        # The comment is a report: an API error never fails the build.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          marker='<!-- coverage-floor -->'
+          log="$RUNNER_TEMP/check.log"
+          body="$RUNNER_TEMP/coverage-comment.md"
+          line=$(grep -E '^coverage: ' "$log" 2>/dev/null | tail -n 1 || true)
+          if [ -z "$line" ]; then
+            result='not measured: `make check` failed before `make cover` ran'
+          elif grep -q '^coverfloor: coverage .* is below the floor' "$log"; then
+            result="below the floor: ${line#coverage: }"
+          else
+            result="ok: ${line#coverage: }"
+          fi
+          {
+            echo "$marker"
+            echo "### Coverage"
+            echo
+            echo "Total Go statement coverage, $result."
+            echo
+            echo "Commit ${SHA}, floor from \`COVERAGE_FLOOR\` in the Makefile."
+          } > "$body"
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | tail -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$body" > /dev/null
+          else
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+          fi
       - name: engine tests
         run: go test -tags linters ./internal/lint/... -count=1
