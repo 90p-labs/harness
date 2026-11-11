@@ -45,7 +45,7 @@ target="$root/dist/harness-$platform"
 lock="$root/dist/.download.lock"
 failure="$root/dist/.download.failed"
 tmp=
-no_binary_help="install gh and log in (gh auth login), or install Go and run: \"$root/bin/harness\" version"
+no_binary_help="install curl or wget, or install Go and run: \"$root/bin/harness\" version"
 
 read_version() {
 	version=
@@ -60,12 +60,25 @@ read_version() {
 	fi
 }
 
+# The release assets are public, so a plain HTTPS fetch needs no login.
+can_fetch() {
+	command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1
+}
+
+fetch() {
+	if command -v curl >/dev/null 2>&1; then
+		curl -fsSL -o "$2" "$1"
+	else
+		wget -q -O "$2" "$1"
+	fi
+}
+
 download() {
 	read_version || return 1
 	mkdir -p "$root/dist"
 	tmp=$(mktemp -d "$root/dist/.download.XXXXXX") || return 1
 	status=0
-	if gh release download "v$version" -R "$release_repo" -p "harness-$platform" -D "$tmp" --clobber &&
+	if fetch "https://github.com/$release_repo/releases/download/v$version/harness-$platform" "$tmp/harness-$platform" &&
 		[ -s "$tmp/harness-$platform" ] &&
 		chmod +x "$tmp/harness-$platform"; then
 		mv -f "$tmp/harness-$platform" "$target" || status=1
@@ -78,7 +91,7 @@ download() {
 
 # A hook has a short timeout and must not block the session, so it never builds and only downloads in the background.
 if [ "${1:-}" = hook ]; then
-	if command -v gh >/dev/null 2>&1 && mkdir -p "$root/dist"; then
+	if can_fetch && mkdir -p "$root/dist"; then
 		for stale in "$lock" "$failure"; do
 			if [ -n "$(find "$stale" -mmin +"$retry_minutes" 2>/dev/null)" ]; then
 				rm -f "$stale"
@@ -107,7 +120,7 @@ if [ "${1:-}" = hook ]; then
 	skip_hook
 fi
 
-if command -v gh >/dev/null 2>&1 && download >&2; then
+if can_fetch && download >&2; then
 	exec "$target" "$@"
 fi
 

@@ -2,6 +2,7 @@ package bin_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,14 +18,16 @@ import (
 )
 
 const (
-	launcherPath    = "bin/harness"
-	harnessConfig   = ".harness.yaml"
-	skippedHook     = "{}"
-	exitNoCommand   = 127
-	fakeBinary      = "#!/bin/sh\necho \"ran $*\"\n"
-	failingGh       = "#!/bin/sh\necho call >>%q\necho %q >&2\nexit 1\n"
+	launcherPath  = "bin/harness"
+	harnessConfig = ".harness.yaml"
+	skippedHook   = "{}"
+	exitNoCommand = 127
+	fakeBinary    = "#!/bin/sh\necho \"ran $*\"\n"
+	failingFetch  = "#!/bin/sh\necho call >>%q\necho %q >&2\nexit 1\n"
+	// A fetch tool that logs its arguments and writes the binary to the path after -o or -O.
+	workingFetch    = "#!/bin/sh\necho \"$*\" >>%q\nwhile [ $# -gt 0 ]; do case $1 in -o|-O) out=$2; shift ;; esac; shift; done\nprintf '#!/bin/sh\\necho \"downloaded $*\"\\n' >\"$out\"\n"
 	loggingFind     = "#!/bin/sh\n%q \"$@\"\nstatus=$?\necho done >>%q\nexit $status\n"
-	ghError         = "HTTP 404: Not Found"
+	fetchError      = "curl: (22) The requested URL returned error: 404"
 	executableMode  = 0o755
 	privateMode     = 0o600
 	downloadLock    = ".download.lock"
@@ -37,7 +40,7 @@ const (
 
 var (
 	stopHook = []string{"hook", "--host", "claude", "stop"}
-	// The launcher must work with only these tools: no gh and no go.
+	// The launcher must work with only these tools: no curl, no wget and no go.
 	launcherTools = []string{"sh", "git", "uname", "tr", "mkdir", "find", "rm", "mktemp", "chmod", "mv", "readlink", "cat"}
 )
 
@@ -99,6 +102,17 @@ func (l launcher) run(t *testing.T, dir string, args ...string) (code int, stdou
 	return 0, out.String(), errOut.String()
 }
 
+// fakeFetch puts a fetch tool on the launcher PATH and returns the file that logs its calls.
+func (l launcher) fakeFetch(t *testing.T, tool, script string, extra ...any) string {
+	t.Helper()
+	calls := filepath.Join(t.TempDir(), tool+".log")
+	body := fmt.Sprintf(script, append([]any{calls}, extra...)...)
+	if err := os.WriteFile(filepath.Join(l.path, tool), []byte(body), executableMode); err != nil {
+		t.Fatal(err)
+	}
+	return calls
+}
+
 func gitRepo(t *testing.T, configured bool) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -147,7 +161,7 @@ func TestLauncher(t *testing.T) {
 		})
 	}
 
-	t.Run("a hook with no binary and no gh prints an empty JSON object and the fix", func(t *testing.T) {
+	t.Run("a hook with no binary, curl or wget prints an empty JSON object and the fix", func(t *testing.T) {
 		l := newLauncher(t)
 		if err := os.Remove(l.binary); err != nil {
 			t.Fatal(err)
@@ -155,25 +169,21 @@ func TestLauncher(t *testing.T) {
 
 		code, stdout, stderr := l.run(t, gitRepo(t, true), stopHook...)
 
-		if code != 0 || strings.TrimSpace(stdout) != skippedHook || !strings.Contains(stderr, "gh auth login") {
+		if code != 0 || strings.TrimSpace(stdout) != skippedHook || !strings.Contains(stderr, "install curl or wget") {
 			t.Fatalf("code = %d, stdout = %q, stderr = %q, want 0, %s and the fix", code, stdout, stderr, skippedHook)
 		}
 	})
 
-	t.Run("a hook after a failed download prints the gh error and does not start gh again", func(t *testing.T) {
+	t.Run("a hook after a failed download prints the curl error and does not start curl again", func(t *testing.T) {
 		l := newLauncher(t)
 		if err := os.Remove(l.binary); err != nil {
 			t.Fatal(err)
 		}
-		calls := filepath.Join(t.TempDir(), "gh.log")
-		gh := fmt.Sprintf(failingGh, calls, ghError)
-		if err := os.WriteFile(filepath.Join(l.path, "gh"), []byte(gh), executableMode); err != nil {
-			t.Fatal(err)
-		}
+		calls := l.fakeFetch(t, "curl", failingFetch, fetchError)
 		repo := gitRepo(t, true)
 
 		code, stdout, stderr := l.run(t, repo, stopHook...)
-		for deadline := time.Now().Add(downloadWait); !strings.Contains(stderr, ghError) && time.Now().Before(deadline); time.Sleep(pollInterval) {
+		for deadline := time.Now().Add(downloadWait); !strings.Contains(stderr, fetchError) && time.Now().Before(deadline); time.Sleep(pollInterval) {
 			code, stdout, stderr = l.run(t, repo, stopHook...)
 		}
 
@@ -181,21 +191,17 @@ func TestLauncher(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if ghCalls := strings.Count(string(raw), "\n"); code != 0 || strings.TrimSpace(stdout) != skippedHook || !strings.Contains(stderr, ghError) || ghCalls != 1 {
-			t.Fatalf("code = %d, stdout = %q, stderr = %q, gh calls = %d, want 0, %s, the gh error and 1 gh call", code, stdout, stderr, ghCalls, skippedHook)
+		if fetchCalls := strings.Count(string(raw), "\n"); code != 0 || strings.TrimSpace(stdout) != skippedHook || !strings.Contains(stderr, fetchError) || fetchCalls != 1 {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q, curl calls = %d, want 0, %s, the curl error and 1 curl call", code, stdout, stderr, fetchCalls, skippedHook)
 		}
 	})
 
-	t.Run("a hook that gets the lock after a failed download prints the gh error and does not start gh", func(t *testing.T) {
+	t.Run("a hook that gets the lock after a failed download prints the curl error and does not start curl", func(t *testing.T) {
 		l := newLauncher(t)
 		if err := os.Remove(l.binary); err != nil {
 			t.Fatal(err)
 		}
-		calls := filepath.Join(t.TempDir(), "gh.log")
-		gh := fmt.Sprintf(failingGh, calls, ghError)
-		if err := os.WriteFile(filepath.Join(l.path, "gh"), []byte(gh), executableMode); err != nil {
-			t.Fatal(err)
-		}
+		calls := l.fakeFetch(t, "curl", failingFetch, fetchError)
 		dist := filepath.Dir(l.binary)
 		lock, failure := filepath.Join(dist, downloadLock), filepath.Join(dist, downloadFailure)
 		// The noclobber redirect opens a FIFO and blocks there until a reader opens it.
@@ -241,7 +247,7 @@ func TestLauncher(t *testing.T) {
 
 		// The wait lets an early failure check pass before the failure file exists; the fixed hook passes in any order.
 		time.Sleep(hookReachesLock)
-		if err := os.WriteFile(failure, []byte(ghError), privateMode); err != nil {
+		if err := os.WriteFile(failure, []byte(fetchError), privateMode); err != nil {
 			t.Fatal(err)
 		}
 		reader, err := os.OpenFile(lock, os.O_RDONLY|syscall.O_NONBLOCK, 0)
@@ -253,10 +259,10 @@ func TestLauncher(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, ghErr := os.Stat(calls)
+		_, fetchErr := os.Stat(calls)
 		_, lockErr := os.Lstat(lock)
-		if got.code != 0 || strings.TrimSpace(got.stdout) != skippedHook || !strings.Contains(got.stderr, ghError) || !errors.Is(ghErr, os.ErrNotExist) || !errors.Is(lockErr, os.ErrNotExist) {
-			t.Fatalf("code = %d, stdout = %q, stderr = %q, gh log error = %v, lock error = %v, want 0, %s, the gh error, no gh call and no lock", got.code, got.stdout, got.stderr, ghErr, lockErr, skippedHook)
+		if got.code != 0 || strings.TrimSpace(got.stdout) != skippedHook || !strings.Contains(got.stderr, fetchError) || !errors.Is(fetchErr, os.ErrNotExist) || !errors.Is(lockErr, os.ErrNotExist) {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q, curl log error = %v, lock error = %v, want 0, %s, the curl error, no curl call and no lock", got.code, got.stdout, got.stderr, fetchErr, lockErr, skippedHook)
 		}
 	})
 
@@ -270,7 +276,7 @@ func TestLauncher(t *testing.T) {
 		}
 	})
 
-	t.Run("a command with no binary, gh or go exits 127 with the fix", func(t *testing.T) {
+	t.Run("a command with no binary, curl, wget or go exits 127 with the fix", func(t *testing.T) {
 		l := newLauncher(t)
 		if err := os.Remove(l.binary); err != nil {
 			t.Fatal(err)
@@ -278,8 +284,44 @@ func TestLauncher(t *testing.T) {
 
 		code, _, stderr := l.run(t, t.TempDir(), "version")
 
-		if code != exitNoCommand || !strings.Contains(stderr, "gh auth login") {
+		if code != exitNoCommand || !strings.Contains(stderr, "install curl or wget") {
 			t.Fatalf("code = %d, stderr = %q, want %d and the fix", code, stderr, exitNoCommand)
 		}
 	})
+
+	for _, tool := range []string{"curl", "wget"} {
+		t.Run("a command with no binary downloads the release of the plugin version with "+tool, func(t *testing.T) {
+			l := newLauncher(t)
+			if err := os.Remove(l.binary); err != nil {
+				t.Fatal(err)
+			}
+			calls := l.fakeFetch(t, tool, workingFetch)
+
+			code, stdout, stderr := l.run(t, t.TempDir(), "version")
+
+			raw, err := os.ReadFile(calls)
+			if err != nil {
+				t.Fatal(err)
+			}
+			url := "https://github.com/90p-labs/harness/releases/download/v" + pluginVersion(t) + "/harness-" + runtime.GOOS + "-" + runtime.GOARCH
+			if code != 0 || stdout != "downloaded version\n" || !strings.Contains(string(raw), url) {
+				t.Fatalf("code = %d, stdout = %q, stderr = %q, %s args = %q, want 0, the downloaded binary output and %s", code, stdout, stderr, tool, raw, url)
+			}
+		})
+	}
+}
+
+func pluginVersion(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile(repository.Path(t, claudeManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil || manifest.Version == "" {
+		t.Fatalf("version of %s: %v", claudeManifest, err)
+	}
+	return manifest.Version
 }

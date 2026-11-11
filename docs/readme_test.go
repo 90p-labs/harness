@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	installPaths   = []string{"Claude Code", "Codex", "Build from source"}
+	installPaths   = []string{"Claude Code", "Codex", "The harness command"}
 	planViewImages = []string{"plan-view-summary.png", "plan-view-specs.png", "plan-view-tasks.png"}
 )
 

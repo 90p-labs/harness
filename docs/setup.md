@@ -6,13 +6,23 @@ This page holds the binary details, the lint tools and the full setup of a repos
 
 The plugin starts the binary through `bin/harness`, which runs `dist/harness-OS-ARCH` of the plugin folder. When that binary is missing:
 
-- A command downloads the binary of release `v<plugin version>` with `gh`. Without `gh`, or when the download fails, it builds the binary with Go. Without both, it exits 127 and names the fix.
-- A hook never builds, because it must not block the session. It starts the `gh` download in the background and skips itself. A skipped hook prints `{}`, so the guard is off until the binary is there. When the download fails, the next hooks print its error, and a hook tries again after 10 minutes.
-- On a machine with Go and no `gh`, start `/90p:harness status` once (Codex: `$90p:harness status`). The skill runs `bin/harness version`, which builds the binary.
+- A command downloads the binary of release `v<plugin version>` with `curl`, or `wget` when `curl` is missing. The release is public, so the download needs no login. Without both tools, or when the download fails, it builds the binary with Go. Without Go too, it exits 127 and names the fix.
+- A hook never builds, because it must not block the session. It starts the download in the background and skips itself. A skipped hook prints `{}`, so the guard is off until the binary is there. When the download fails, the next hooks print its error, and a hook tries again after 10 minutes.
+- On a machine with Go and no `curl` or `wget`, start `/90p:harness status` once (Codex: `$90p:harness status`). The skill runs `bin/harness version`, which builds the binary.
 
 The release workflow sets the plugin version and the tag `v<plugin version>` together on each releasing push to `main`. So the download name matches the plugin version. The release assets appear a few minutes after the push. A download in that gap fails, and a hook tries again after 10 minutes.
 
-The plugin puts no `harness` command on the `PATH`. The setup commands below and a gate such as `harness lint --json` need one: build it from source, or download the asset `harness-OS-ARCH` of release `v<plugin version>` (`gh release download v<plugin version> -R 90p-labs/harness -p harness-OS-ARCH`), make it executable and put it on the `PATH` as `harness`.
+The plugin puts no `harness` command on the `PATH`. The setup commands below and a gate such as `harness lint --json` need one. Build it from source, or download the asset `harness-OS-ARCH` of a release into a folder on the `PATH`. OS is `darwin` or `linux`, and ARCH is `arm64` or `amd64`:
+
+```sh
+# the latest release
+curl -fsSL -o ~/.local/bin/harness https://github.com/90p-labs/harness/releases/latest/download/harness-darwin-arm64
+# a given release
+curl -fsSL -o ~/.local/bin/harness https://github.com/90p-labs/harness/releases/download/v0.5.0/harness-darwin-arm64
+# with wget
+wget -qO ~/.local/bin/harness https://github.com/90p-labs/harness/releases/latest/download/harness-darwin-arm64
+chmod +x ~/.local/bin/harness
+```
 
 ## Move from the old plugin name
 

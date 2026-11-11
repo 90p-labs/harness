@@ -1351,8 +1351,8 @@ The launcher `bin/harness` rules:
 
 - A hook acts only in a git repository with `.harness.yaml` at its top level, from `git rev-parse --show-toplevel` in the working folder. Elsewhere it prints `{}` and exits 0. A repository-local `host install` opts in by its hooks, so the binary still fails closed outside git.
 - It runs `dist/harness-OS-ARCH` of the plugin folder when it exists.
-- A command with no binary downloads the asset `harness-OS-ARCH` of release `v<version>` (from `.claude-plugin/plugin.json`) with `gh`. Then it builds with Go. With neither, it exits 127 with the fix.
-- A hook with no binary never builds. It starts the `gh` download in the background under a lock (a lock older than 10 minutes is stale), prints `{}` and names the cause on stderr. A failed download leaves its error in `dist/.download.failed`. Each hook then prints that error with no new download, until the file is older than 10 minutes. A hook reads that file only while it holds the lock, and releases the lock before it skips. So a download that fails while a hook starts never gives a second download.
+- A command with no binary downloads the asset `harness-OS-ARCH` of release `v<version>` (from `.claude-plugin/plugin.json`). It uses `curl`, or `wget` when `curl` is missing. The asset is public, so it needs no login. Then it builds with Go. With none of them, it exits 127 with the fix.
+- A hook with no binary never builds. It starts the download in the background under a lock that goes stale after 10 minutes, prints `{}` and names the cause on stderr. A failed download leaves its error in `dist/.download.failed`. Each hook then prints that error with no new download, until the file is older than 10 minutes. A hook reads that file only while it holds the lock, and releases the lock before it skips. So a download that fails while a hook starts never gives a second download.
 
 A release is a `vX.Y.Z` tag. The release bot sets the version of both plugin manifests, not a person.
 
