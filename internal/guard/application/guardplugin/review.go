@@ -130,7 +130,7 @@ func (p reviewShip) Handle(ctx context.Context, envelope shareddomain.Envelope) 
 	if len(list) > 0 {
 		listed = map[shareddomain.Host][]string{host: listed[host]}
 	}
-	reason, denied := domain.DenyReviewModels(counted, unread, listed)
+	reason, denied := domain.DenyReviewModels(counted, unread, listed, domain.ReviewFloor(false))
 	if !denied {
 		return shareddomain.Verdict{Kind: shareddomain.VerdictAllow}, nil
 	}
