@@ -2,7 +2,7 @@
 
 The harness is an open source Go tool and a plugin for Claude Code and Codex. It drives an AI coding agent through a fixed loop: plan, approve, work, review, ship and watch production.
 
-Status: pre-alpha. The repository is private, so log in to GitHub first: run `gh auth login`, then `gh auth setup-git`.
+Status: pre-alpha. The plugin downloads its binary with `gh`, so run `gh auth login` first, or install Go to build it.
 
 ## Install
 
