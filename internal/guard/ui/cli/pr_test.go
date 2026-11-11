@@ -19,7 +19,7 @@ func TestPRCheck(t *testing.T) {
 
 	run := func(args ...string) (string, error) {
 		var out bytes.Buffer
-		cmd := NewPRCommand(fakeSource{})
+		cmd := NewPRCommand(fakeSource{}, fakePolicy{})
 		cmd.SilenceUsage = true
 		cmd.SetArgs(args)
 		cmd.SetOut(&out)
@@ -77,6 +77,49 @@ func (f fakeSource) Commits(_ context.Context, base string) ([]string, error) {
 	return f.commits, nil
 }
 
+type fakePolicy struct {
+	disabled []string
+	err      error
+}
+
+func (f fakePolicy) GuardDisabled(context.Context) ([]string, error) { return f.disabled, f.err }
+
+func TestPRPolicyCommand(t *testing.T) {
+	cases := []struct {
+		name     string
+		policy   fakePolicy
+		args     []string
+		want     string
+		wantFail bool
+	}{
+		{name: "defaults", policy: fakePolicy{}, want: "draft: required\nmerge: user\n"},
+		{name: "draft off", policy: fakePolicy{disabled: []string{domain.RulePRDraftOnly}}, want: "draft: optional\nmerge: user\n"},
+		{name: "merge off", policy: fakePolicy{disabled: []string{domain.RulePRNoMerge}}, want: "draft: required\nmerge: agent\n"},
+		{name: "both off", policy: fakePolicy{disabled: []string{domain.RulePRDraftOnly, domain.RulePRNoMerge}}, want: "draft: optional\nmerge: agent\n"},
+		{name: "source error", policy: fakePolicy{err: errors.New("config broken")}, wantFail: true},
+		{name: "unknown id", policy: fakePolicy{disabled: []string{"bogus"}}, wantFail: true},
+		{name: "extra arg", policy: fakePolicy{}, args: []string{"extra"}, wantFail: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			cmd := NewPRCommand(fakeSource{}, tc.policy)
+			cmd.SilenceUsage = true
+			cmd.SetArgs(append([]string{"policy"}, tc.args...))
+			cmd.SetOut(&out)
+			cmd.SetErr(io.Discard)
+			err := cmd.Execute()
+
+			if (err != nil) != tc.wantFail {
+				t.Fatalf("err = %v, want failure = %v", err, tc.wantFail)
+			}
+			if out.String() != tc.want {
+				t.Fatalf("out = %q, want %q", out.String(), tc.want)
+			}
+		})
+	}
+}
+
 func TestPRBodyBaseFlag(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -88,7 +131,7 @@ func TestPRBodyBaseFlag(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := "unset"
-			cmd := NewPRCommand(fakeSource{base: &got})
+			cmd := NewPRCommand(fakeSource{base: &got}, fakePolicy{})
 			cmd.SetArgs(tc.args)
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
@@ -106,7 +149,7 @@ func TestPRBodyPrintsSkeleton(t *testing.T) {
 	plan := "# Plan\n\n## Tech specs\n\n### Flow\n\n```mermaid\nsequenceDiagram\n  a->>b: call\n```\n\nText.\n\n```go\nnot a diagram\n```\n"
 	src := fakeSource{plan: plan, commits: []string{"feat(pr): print the PR body skeleton", "docs(skill): fill the body"}}
 	var out bytes.Buffer
-	cmd := NewPRCommand(src)
+	cmd := NewPRCommand(src, fakePolicy{})
 	cmd.SetArgs([]string{commandBody})
 	cmd.SetOut(&out)
 	cmd.SetErr(io.Discard)
@@ -133,7 +176,7 @@ func TestPRBodyPrintsSkeleton(t *testing.T) {
 
 	t.Run("no diagram", func(t *testing.T) {
 		var out bytes.Buffer
-		cmd := NewPRCommand(fakeSource{commits: []string{"fix: x"}})
+		cmd := NewPRCommand(fakeSource{commits: []string{"fix: x"}}, fakePolicy{})
 		cmd.SetArgs([]string{commandBody})
 		cmd.SetOut(&out)
 		cmd.SetErr(io.Discard)

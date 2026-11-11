@@ -37,7 +37,8 @@ const (
 
 var errNoCommand = errors.New("no command given")
 
-// prBodySource reads the plan of the active run and the branch commits for `harness pr body`. It writes no state.
+// prBodySource reads the plan of the active run and the branch commits for `harness pr body`. It also reads
+// `guard.disabled` for `harness pr policy`. It writes no state.
 type prBodySource struct{ flags *pflag.FlagSet }
 
 func (s prBodySource) Plan(ctx context.Context) (string, error) {
@@ -55,6 +56,19 @@ func (s prBodySource) Plan(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	return string(content), err
+}
+
+// GuardDisabled returns guard.disabled from the config of the working folder, for `harness pr policy`.
+func (s prBodySource) GuardDisabled(ctx context.Context) ([]string, error) {
+	worktree, err := topLevel(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load(s.flags, worktree)
+	if err != nil {
+		return nil, err
+	}
+	return cfg.Guard.Disabled, nil
 }
 
 func topLevel(ctx context.Context) (string, error) {
@@ -223,7 +237,8 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newInitCommand(root.PersistentFlags(), version))
 	root.AddCommand(newReportCommand(root.PersistentFlags()))
 	root.AddCommand(guardcli.NewReviewCommand(reviewPanelSource(root.PersistentFlags())))
-	root.AddCommand(guardcli.NewPRCommand(prBodySource{flags: root.PersistentFlags()}))
+	prSource := prBodySource{flags: root.PersistentFlags()}
+	root.AddCommand(guardcli.NewPRCommand(prSource, prSource))
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,
 		Short: "Print the build version",

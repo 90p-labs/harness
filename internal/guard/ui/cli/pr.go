@@ -21,6 +21,7 @@ const (
 	bodyOK         = "ok"
 
 	commandBody           = "body"
+	commandPolicy         = "policy"
 	bottomLinePlaceholder = "<bottom line: what the PR changes and what the reviewer must check>"
 	whyPlaceholder        = "<why: the problem and the reason for the change>"
 	noDiagramLine         = "The change adds no diagram."
@@ -36,9 +37,16 @@ type BodySource interface {
 	Commits(ctx context.Context, base string) ([]string, error)
 }
 
+// PolicySource reads the guard rules that the config turns off.
+type PolicySource interface {
+	// GuardDisabled returns the ids of guard.disabled from the effective config.
+	GuardDisabled(ctx context.Context) ([]string, error)
+}
+
 var errBodyProblems = errors.New("the pull request body has problems")
 
-func NewPRCommand(source BodySource) *cobra.Command {
+// NewPRCommand returns the `pr` command with its check, body and policy subcommands.
+func NewPRCommand(source BodySource, policy PolicySource) *cobra.Command {
 	pr := &cobra.Command{Use: commandPR, Short: "Check a pull request before it opens"}
 	check := &cobra.Command{
 		Use:   commandCheck,
@@ -89,7 +97,24 @@ func NewPRCommand(source BodySource) *cobra.Command {
 		},
 	}
 	body.Flags().String(flagBase, "", "the base branch of the pull request; default: the default branch")
-	pr.AddCommand(check, body)
+	policyCmd := &cobra.Command{
+		Use:   commandPolicy,
+		Short: "Print the pull request policy of the guard: draft required or optional, merge by the user or the agent",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			disabled, err := policy.GuardDisabled(cmd.Context())
+			if err != nil {
+				return err
+			}
+			p, err := domain.PRPolicyOf(disabled)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "draft: %s\nmerge: %s\n", p.Draft, p.Merge)
+			return err
+		},
+	}
+	pr.AddCommand(check, body, policyCmd)
 	return pr
 }
 

@@ -321,6 +321,87 @@ func TestConfigCommand(t *testing.T) {
 	}
 }
 
+func TestPRPolicyRoot(t *testing.T) {
+	writeConfig := func(t *testing.T, dir, disabled string) string {
+		t.Helper()
+		file := filepath.Join(dir, ".harness.yaml")
+		if err := os.WriteFile(file, []byte("guard:\n  disabled: "+disabled+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return file
+	}
+
+	t.Run("config flag", func(t *testing.T) {
+		clearHarnessEnv(t)
+		initRepo(t)
+		file := writeConfig(t, t.TempDir(), "[pr-draft-only, pr-no-merge]")
+
+		code, stdout, stderr := execute(t, "pr", "policy", "--config", file)
+
+		if code != exitOK || stdout != "draft: optional\nmerge: agent\n" {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+	})
+	t.Run("harness yaml at the top level", func(t *testing.T) {
+		clearHarnessEnv(t)
+		dir := initRepo(t)
+		writeConfig(t, dir, "[pr-no-merge]")
+		sub := filepath.Join(dir, "sub")
+		if err := os.Mkdir(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Chdir(sub)
+
+		code, stdout, stderr := execute(t, "pr", "policy")
+
+		if code != exitOK || stdout != "draft: required\nmerge: agent\n" {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+	})
+	t.Run("environment", func(t *testing.T) {
+		clearHarnessEnv(t)
+		initRepo(t)
+		t.Setenv("HARNESS_GUARD_DISABLED", "pr-draft-only")
+
+		code, stdout, stderr := execute(t, "pr", "policy")
+
+		if code != exitOK || stdout != "draft: optional\nmerge: user\n" {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+	})
+	t.Run("defaults", func(t *testing.T) {
+		clearHarnessEnv(t)
+		initRepo(t)
+
+		code, stdout, stderr := execute(t, "pr", "policy")
+
+		if code != exitOK || stdout != "draft: required\nmerge: user\n" {
+			t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+	})
+	for _, id := range []string{"bogus", "PR-NO-MERGE"} {
+		t.Run("unknown "+id, func(t *testing.T) {
+			clearHarnessEnv(t)
+			dir := initRepo(t)
+			writeConfig(t, dir, "["+id+"]")
+
+			code, stdout, stderr := execute(t, "pr", "policy")
+
+			if code != exitRuntime || stdout != "" || !strings.Contains(stderr, id) {
+				t.Fatalf("code = %d, stdout = %q, stderr = %q, want %d, no stdout and the id", code, stdout, stderr, exitRuntime)
+			}
+		})
+	}
+	t.Run("positional arg", func(t *testing.T) {
+		clearHarnessEnv(t)
+		initRepo(t)
+
+		if code, stdout, _ := execute(t, "pr", "policy", "extra"); code != exitUsage || stdout != "" {
+			t.Fatalf("code = %d, stdout = %q, want %d and no stdout", code, stdout, exitUsage)
+		}
+	})
+}
+
 func TestConfigFlagMissingFile(t *testing.T) {
 	clearHarnessEnv(t)
 	missing := filepath.Join(t.TempDir(), "missing.yaml")
