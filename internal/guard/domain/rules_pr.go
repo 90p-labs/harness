@@ -32,6 +32,7 @@ const (
 	reasonBodyFileRead = "cannot read the body file: "
 	nextStepBottomLine = "start the body with the bottom line: one or two sentences above %s"
 	nextStepWords      = "split the line into lines of 40 words or fewer"
+	nextStepEmDash     = "rewrite the line with commas, colons or sentences"
 )
 
 var (
@@ -110,6 +111,9 @@ func BodyProblems(body string) []string {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		words := strings.Fields(line)
+		if strings.ContainsRune(line, emDashRune) {
+			problems = append(problems, problem(fmt.Sprintf("line %d has an em dash", i+1), nextStepEmDash))
+		}
 		switch {
 		case strings.HasPrefix(trimmed, fenceMarker) && !inFence:
 			inFence = true
