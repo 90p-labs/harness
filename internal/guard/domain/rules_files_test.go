@@ -187,6 +187,10 @@ func TestShellNeverPanics(t *testing.T) {
 		"\"$(<<E\"x",
 		"\" $(<<-{]E\"é",
 		"S=/tmp; echo ${S}x \"${S:-a}\" $(true) `true` <(true) > a.go",
+		"sed -i '' x ${A.go",
+		"sed -i '' x $(a.go",
+		"sed -i '' x `a.go",
+		"tee ~",
 	}
 	for _, template := range templates {
 		runes := []rune(template)
@@ -220,10 +224,16 @@ func TestShellWriteReason(t *testing.T) {
 		{"file after a cd", "cd /work/repo/web && cat > a.ts", []string{"source file `web/a.ts`."}},
 		{"unknown variable", "cat > $S/a.go", []string{"cannot resolve the target `$S/a.go`.", "use a literal absolute path"}},
 		{"tilde", "cat > ~/a.go", []string{"cannot resolve the target `~/a.go`.", "use a literal absolute path"}},
-		{"not flat with a literal path", "for f in a; do cat > /work/repo/a.go; done", []string{"the command is not a flat line.", "use a literal absolute path"}},
-		{"not flat with a relative target", "for f in a; do cat > a.go; done", []string{"the command is not a flat line.", "use a literal absolute path"}},
-		{"heredoc body line ends in a backslash", "D=/work/repo\ncat > /tmp/notes.txt <<EOF\ngo test \\\nEOF\nD=/tmp/scratch\ncat > /tmp/other.txt <<EOF\nx\nEOF\necho hi > $D/a.go", []string{"the command is not a flat line."}},
-		{"carriage return", "cd /missing &&\r\necho x > a.go", []string{"the command is not a flat line."}},
+		{"not flat with a literal path", "for f in a; do cat > /work/repo/a.go; done", []string{"the command is not a flat line, and it writes `/work/repo/a.go`.", "Edit or Write"}},
+		{"not flat with a relative target", "for f in a; do cat > a.go; done", []string{"the command is not a flat line, and it writes `a.go`.", "Edit or Write"}},
+		{"not flat with one part", "for f in a; do cat > $S/a.go; done", []string{"and the target `$S/a.go` holds `$S`.", "use a literal absolute path"}},
+		{"not flat with two parts", "for f in a; do cat > $S/${T}/a.go; done", []string{"holds `$S` and `${T}`.", "use a literal absolute path"}},
+		{"not flat with three parts", "for f in a; do cat > ~/$S/${T}.go; done", []string{"holds `~`, `$S` and `${T}`."}},
+		{"not flat with a positional part", "for f in a; do cat > a/$1.go; done", []string{"holds `$1`.", "use a literal absolute path"}},
+		{"not flat with an unclosed part", "for f in a; do cat > ${S/a.go; done", []string{"the target `${S/a.go` holds `${S/a.go`.", "use a literal absolute path"}},
+		{"issue 93 payload 2", "R=.harness/runs/r1 && H=$(git rev-parse HEAD) && /usr/bin/sed -i '' \"s/^Head: .*/Head: $H/\" /work/repo/$R/self-check.md", []string{"`$R`", "use a literal absolute path"}},
+		{"heredoc body line ends in a backslash", "D=/work/repo\ncat > /tmp/notes.txt <<EOF\ngo test \\\nEOF\nD=/tmp/scratch\ncat > /tmp/other.txt <<EOF\nx\nEOF\necho hi > $D/a.go", []string{"the command is not a flat line, and the target `$D/a.go` holds `$D`."}},
+		{"carriage return", "cd /missing &&\r\necho x > a.go", []string{"the command is not a flat line, and it writes `a.go`."}},
 		{"resolved source after an unresolved target", "cat > $X/notes.txt; cat > a.go", []string{"source file `a.go`.", "Edit or Write"}},
 		{"unknown folder", "cd -- /tmp; cat > a.go", []string{"cannot resolve the target `a.go`.", "use a literal absolute path"}},
 	}
@@ -240,6 +250,130 @@ func TestShellWriteReason(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestShellWriteSedInPlace(t *testing.T) {
+	denied := []struct {
+		name string
+		line string
+		want []string
+	}{
+		{"empty suffix after a cd", "cd /x; sed -i '' 's/a/b/' docs/readme_test.go", []string{"`docs/readme_test.go`"}},
+		{"empty suffix", "sed -i '' 's/a/b/' docs/readme_test.go", []string{"`docs/readme_test.go`", "Edit or Write"}},
+		{"script word is a source file", "sed -i '' a.go", nil},
+		{"script word after a cd", "cd /x; sed -i '' a.go", nil},
+		{"w command in the script", "sed -i 's/a/b/w a.go' notes.txt", nil},
+	}
+	for _, tc := range denied {
+		t.Run(tc.name, func(t *testing.T) {
+			reason, ok := denyShellWriteSource(bash(tc.line), baseContext())
+			if !ok {
+				t.Fatalf("%q was allowed", tc.line)
+			}
+			if strings.Contains(reason, "``") {
+				t.Fatalf("reason %q names an empty target", reason)
+			}
+			for _, part := range tc.want {
+				if !strings.Contains(reason, part) {
+					t.Fatalf("reason %q lacks %q", reason, part)
+				}
+			}
+		})
+	}
+	allowed := []string{
+		"sed -i '' 's/a/b/' notes.txt",
+		"sed -i '' 's/a/b/' /work/repo/.harness/runs/r1/self-check.md",
+	}
+	for _, line := range allowed {
+		t.Run(line, func(t *testing.T) {
+			if reason, ok := denyShellWriteSource(bash(line), baseContext()); ok {
+				t.Fatalf("%q was denied: %s", line, reason)
+			}
+		})
+	}
+}
+
+func TestUnresolvedParts(t *testing.T) {
+	cases := []struct {
+		target string
+		want   []string
+	}{
+		{"$A/b/${C}/$(d e)/`f`.go", []string{"$A", "${C}", "$(d e)", "`f`"}},
+		{"~/x.go", []string{"~"}},
+		{"~user/x.go", []string{"~user"}},
+		{"a/$(b $(c))/d.go", []string{"$(b $(c))"}},
+		{"${A/x.go", []string{"${A/x.go"}},
+		{"$(x", []string{"$(x"}},
+		{"a/`b.go", []string{"a/`b.go"}},
+		{"a/$1/$?/$@.go", []string{"$1", "$?", "$@"}},
+		{"a/$/b.go", nil},
+		{"/work/repo/a.go", nil},
+		{"a/~/b.go", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.target, func(t *testing.T) {
+			if got := unresolvedParts(tc.target); !slices.Equal(got, tc.want) {
+				t.Fatalf("unresolvedParts(%q) = %q, want %q", tc.target, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestShellWriteStateDir(t *testing.T) {
+	allowed := []string{
+		"sed -i '' x .harness/runs/$RUN/self-check.md",
+		"tee .kodify/$X/a.go",
+		"H=$(date) && sed -i '' \"s/x/$H/\" .harness/runs/r1/self-check.md",
+		"H=$(date) && tee .kodify/$X/a.go",
+		"sed -i '' x /work/repo/.harness/runs/$RUN/self-check.md",
+		"tee /work/repo/.kodify/$X/a.go",
+		"H=$(date) && sed -i '' \"s/x/$H/\" /work/repo/.harness/runs/r1/self-check.md",
+	}
+	for _, line := range allowed {
+		t.Run(line, func(t *testing.T) {
+			if reason, ok := denyShellWriteSource(bash(line), baseContext()); ok {
+				t.Fatalf("%q was denied: %s", line, reason)
+			}
+		})
+	}
+	for _, line := range []string{"sed -i '' x .harness/../a.go", "H=$(date) && sed -i '' x .harness/../a.go"} {
+		t.Run(line, func(t *testing.T) {
+			if _, ok := denyShellWriteSource(bash(line), baseContext()); !ok {
+				t.Fatalf("%q was allowed", line)
+			}
+		})
+	}
+}
+
+func TestIssue93Payloads(t *testing.T) {
+	denied := []struct {
+		name string
+		line string
+		want string
+	}{
+		{"payload 1", "cd /tmp/repro; sed -i '' 's/a/b/' docs/readme_test.go && go test ./docs/; git checkout docs/readme_test.go", "`docs/readme_test.go`"},
+		{"payload 2", "R=.harness/runs/r1 && H=$(git rev-parse HEAD) && /usr/bin/sed -i '' \"s/^Head: .*/Head: $H/\" /work/repo/$R/self-check.md", "`$R`"},
+	}
+	for _, tc := range denied {
+		t.Run(tc.name, func(t *testing.T) {
+			reason, ok := denyShellWriteSource(bash(tc.line), baseContext())
+			if !ok {
+				t.Fatalf("%q was allowed", tc.line)
+			}
+			if !strings.Contains(reason, tc.want) {
+				t.Fatalf("reason %q lacks %q", reason, tc.want)
+			}
+			if strings.Contains(reason, "$(git") {
+				t.Fatalf("reason %q names the substitution", reason)
+			}
+		})
+	}
+	t.Run("payload 3", func(t *testing.T) {
+		line := "/usr/bin/sed -i '' 's/^Head: .*/Head: y/' /work/repo/.harness/runs/r1/self-check.md"
+		if reason, ok := denyShellWriteSource(bash(line), baseContext()); ok {
+			t.Fatalf("%q was denied: %s", line, reason)
+		}
+	})
 }
 
 func TestShellWriteOptions(t *testing.T) {
