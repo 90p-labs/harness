@@ -2,6 +2,7 @@ package docs_test
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/90p-labs/harness/internal/testsupport/repository"
@@ -20,6 +21,8 @@ const (
 	verifySymfonyDoc   = "examples/symfony/README.md"
 	oldPassGatePattern = `(?m)^\s*(PASS|CACHED) [a-z0-9-]+ [0-9.]+(ms|s|m)`
 	oldCommitPattern   = `(?m)^\s*(PASS|FAIL) [0-9a-f]{12} [a-z]+$`
+	basePattern        = `^\s*base \S+ [0-9a-f]{12}$`
+	passCommitsPrefix  = "PASS commits="
 )
 
 var (
@@ -29,7 +32,28 @@ var (
 	}
 	oldPassGateLine = regexp.MustCompile(oldPassGatePattern)
 	oldCommitLine   = regexp.MustCompile(oldCommitPattern)
+	baseLine        = regexp.MustCompile(basePattern)
 )
+
+func TestDocsShowTheVerifyCommitsBase(t *testing.T) {
+	for _, doc := range verifyDocs {
+		lines := strings.Split(repository.Read(t, doc), "\n")
+		for i, line := range lines {
+			if !strings.HasPrefix(strings.TrimSpace(line), passCommitsPrefix) {
+				continue
+			}
+			if i == 0 || !baseLine.MatchString(lines[i-1]) {
+				t.Errorf("%s line %d: %q has no base line before it", doc, i+1, line)
+			}
+		}
+	}
+	design := repository.Read(t, verifyDesign)
+	for _, want := range []string{"origin/<base>", "so a stale local branch lists no other pull request commits"} {
+		if !strings.Contains(design, want) {
+			t.Errorf("%s does not name %q", verifyDesign, want)
+		}
+	}
+}
 
 func TestDocsShowShortVerifyOutput(t *testing.T) {
 	for _, doc := range verifyDocs {

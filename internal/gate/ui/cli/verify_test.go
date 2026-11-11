@@ -21,6 +21,8 @@ const (
 	failedTail  = "FAIL: TestLogin\nexit status 1"
 )
 
+var stubBase = domain.Base{Ref: "origin/main", SHA: "0a83514a6119abcdef0123456789abcdef012345"}
+
 func connectWith(handlers cli.Handlers, closed *bool) cli.Connect {
 	return func(context.Context) (cli.Handlers, func() error, error) {
 		return handlers, func() error { *closed = true; return nil }, nil
@@ -224,7 +226,7 @@ func TestVerifyCommitsShortOutput(t *testing.T) {
 		var closed bool
 		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
 			VerifyCommits: func(context.Context, string) (verifycommits.Result, error) {
-				return verifycommits.Result{Commits: []domain.CommitResult{
+				return verifycommits.Result{Base: stubBase, Commits: []domain.CommitResult{
 					{SHA: "0123456789abcdef", Type: "test", Passed: false},
 					{SHA: "fedcba9876543210", Type: "feat", Passed: true},
 				}}, nil
@@ -233,7 +235,7 @@ func TestVerifyCommitsShortOutput(t *testing.T) {
 
 		stdout, err := run(t, cmd, "--commits", commitsBase)
 
-		if err != nil || stdout != "PASS commits=2\n" {
+		if err != nil || stdout != "base origin/main 0a83514a6119\nPASS commits=2\n" {
 			t.Fatalf("err = %v, stdout = %q", err, stdout)
 		}
 	})
@@ -242,7 +244,7 @@ func TestVerifyCommitsShortOutput(t *testing.T) {
 		var closed bool
 		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
 			VerifyCommits: func(context.Context, string) (verifycommits.Result, error) {
-				return verifycommits.Result{Commits: []domain.CommitResult{
+				return verifycommits.Result{Base: stubBase, Commits: []domain.CommitResult{
 					{SHA: "0123456789abcdef", Type: "feat", Passed: false},
 					{SHA: "fedcba9876543210", Type: "fix", Passed: true},
 				}}, domain.ErrCommitRule
@@ -251,8 +253,37 @@ func TestVerifyCommitsShortOutput(t *testing.T) {
 
 		stdout, err := run(t, cmd, "--commits", commitsBase)
 
-		if !errors.Is(err, domain.ErrCommitRule) || stdout != "FAIL 0123456789ab feat\nPASS fedcba987654 fix\n" {
+		want := "base origin/main 0a83514a6119\nFAIL 0123456789ab feat\nPASS fedcba987654 fix\n"
+		if !errors.Is(err, domain.ErrCommitRule) || stdout != want {
 			t.Fatalf("err = %v, stdout = %q", err, stdout)
+		}
+	})
+
+	t.Run("a rule error prints the failed gates and their tails", func(t *testing.T) {
+		var closed bool
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+			VerifyCommits: func(context.Context, string) (verifycommits.Result, error) {
+				return verifycommits.Result{Base: stubBase, Commits: []domain.CommitResult{
+					{SHA: "006bdb343baf1234", Type: "feat", Passed: false, Failed: []domain.GateFailure{
+						{Gate: "test", Status: domain.StatusFail, Duration: 12*time.Millisecond + 400*time.Microsecond, Tail: failedTail},
+						{Gate: "lint", Status: domain.StatusVetoed, Duration: 3 * time.Millisecond, Tail: "vetoed"},
+					}},
+					{SHA: "e2026fc109971234", Type: "fix", Passed: true},
+				}}, domain.ErrCommitRule
+			},
+		}, &closed))
+
+		stdout, err := run(t, cmd, "--commits", commitsBase)
+
+		want := "base origin/main 0a83514a6119\n" +
+			"FAIL 006bdb343baf feat\n" +
+			"  FAIL test 12ms\n" +
+			"  VETOED lint 3ms\n" +
+			"PASS e2026fc10997 fix\n" +
+			"\n006bdb343baf test:\n" + failedTail + "\n" +
+			"\n006bdb343baf lint:\nvetoed\n"
+		if !errors.Is(err, domain.ErrCommitRule) || stdout != want {
+			t.Fatalf("err = %v, stdout = %q, want %q", err, stdout, want)
 		}
 	})
 }

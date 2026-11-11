@@ -175,6 +175,7 @@ The next run prints no setup line. The step runs only when the hash of its `path
 ```text
 $ git add -A && git commit -q -m "chore: add go-cmp"
 $ harness verify --commits HEAD~1
+base HEAD~1 0a83514a6119
 PASS commits=1
 ```
 

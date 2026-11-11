@@ -228,3 +228,125 @@ func TestCommits(t *testing.T) {
 		}
 	})
 }
+
+func commitEmpty(t *testing.T, dir, message string) string {
+	t.Helper()
+	gitIn(t, dir, "commit", "-q", "--allow-empty", "-m", message)
+	return gitIn(t, dir, "rev-parse", "HEAD")
+}
+
+func TestResolveBaseReturnsAProbeError(t *testing.T) {
+	dir := newRepo(t)
+	gitIn(t, dir, "checkout", "-q", "-b", "main")
+	commitEmpty(t, dir, "root")
+	gitIn(t, dir, "update-ref", "--no-deref", "refs/remotes/origin/main", "HEAD")
+	ref := filepath.Join(dir, ".git", "refs", "remotes", "origin", "main")
+	writeFile(t, dir, filepath.Join(".git", "refs", "remotes", "origin", "main"), strings.Repeat("1", 40)+"\n")
+
+	got, err := gittree.Tree{}.ResolveBase(context.Background(), dir, "main")
+
+	if err == nil {
+		t.Fatalf("ResolveBase over a broken remote ref %s = %+v, nil, want an error", ref, got)
+	}
+	if !strings.Contains(err.Error(), "origin/main") {
+		t.Fatalf("error = %v, want it to name origin/main", err)
+	}
+}
+
+func TestResolveBaseReturnsAMergeBaseError(t *testing.T) {
+	const missing = "no-such-branch"
+	dir := newRepo(t)
+	gitIn(t, dir, "checkout", "-q", "-b", "main")
+	commitEmpty(t, dir, "root")
+
+	got, err := gittree.Tree{}.ResolveBase(context.Background(), dir, missing)
+
+	if err == nil || !strings.Contains(err.Error(), missing) {
+		t.Fatalf("ResolveBase(%q) = %+v, %v, want an error naming %s", missing, got, err, missing)
+	}
+}
+
+func TestResolveBase(t *testing.T) {
+	const (
+		mainBranch = "main"
+		originMain = "origin/main"
+		remoteRef  = "refs/remotes/origin/main"
+	)
+	ctx := context.Background()
+	tree := gittree.Tree{}
+	newBranchRepo := func(t *testing.T) (dir, root string) {
+		dir = newRepo(t)
+		gitIn(t, dir, "checkout", "-q", "-b", mainBranch)
+		root = commitEmpty(t, dir, "root")
+		return dir, root
+	}
+
+	cases := map[string]func(t *testing.T) (dir, base string, want domain.Base){
+		"a stale local base gives the newer remote base": func(t *testing.T) (string, string, domain.Base) {
+			dir, _ := newBranchRepo(t)
+			gitIn(t, dir, "checkout", "-q", "-b", "feature")
+			upstream := commitEmpty(t, dir, "upstream")
+			gitIn(t, dir, "update-ref", remoteRef, upstream)
+			commitEmpty(t, dir, "feat: work")
+			return dir, mainBranch, domain.Base{Ref: originMain, SHA: upstream}
+		},
+		"a local base ahead of the remote base keeps the local base": func(t *testing.T) (string, string, domain.Base) {
+			dir, root := newBranchRepo(t)
+			gitIn(t, dir, "update-ref", remoteRef, root)
+			local := commitEmpty(t, dir, "local only")
+			gitIn(t, dir, "checkout", "-q", "-b", "feature")
+			commitEmpty(t, dir, "feat: work")
+			return dir, mainBranch, domain.Base{Ref: mainBranch, SHA: local}
+		},
+		"no remote base gives the local base": func(t *testing.T) (string, string, domain.Base) {
+			dir, root := newBranchRepo(t)
+			gitIn(t, dir, "checkout", "-q", "-b", "feature")
+			commitEmpty(t, dir, "feat: work")
+			return dir, mainBranch, domain.Base{Ref: mainBranch, SHA: root}
+		},
+		"a sha base keeps the sha": func(t *testing.T) (string, string, domain.Base) {
+			dir, root := newBranchRepo(t)
+			gitIn(t, dir, "update-ref", remoteRef, root)
+			commitEmpty(t, dir, "feat: work")
+			return dir, root, domain.Base{Ref: root, SHA: root}
+		},
+		"a revision keeps its ref": func(t *testing.T) (string, string, domain.Base) {
+			dir, _ := newBranchRepo(t)
+			gitIn(t, dir, "update-ref", remoteRef, gitIn(t, dir, "rev-parse", "HEAD"))
+			previous := commitEmpty(t, dir, "second")
+			commitEmpty(t, dir, "feat: work")
+			return dir, "HEAD~1", domain.Base{Ref: "HEAD~1", SHA: previous}
+		},
+		"an origin base keeps its ref": func(t *testing.T) (string, string, domain.Base) {
+			dir, root := newBranchRepo(t)
+			gitIn(t, dir, "update-ref", remoteRef, root)
+			commitEmpty(t, dir, "feat: work")
+			return dir, originMain, domain.Base{Ref: originMain, SHA: root}
+		},
+		"an origin base ignores a remote ref named origin/origin/main": func(t *testing.T) (string, string, domain.Base) {
+			dir, root := newBranchRepo(t)
+			gitIn(t, dir, "update-ref", remoteRef, root)
+			work := commitEmpty(t, dir, "feat: work")
+			gitIn(t, dir, "update-ref", "refs/remotes/origin/"+originMain, work)
+			return dir, originMain, domain.Base{Ref: originMain, SHA: root}
+		},
+		"a HEAD base ignores the remote HEAD": func(t *testing.T) (string, string, domain.Base) {
+			dir, _ := newBranchRepo(t)
+			gitIn(t, dir, "checkout", "-q", "-b", "feature")
+			head := commitEmpty(t, dir, "feat: work")
+			gitIn(t, dir, "update-ref", "refs/remotes/origin/HEAD", head)
+			return dir, "HEAD", domain.Base{Ref: "HEAD", SHA: head}
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir, base, want := setup(t)
+
+			got, err := tree.ResolveBase(ctx, dir, base)
+
+			if err != nil || got != want {
+				t.Fatalf("ResolveBase(%q) = %+v, %v, want %+v", base, got, err, want)
+			}
+		})
+	}
+}
