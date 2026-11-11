@@ -24,3 +24,4 @@ One line per ADR. Read this first, then only the ADRs that the change touches.
 | [0018](0018-review-round-in-four-steps.md) | 0018 Review round in four steps |
 | [0019](0019-guard-threat-model.md) | 0019 Guard threat model |
 | [0020](0020-review-round-counts-blocker-and-major.md) | 0020 Review round counts blocker and major |
+| [0021](0021-plan-page-follows-the-run.md) | 0021 The plan page follows the run |

@@ -33,11 +33,11 @@ var mermaidJS string
 var fontFiles embed.FS
 
 const (
-	GroupProduct = "Product"
-	GroupSpecs   = "Tech specs"
-	GroupTasks   = "Tasks"
-	GroupQA      = "QA and verification"
-	GroupSignals = "Signals"
+	GroupOverview = "Overview"
+	GroupBuild    = "Build"
+	GroupVerify   = "Verify"
+	// GroupQA names the program page group. The plan page does not use it.
+	GroupQA = "QA and verification"
 )
 
 const (
@@ -192,9 +192,13 @@ type navGroup struct {
 	Items        []navItem
 }
 
+// groupNames gives each kind of section the nav group that holds it.
 type groupNames struct{ Product, Specs, Tasks, QA, Signals string }
 
 type counts struct{ Criteria, Tasks, Files, Problems int }
+
+// done counts what the run finished: criteria proved, tasks committed, and the files the plan adds or changes.
+type done struct{ Criteria, Tasks, NewFiles, ChangedFiles, DeletedFiles int }
 
 type problemRow struct {
 	Anchor, Rule, Message string
@@ -250,13 +254,38 @@ type treeView struct {
 	Rows  []treeRow
 }
 
+const (
+	taskOpen      = "open"
+	taskCommitted = "committed"
+)
+
+var phaseLabels = map[string]string{
+	shareddomain.PhasePlanning:         "Planning",
+	shareddomain.PhaseAwaitingApproval: "Waiting for approval",
+	shareddomain.PhaseWorking:          "Building",
+	shareddomain.PhaseReviewing:        "In review",
+	shareddomain.PhaseShipping:         "Shipping",
+	shareddomain.PhaseReleasing:        "Releasing",
+	shareddomain.PhaseObserving:        "Observing",
+	shareddomain.PhaseBlocked:          "Blocked",
+	shareddomain.PhaseDone:             "Done",
+	shareddomain.PhaseAbandoned:        "Abandoned",
+}
+
+func phaseLabel(phase string) string {
+	if label, ok := phaseLabels[phase]; ok {
+		return label
+	}
+	return phase
+}
+
 type taskRow struct {
-	Key, Name, Side     string
-	Model               string
-	Number              int
-	TestFirst           template.HTML
-	Owned               []string
-	DoD, After, Commits []chip
+	Key, Name, Side, State string
+	Model                  string
+	Number                 int
+	TestFirst              template.HTML
+	Owned                  []string
+	DoD, After, Commits    []chip
 }
 
 type waveRow struct {
@@ -282,6 +311,7 @@ type signalRow struct {
 
 type noteBlock struct {
 	Title string
+	Open  bool
 	Items []template.HTML
 }
 
@@ -296,14 +326,19 @@ type planData struct {
 	Labels   map[string]string   `json:"labels"`
 	State    map[string]string   `json:"state"`
 	Diagrams []string            `json:"diagrams"`
+	Phase    string              `json:"phase"`
+	Tasks    map[string]string   `json:"tasks"`
 }
 
 type model struct {
 	Title      string
 	Track      string
+	Status     string
+	Base       string
 	Run        domain.ViewRun
 	Goal       []template.HTML
 	Counts     counts
+	Done       done
 	G          groupNames
 	Nav        []navGroup
 	Problems   []problemRow
@@ -372,8 +407,10 @@ func (b *builder) model() model {
 	m := model{
 		Title:    title(doc),
 		Track:    b.in.Run.Track,
+		Status:   phaseLabel(b.in.Run.Phase),
+		Base:     doc.Base(),
 		Run:      b.in.Run,
-		G:        groupNames{GroupProduct, GroupSpecs, GroupTasks, GroupQA, GroupSignals},
+		G:        groupNames{GroupOverview, GroupBuild, GroupBuild, GroupVerify, GroupVerify},
 		Problems: b.problems(),
 		Criteria: b.criteria(),
 		Notes:    b.notes(),
@@ -396,34 +433,68 @@ func (b *builder) model() model {
 		m.Regression = append(m.Regression, inline(h))
 	}
 	m.Counts = counts{Criteria: len(doc.Criteria), Tasks: len(doc.Tasks), Files: len(b.fileKeys), Problems: len(b.in.Problems)}
+	m.Done = b.done(m)
 	m.Nav = b.nav(m)
 	m.Data = b.data()
 	return m
 }
 
+// done counts the proved criteria, the committed tasks and the new and changed files, once for each path.
+func (b *builder) done(m model) done {
+	var d done
+	for _, c := range m.Criteria {
+		if c.State == domain.ProofPass {
+			d.Criteria++
+		}
+	}
+	for _, w := range m.Waves {
+		for _, t := range w.Tasks {
+			if t.State == taskCommitted {
+				d.Tasks++
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, tree := range b.trees() {
+		for _, e := range tree.Entries {
+			if e.IsDir || seen[e.Path] {
+				continue
+			}
+			seen[e.Path] = true
+			switch e.Mark {
+			case domain.MarkNew:
+				d.NewFiles++
+			case domain.MarkChanged:
+				d.ChangedFiles++
+			case domain.MarkDeleted:
+				d.DeletedFiles++
+			}
+		}
+	}
+	return d
+}
+
 func (b *builder) nav(m model) []navGroup {
 	doc := b.in.Doc
-	product := []navItem{{Anchor: anchorSummary, Label: "Goal"}, {Anchor: anchorCriteria, Label: "Criteria", Count: itoa(len(doc.Criteria))}}
+	overview := []navItem{{Anchor: anchorSummary, Label: "Goal"}, {Anchor: anchorCriteria, Label: "Criteria", Count: itoa(len(doc.Criteria))}}
 	if len(m.Notes) > 0 {
-		product = append(product, navItem{Anchor: anchorNotes, Label: "Decisions and risks"})
+		overview = append(overview, navItem{Anchor: anchorNotes, Label: "Decisions and risks"})
 	}
 	return []navGroup{
-		{"01", GroupProduct, product},
-		{"02", GroupSpecs, []navItem{
-			{Anchor: anchorSpecs, Label: "Diagrams and sketches", Count: itoa(len(doc.Specs))},
+		{"01", GroupOverview, overview},
+		{"02", GroupBuild, []navItem{
+			{Anchor: anchorSpecs, Label: "Specs", Count: itoa(len(doc.Specs))},
+			{Anchor: anchorTasks, Label: "Tasks", Count: itoa(len(doc.Tasks))},
 			{Anchor: anchorTrees, Label: "Files", Count: itoa(len(b.fileKeys))},
+			{Anchor: anchorDelivery, Label: "Commits", Count: itoa(len(doc.Commits))},
 		}},
-		{"03", GroupTasks, []navItem{
-			{Anchor: anchorTasks, Label: "Tasks by wave", Count: itoa(len(doc.Tasks))},
-			{Anchor: anchorDelivery, Label: "Commits and PR", Count: itoa(len(doc.Commits))},
-		}},
-		{"04", GroupQA, []navItem{
+		{"03", GroupVerify, []navItem{
 			{Anchor: anchorProblems, Label: "Problems", Count: itoa(len(b.in.Problems)), Bad: len(b.in.Problems) > 0},
-			{Anchor: anchorMatrix, Label: "Trace and proofs"},
+			{Anchor: anchorMatrix, Label: "Traceability"},
 			{Anchor: anchorProofs, Label: "Proof commands"},
 			{Anchor: anchorSource, Label: "Source", Count: itoa(len(doc.Lines))},
+			{Anchor: anchorSignals, Label: "Post-deploy signals", Count: itoa(len(doc.Signals))},
 		}},
-		{"05", GroupSignals, []navItem{{Anchor: anchorSignals, Label: "Post-deploy signals", Count: itoa(len(doc.Signals))}}},
 	}
 }
 
@@ -498,13 +569,22 @@ func (b *builder) criteria() []criterionRow {
 func (b *builder) notes() []noteBlock {
 	var blocks []noteBlock
 	for _, name := range []string{domain.HeadingDecisions, domain.HeadingReviewRisks, domain.HeadingThreatModel, headingRisks, headingNonGoals, headingEdgeCases} {
-		block := noteBlock{Title: name}
+		block := noteBlock{Title: name, Open: name == domain.HeadingReviewRisks}
 		for _, item := range proseOf(b.in.Doc, name) {
 			block.Items = append(block.Items, inline(item))
 		}
 		if len(block.Items) > 0 {
 			blocks = append(blocks, block)
 		}
+	}
+	questions := noteBlock{Title: domain.HeadingOpenQuestions, Open: true}
+	for _, q := range b.in.Doc.OpenQuestions {
+		if q != domain.OpenQuestionsNone {
+			questions.Items = append(questions.Items, inline(q))
+		}
+	}
+	if len(questions.Items) > 0 {
+		blocks = append(blocks, questions)
 	}
 	return blocks
 }
@@ -618,10 +698,16 @@ func (b *builder) task(t domain.Task) taskRow {
 	for _, n := range t.DoD {
 		row.DoD = append(row.DoD, b.criterionChip(n))
 	}
+	committed := true
 	for _, c := range b.in.Doc.Commits {
 		if slices.Contains(c.Tasks, t.Number) {
 			row.Commits = append(row.Commits, b.commitChips([]int{c.Number})...)
+			committed = committed && b.states.Commits[c.Number] == domain.CommitFound
 		}
+	}
+	row.State = taskOpen
+	if committed && len(row.Commits) > 0 {
+		row.State = taskCommitted
 	}
 	return row
 }
@@ -702,7 +788,8 @@ func (b *builder) signals() []signalRow {
 
 func (b *builder) data() planData {
 	doc := b.in.Doc
-	d := planData{Graph: b.graph(), Labels: map[string]string{}, State: map[string]string{}, Diagrams: b.diagrams}
+	d := planData{Graph: b.graph(), Labels: map[string]string{}, State: map[string]string{}, Diagrams: b.diagrams,
+		Phase: b.in.Run.Phase, Tasks: map[string]string{}}
 	if d.Diagrams == nil {
 		d.Diagrams = []string{}
 	}
@@ -712,6 +799,7 @@ func (b *builder) data() planData {
 	}
 	for _, t := range doc.Tasks {
 		d.Labels[number(keyTask, t.Number)] = "Task " + itoa(t.Number) + ": " + t.Name
+		d.Tasks[number(keyTask, t.Number)] = b.task(t).State
 	}
 	for title, key := range b.specKeys {
 		d.Labels[key] = title

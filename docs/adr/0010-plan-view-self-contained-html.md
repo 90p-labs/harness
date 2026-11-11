@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-08.
+Accepted, 2026-11-08. Superseded in part by ADR 0021, 2026-11-11: the render rule.
 
 ## Context
 
@@ -14,7 +14,7 @@ A human approves a plan in `awaiting_approval`. A long `plan.md` hides the diagr
 - The page embeds mermaid, rough.js, the fonts and the CSS with `go:embed`. No `src`, `href` or `url(` points outside the page.
 - The Go renderer draws each Excalidraw sketch to SVG through goja and rough.js. The page loads no Excalidraw library.
 - The mermaid `stateDiagram-v2` marks go through a flowchart conversion, so each state and edge gets the color of its mark.
-- A view plugin on `run.transition.after` writes the page when the new phase is `awaiting_approval`. A render error never blocks the transition.
+- A view plugin on `run.transition.after` writes the page after every transition, in every phase. ADR 0021 changed this from `awaiting_approval` only. A render error never blocks the transition.
 - The plan rule `diagram-required` refuses a plan with a missing diagram or sketch file.
 
 ## Consequences

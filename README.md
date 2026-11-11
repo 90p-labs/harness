@@ -96,7 +96,7 @@ A run has five steps:
 4. Review: two or more reviewer models check the change.
 5. Ship: the agent opens the pull request.
 
-`harness plan view` shows the plan as one page, with the proof state of each criterion, the diagrams and the tasks:
+`harness plan view` shows the plan as one page. It shows the phase, the state of each task, the proof state of each criterion, the diagrams and the tasks. The page updates on every phase change:
 
 ![The plan summary with the acceptance criteria and their proof state](docs/images/plan-view-summary.png)
 

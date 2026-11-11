@@ -104,6 +104,34 @@ func envelope(t *testing.T, to string) shareddomain.Envelope {
 	}
 }
 
+func TestPluginRendersEveryPhase(t *testing.T) {
+	var commands []renderview.Command
+	render := func(_ context.Context, c renderview.Command) (string, error) {
+		commands = append(commands, c)
+		return "", nil
+	}
+	plugin := viewplugin.New(worktree, render, liveRound(2, nil), noOpen)
+
+	transitions := []string{
+		shareddomain.PhaseWorking,
+		shareddomain.PhaseReviewing,
+		shareddomain.PhaseShipping,
+		shareddomain.PhaseDone,
+	}
+	for _, phase := range transitions {
+		commands = nil
+
+		verdict, err := plugin.Handle(t.Context(), envelope(t, phase))
+
+		if err != nil || verdict.Kind != shareddomain.VerdictAllow {
+			t.Fatalf("%s: verdict = %v, err = %v, want allow", phase, verdict, err)
+		}
+		if len(commands) != 1 || commands[0].Phase != phase || commands[0].LiveRound != 2 {
+			t.Errorf("%s: commands = %+v, want one render of that phase in round 2", phase, commands)
+		}
+	}
+}
+
 func TestViewPlugin(t *testing.T) {
 	var commands []renderview.Command
 	render := func(_ context.Context, c renderview.Command) (string, error) {
@@ -150,13 +178,13 @@ func TestViewPlugin(t *testing.T) {
 		}
 	})
 
-	t.Run("another phase renders nothing", func(t *testing.T) {
+	t.Run("another phase renders the page too", func(t *testing.T) {
 		commands = nil
 
 		verdict, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseWorking))
 
-		if err != nil || verdict.Kind != shareddomain.VerdictAllow || len(commands) != 0 {
-			t.Errorf("verdict = %v, err = %v, commands = %v", verdict, err, commands)
+		if err != nil || verdict.Kind != shareddomain.VerdictAllow || len(commands) != 1 || commands[0].Phase != shareddomain.PhaseWorking {
+			t.Errorf("verdict = %v, err = %v, commands = %+v, want one render in working", verdict, err, commands)
 		}
 	})
 
