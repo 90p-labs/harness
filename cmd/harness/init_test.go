@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -65,9 +66,13 @@ func TestInitSetsUpARepository(t *testing.T) {
 		"lint init: wrote .harness-lint",
 		"lint baseline: skipped, no lint pack",
 		"host: wrote " + filepath.Join(dir, ".claude", "settings.json"),
+		"gitignore: added " + shareddomain.RunsFolder + "/",
 	}
 	if got := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n"); !reflect.DeepEqual(got, want) {
 		t.Errorf("stdout lines = %q, want %q", got, want)
+	}
+	if got := readRepoFile(t, dir, ".gitignore"); got != shareddomain.RunsFolder+"/\n" {
+		t.Errorf(".gitignore = %q, want %q", got, shareddomain.RunsFolder+"/\n")
 	}
 	if config := readConfig(t, dir); !strings.Contains(config, "gates:") || strings.Contains(config, "lint:") {
 		t.Errorf(".harness.yaml = %q, want the gates key and no lint key", config)
@@ -79,6 +84,168 @@ func TestInitSetsUpARepository(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, lintdomain.BaselinePath)); !os.IsNotExist(err) {
 		t.Errorf("%s exists with no lint pack", lintdomain.BaselinePath)
+	}
+}
+
+func readRepoFile(t *testing.T, dir, name string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func TestInitAppendsRunsToGitignore(t *testing.T) {
+	rule := shareddomain.RunsFolder + "/"
+	tests := []struct {
+		name string
+		old  string
+		want string
+	}{
+		{"final newline", "dist/\n", "dist/\n" + rule + "\n"},
+		{"no final newline", "dist/", "dist/\n" + rule + "\n"},
+		{"crlf", "dist/\r\nbuild/\r\n", "dist/\r\nbuild/\r\n" + rule + "\r\n"},
+		{"crlf no final newline", "dist/\r\nbuild/", "dist/\r\nbuild/\r\n" + rule + "\r\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearHarnessEnv(t)
+			dir := initRepo(t)
+			writeRepoFile(t, dir, "go.mod", goModuleFile)
+			writeRepoFile(t, dir, ".gitignore", tt.old)
+
+			code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+			if code != exitOK || stderr != "" {
+				t.Fatalf("code = %d, stderr = %q", code, stderr)
+			}
+			if !strings.HasSuffix(stdout, "gitignore: added "+rule+"\n") {
+				t.Errorf("stdout = %q, want the added line last", stdout)
+			}
+			if got := readRepoFile(t, dir, ".gitignore"); got != tt.want {
+				t.Errorf(".gitignore = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInitKeepsAnIgnoringGitignore(t *testing.T) {
+	const (
+		wantKeep = "keep"
+		wantAdd  = "add"
+	)
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{".harness", ".harness\n", wantKeep},
+		{".harness/", "dist/\n.harness/\n", wantKeep},
+		{".harness/*", ".harness/*\n", wantKeep},
+		{".harness/**", ".harness/**\n", wantKeep},
+		{".harness/runs", ".harness/runs\n", wantKeep},
+		{".harness/runs/", ".harness/runs/\n", wantKeep},
+		{".harness/runs/*", ".harness/runs/*\n", wantKeep},
+		{".harness/runs/**", ".harness/runs/**\n", wantKeep},
+		{"slash root", "/.harness/runs\n", wantKeep},
+		{"slash root folder", "/.harness/\n", wantKeep},
+		{"double star", "**/.harness/\n", wantKeep},
+		{"double star runs", "**/.harness/runs/\n", wantKeep},
+		{"trailing spaces", ".harness/runs/  \n", wantKeep},
+		{"crlf", ".harness/runs/\r\n", wantKeep},
+		{"no final newline", "dist/\n.harness/runs/", wantKeep},
+		{"examples form", ".harness/*\n!.harness/plugins/\n", wantKeep},
+		{"re-ignored after negation", ".harness/*\n!.harness/runs/\n.harness/runs/\n", wantKeep},
+		{"padded", "  .harness/runs/  \n", wantAdd},
+		{"negated runs", ".harness/*\n!.harness/runs/\n", wantAdd},
+		{"commented", "# .harness/\n", wantAdd},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearHarnessEnv(t)
+			dir := initRepo(t)
+			writeRepoFile(t, dir, "go.mod", goModuleFile)
+			writeRepoFile(t, dir, ".gitignore", tt.content)
+
+			code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+			if code != exitOK || stderr != "" {
+				t.Fatalf("code = %d, stderr = %q", code, stderr)
+			}
+			got := readRepoFile(t, dir, ".gitignore")
+			if tt.want == wantAdd {
+				if strings.Contains(stdout, "gitignore: kept\n") || !strings.HasSuffix(got, shareddomain.RunsFolder+"/\n") {
+					t.Errorf("stdout = %q, .gitignore = %q, want the rule added", stdout, got)
+				}
+				return
+			}
+			if got != tt.content {
+				t.Errorf(".gitignore = %q, want %q", got, tt.content)
+			}
+			if !strings.HasSuffix(stdout, "gitignore: kept\n") {
+				t.Errorf("stdout = %q, want the kept line last", stdout)
+			}
+		})
+	}
+}
+
+func TestInitTwiceKeepsTheGitignore(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	writeRepoFile(t, dir, "go.mod", goModuleFile)
+
+	if code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude); code != exitOK {
+		t.Fatalf("first run: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	first := readRepoFile(t, dir, ".gitignore")
+
+	code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude)
+
+	if code != exitOK || stderr != "" {
+		t.Fatalf("second run: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	if !strings.HasSuffix(stdout, "gitignore: kept\n") {
+		t.Errorf("second run stdout = %q, want the kept line last", stdout)
+	}
+	if second := readRepoFile(t, dir, ".gitignore"); second != first {
+		t.Errorf(".gitignore = %q, want %q", second, first)
+	}
+	if n := strings.Count(first, shareddomain.RunsFolder+"/"); n != 1 {
+		t.Errorf("the rule appears %d times, want 1", n)
+	}
+}
+
+func TestInitIgnoresOnlyTheRunsFolder(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	writeRepoFile(t, dir, "go.mod", goModuleFile)
+
+	if code, stdout, stderr := execute(t, commandInit, initHostFlag, hostClaude); code != exitOK {
+		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+
+	if got := readRepoFile(t, dir, ".gitignore"); got != shareddomain.RunsFolder+"/\n" {
+		t.Errorf(".gitignore = %q, want %q", got, shareddomain.RunsFolder+"/\n")
+	}
+	ignored := func(name string) bool {
+		t.Helper()
+		err := exec.Command(gitBinary, "-C", dir, "-c", "core.excludesFile=/dev/null", "check-ignore", "-q", name).Run()
+		if err == nil {
+			return true
+		}
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 1 {
+			return false
+		}
+		t.Fatalf("git check-ignore %s: %v", name, err)
+		return false
+	}
+	if name := shareddomain.RunsFolder + "/x/plan.md"; !ignored(name) {
+		t.Errorf("%s is not ignored", name)
+	}
+	if name := ".harness/plugins/lint.sh"; ignored(name) {
+		t.Errorf("%s is ignored", name)
 	}
 }
 

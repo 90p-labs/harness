@@ -30,7 +30,7 @@ const (
 	PhaseDone             = "done"
 	PhaseAbandoned        = "abandoned"
 
-	runsFolder        = ".harness/runs"
+	RunsFolder        = ".harness/runs"
 	planFileName      = "plan.md"
 	findingsFileName  = "findings.md"
 	handoffFileName   = "handoff.md"
@@ -57,17 +57,17 @@ type TransitionPayload struct {
 }
 
 func RunPlanFile(runID string) string {
-	return path.Join(runsFolder, runID, planFileName)
+	return path.Join(RunsFolder, runID, planFileName)
 }
 
 func RunFindingsFile(runID string) string {
-	return path.Join(runsFolder, runID, findingsFileName)
+	return path.Join(RunsFolder, runID, findingsFileName)
 }
 
 func RunHandoffFile(runID string) string {
-	return path.Join(runsFolder, runID, handoffFileName)
+	return path.Join(RunsFolder, runID, handoffFileName)
 }
 
 func RunSelfCheckFile(runID string) string {
-	return path.Join(runsFolder, runID, selfCheckFileName)
+	return path.Join(RunsFolder, runID, selfCheckFileName)
 }
