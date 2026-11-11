@@ -37,7 +37,7 @@ Start: run harness version ("Binary")
 - `abandon`: run `harness run abandon` and report.
 - Any other text with no active run: run `harness run start "<text>"`.
 
-Each `run` command prints the phase and a `next:` line. Do the `next:` step. When a `handoff:` line asks for it, write `handoff.md` in the run folder as the line says, then end the turn. The next session resumes from `harness run status` and `handoff.md`.
+Each `run` command prints the phase and a `next:` line. Do the `next:` step. When a `handoff:` line asks for it, write `handoff.md` in the run folder as a checkpoint, then continue with the `next:` step. Do not end the turn, except for a question to the user, such as the `Plan` question, or when your context is near its limit. A new session resumes from `harness run status` and `handoff.md`.
 
 ## Phases
 
@@ -128,7 +128,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
 
-A change to the approved plan needs `harness run amend` and a new `Plan` answer.
+To change the approved plan, edit `plan.md` first, then run `harness run amend`. When approval is needed, the run goes to `awaiting_approval`: ask the `Plan` question again, then run `harness run approve`. With `run.approval: false`, the run goes to `working` with no `Plan` answer. A tree-only amend skips the approval only in `working` with no live review round; from `reviewing` or `shipping`, it needs the `Plan` answer. `harness run plan` never follows an amend.
 
 ## Guard
 

@@ -40,7 +40,15 @@ const (
 	decisionsHead     = "## Decisions"
 	handoffFile       = "handoff.md"
 	statusRouteStart  = "- `status` or empty"
-	endTurnPhrase     = "end the turn"
+)
+
+// The handoff phrases of SKILL.md.
+const (
+	noEndTurnPhrase    = "Do not end the turn"
+	userQuestionPhrase = "a question to the user"
+	contextLimitPhrase = "context is near its limit"
+	continuePhrase     = "then continue"
+	staleEndPhrase     = "then end the turn"
 )
 
 var (
@@ -169,14 +177,33 @@ func TestHarnessSkillHandoff(t *testing.T) {
 	if strings.Contains(planning, configCommand) {
 		t.Errorf("%s: the item %q still runs %q", skillFile, planningItem, configCommand)
 	}
-	for _, want := range []string{handoffFile, endTurnPhrase} {
+	for _, want := range []string{handoffFile, noEndTurnPhrase, userQuestionPhrase, contextLimitPhrase, continuePhrase} {
 		if !strings.Contains(skill, want) {
 			t.Errorf("%s does not name %q", skillFile, want)
 		}
+	}
+	if strings.Contains(skill, staleEndPhrase) {
+		t.Errorf("%s still says %q", skillFile, staleEndPhrase)
 	}
 	_, route, _ := strings.Cut(skill, statusRouteStart)
 	route, _, _ = strings.Cut(route, "\n")
 	if !strings.Contains(route, handoffFile) {
 		t.Errorf("%s: the status route does not name %q", skillFile, handoffFile)
+	}
+}
+
+func TestHarnessSkillAmend(t *testing.T) {
+	skill := repository.Read(t, skillFile)
+	for _, want := range []string{
+		"edit `plan.md` first, then run `harness run amend`",
+		"ask the `Plan` question again, then run `harness run approve`",
+		"With `run.approval: false`, the run goes to `working`",
+		"A tree-only amend skips the approval only in `working` with no live review round",
+		"from `reviewing` or `shipping`, it needs the `Plan` answer",
+		"`harness run plan` never follows an amend",
+	} {
+		if !strings.Contains(skill, want) {
+			t.Errorf("%s does not name %q", skillFile, want)
+		}
 	}
 }

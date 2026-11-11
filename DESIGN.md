@@ -175,7 +175,7 @@ The lead writes `handoff.md` in the run folder after a phase change. The file ha
 
 The run stores the step in the column `handoff_step` (migration 0007). A resumed session at the same step meets the normal stop rule.
 
-A Codex host has no pane restart. The handoff stop ends the turn, and the next prompt continues the same session in the same context.
+`handoff.md` is a checkpoint. The `handoff:` line ends with `then continue`: the lead writes the file, then continues with the `next:` step. The lead ends the turn only for a question to the user or when its context is near its limit. No host resumes a run by itself: a new session reads `harness run status` and `handoff.md`.
 
 ```mermaid
 classDiagram
