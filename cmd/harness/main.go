@@ -236,6 +236,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newVerifyCommand(root.PersistentFlags()), newGatesCommand(root.PersistentFlags()), newLintCommand(root.PersistentFlags(), version), newLiveCommand(root.PersistentFlags()))
 	root.AddCommand(newInitCommand(root.PersistentFlags(), version))
 	root.AddCommand(newReportCommand(root.PersistentFlags()))
+	root.AddCommand(newRecipeCommand())
 	root.AddCommand(guardcli.NewReviewCommand(reviewPanelSource(root.PersistentFlags())))
 	prSource := prBodySource{flags: root.PersistentFlags()}
 	root.AddCommand(guardcli.NewPRCommand(prSource, prSource))
