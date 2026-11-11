@@ -39,7 +39,7 @@ A later edit of the tool config that lets a rule through stays green until someo
 - Put the dependency install in one `setup` step, such as `pnpm install --frozen-lockfile` or `composer install`, and not in a gate. `harness verify` runs the step before the gates, so two gates in parallel never write `vendor/` or `node_modules/` at the same time. Put the lockfile, `compose.yaml` and the `Dockerfile` in the step `paths`: a change runs the install again. Set `creates` to a file that the install writes in the project, such as `vendor/autoload.php`. The temporary worktree of `harness verify --commits` has no such file, so the step runs there too.
 - Set `verify.parallel` to 2 or more, and let the fast checks run in parallel. Give the slow gates, such as the tests or the build, a `needs` on the fast checks. When a fast check fails, the slow gates print `SKIPPED` and do not start.
 - The output in these READMEs comes from macOS with Docker Desktop, which gives the files that a container writes to the host user. On Linux with Docker Engine, a container runs as root, and the files that it writes in the project belong to root. Then `harness verify --commits` can fail to remove its temporary worktree. Run Docker Engine in rootless mode, which maps root in the container to your user. A `user:` key alone does not work: the named volumes and the caches under `/root` belong to root.
-- Add `.harness/` to `.gitignore`, because it holds the run state. A project with a plugin under `.harness/plugins/` uses `.harness/*` and `!.harness/plugins/` instead.
+- `harness init` adds `.harness/runs/` to `.gitignore`, which holds the run state. That rule keeps `.harness/plugins/` in git.
 
 ## A Makefile as a gate source
 

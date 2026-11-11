@@ -97,6 +97,7 @@ gates: wrote node-lint, lint
 lint init: wrote .harness-lint
 lint baseline: wrote .harness-lint/baseline.json (11 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
+gitignore: added .harness/runs/
 $ cat .harness.yaml
 lint:
   packs:
@@ -139,7 +140,7 @@ The `paths` of the step `node-install` are `.npmrc`, `package.json`, `pnpm-lock.
 The input hash holds the files that git tracks and the untracked files that `.gitignore` does not list.
 `node_modules/` and `.next/` are in the `.gitignore` of the app, so they are not in the hash.
 On Linux with Docker Engine, read the root-user limit in the [examples index](../README.md#rules-for-every-example).
-Add `.harness/` to the `.gitignore`. It holds the run folders.
+`harness init` adds `.harness/runs/` to `.gitignore`, which holds the run folders. That rule keeps `.harness/plugins/` in git.
 
 ### 3. Set up the harness
 
@@ -156,6 +157,7 @@ gates: kept
 lint init: wrote .harness-lint
 lint baseline: wrote .harness-lint/baseline.json (10 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
+gitignore: kept
 ```
 
 The `ddd` pack reads the business root `src/contexts/`. The proof app has two contexts, `cart` and `catalog`, each with the folders `domain`, `application` and `infrastructure`, and the file `src/contexts/kernel.ts`.
@@ -417,7 +419,7 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 │   │   │   │   └── product.memory-repository.ts
 │   │   │   └── catalog.module.ts
 │   │   └── kernel.ts
-├── .gitignore               you add the harness line, commit
+├── .gitignore               harness init adds a line, commit
 ├── .harness.yaml            you add, commit
 ├── AGENTS.md
 ├── Dockerfile               you add, commit
@@ -436,5 +438,5 @@ The marks on the right are not part of the `tree` output. "You add" is a file th
 
 The tree comes from the end of the proof. It holds `checkout-date.entity.ts` and `legacy-total.entity.ts` from the `ddd` section, and the `.harness.yaml` there holds `domain_allow: [date-fns]`.
 `next-env.d.ts` and `tsconfig.tsbuildinfo` are not harness files. `.gitignore` of the app ignores them.
-The harness keeps the state of `harness verify` in `.git/.harness/state.db`, so the tree has no `.harness/` folder. `.harness/` appears when you run `harness run`, and the `.gitignore` line `.harness/` ignores it.
+The harness keeps the state of `harness verify` in `.git/.harness/state.db`, so the tree has no `.harness/` folder. `.harness/` appears when you run `harness run`. The `.gitignore` line `.harness/runs/`, written by `harness init`, ignores its run folders.
 `node_modules/` is a mount point on the host. The packages are in the named volume.
