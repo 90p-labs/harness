@@ -22,7 +22,7 @@ const (
 	execMode       = 0o755
 	fileMode       = 0o644
 	exitUsage      = 2
-	loggingGh      = "#!/bin/sh\necho \"$*\" >>%q\nexit 1\n"
+	loggingCurl    = "#!/bin/sh\necho \"$*\" >>%q\nexit 1\n"
 )
 
 var manifests = []string{claudeManifest, codexManifest}
@@ -626,7 +626,7 @@ func TestBumpManifests(t *testing.T) {
 		if err := os.WriteFile(target, launcher, execMode); err != nil {
 			t.Fatal(err)
 		}
-		calls := filepath.Join(t.TempDir(), "gh.log")
+		calls := filepath.Join(t.TempDir(), "curl.log")
 		tools := t.TempDir()
 		for _, tool := range []string{"sh", "git", "uname", "tr", "mkdir", "find", "rm", "mktemp", "chmod", "mv", "readlink", "cat"} {
 			found, err := exec.LookPath(tool)
@@ -637,7 +637,7 @@ func TestBumpManifests(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err := os.WriteFile(filepath.Join(tools, "gh"), []byte(fmt.Sprintf(loggingGh, calls)), execMode); err != nil {
+		if err := os.WriteFile(filepath.Join(tools, "curl"), []byte(fmt.Sprintf(loggingCurl, calls)), execMode); err != nil {
 			t.Fatal(err)
 		}
 		cmd := exec.Command(target, "version")
@@ -647,10 +647,10 @@ func TestBumpManifests(t *testing.T) {
 
 		raw, err := os.ReadFile(calls)
 		if err != nil {
-			t.Fatalf("the launcher did not call gh: %v", err)
+			t.Fatalf("the launcher did not call curl: %v", err)
 		}
-		if !strings.Contains(string(raw), "release download v3.1.4 ") {
-			t.Fatalf("gh calls = %q, want release download v3.1.4", raw)
+		if !strings.Contains(string(raw), "/releases/download/v3.1.4/harness-") {
+			t.Fatalf("curl calls = %q, want the asset URL of release v3.1.4", raw)
 		}
 	})
 }
