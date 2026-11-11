@@ -269,6 +269,28 @@ func checkCommits(doc Document, add report) {
 			add(t.Line, RuleTaskUncommitted, "task %d is in no commit", t.Number)
 		}
 	}
+	checkCommitSplit(doc, add)
+}
+
+func checkCommitSplit(doc Document, add report) {
+	var tests []Commit
+	hasDocs, hasCode := false, false
+	for _, c := range doc.Commits {
+		switch c.Type() {
+		case "test":
+			tests = append(tests, c)
+		case CommitTypeDocs:
+			hasDocs = true
+		case "feat", "fix":
+			hasCode = true
+		}
+	}
+	if !hasDocs || hasCode {
+		return
+	}
+	for _, c := range tests {
+		add(c.Line, RuleCommitSplit, "commit %q is a test commit in a docs change, which verify --commits rejects when it fails. Drop it and prove the docs with a proof command", c.Subject)
+	}
 }
 
 func checkPRs(doc Document, add report) {
