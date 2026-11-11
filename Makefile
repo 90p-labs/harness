@@ -4,7 +4,9 @@ PLATFORMS ?= darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 MARKETPLACE := harness
 PLUGIN := 90p@$(MARKETPLACE)
 
-.PHONY: build dist test check install-claude
+COVERAGE_FLOOR ?= 85
+
+.PHONY: build dist test cover check install-claude
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o dist/harness ./cmd/harness
@@ -18,6 +20,15 @@ dist:
 
 test:
 	go test ./...
+
+# A failing test stops the target before the floor check. A trap removes the profile on exit and interrupt.
+cover:
+	profile=$$(mktemp) || exit 1; \
+	trap 'rm -f "$$profile"' EXIT; \
+	trap 'exit 130' INT; \
+	trap 'exit 143' TERM; \
+	go test -coverprofile="$$profile" ./... || exit 1; \
+	sh scripts/coverfloor.sh "$$profile" "$(COVERAGE_FLOOR)"
 
 check:
 	test -z "$$(gofmt -l .)"
