@@ -138,6 +138,35 @@ func TestVerifyTrace(t *testing.T) {
 		}
 	})
 
+	t.Run("a test file outside the owned files beats a dotted identifier before it", func(t *testing.T) {
+		doc := readFixture(t, "verify_clean.md")
+		doc.Tasks[0].TestFirst = "`domain.Pong` is missing, so `TestPong` in `elsewhere_test.go` fails."
+		b := cleanBranch()
+		b.Tests["elsewhere_test.go"] = "package domain_test\n\nfunc TestPong(t *testing.T) {}\n"
+
+		got := domain.VerifyTrace(doc, b, allPass)
+
+		if len(got) != 0 {
+			t.Fatalf("problems = %v, want none", got)
+		}
+	})
+
+	t.Run("a test file outside the owned files beats a dotted type that only holds test", func(t *testing.T) {
+		doc := readFixture(t, "verify_clean.md")
+		doc.Tasks[0].TestFirst = "`testing.T` is unused, so `TestPong` in `elsewhere_test.go` fails."
+		b := cleanBranch()
+		b.Tests["elsewhere_test.go"] = "package domain_test\n\nfunc TestPong(t *testing.T) {}\n"
+
+		got := domain.VerifyTrace(doc, b, allPass)
+
+		if len(got) != 0 {
+			t.Fatalf("problems = %v, want none", got)
+		}
+		if files := domain.TestFiles(doc); !slices.Contains(files, "elsewhere_test.go") || slices.Contains(files, "testing.T") {
+			t.Fatalf("TestFiles = %v, want elsewhere_test.go and not testing.T", files)
+		}
+	})
+
 	t.Run("a mark that the diff lacks is a tree diff", func(t *testing.T) {
 		b := cleanBranch()
 		b.Files = slices.DeleteFunc(b.Files, func(f domain.FileChange) bool { return f.Path == moduleFile })
@@ -227,6 +256,67 @@ func TestTraceState(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestTestFirstPath(t *testing.T) {
+	const cleanLine = "- Test first: `pong_test.go`: `TestPong` fails, because `Pong` does not exist."
+	raw, err := os.ReadFile("testdata/verify_clean.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"name before file":              "- Test first: add `TestPong` in `pong_test.go`. It fails, because `Pong` does not exist.",
+		"name then Pong then file":      "- Test first: add `TestPong` for `Pong` in `pong_test.go`. It fails.",
+		"dot slash file":                "- Test first: `./pong_test.go`: `TestPong` fails, because `Pong` does not exist.",
+		"command before file":           "- Test first: run `go test ./internal/ping/domain -run TestPong` on `pong_test.go`: `TestPong` fails.",
+		"dotted identifier before file": "- Test first: `domain.Pong` is missing, so `TestPong` in `pong_test.go` fails.",
+		"owned source before its test":  "- Test first: `pong.go` lacks `Pong`, so `TestPong` in `pong_test.go` fails.",
+	}
+	// The cases do not use t.Run: the criterion proof greps `--- PASS: TestTestFirstPath`,
+	// which a subtest PASS line would also match.
+	for name, line := range cases {
+		text := strings.Replace(string(raw), cleanLine, line, 1)
+		if text == string(raw) {
+			t.Fatalf("%s: the task 1 line is not in the fixture", name)
+		}
+		doc, problems := domain.Parse(text)
+		if len(problems) != 0 {
+			t.Fatalf("%s: parse problems: %v", name, problems)
+		}
+
+		if got, want := domain.TestFiles(doc), []string{pongTestFile, handlerTest}; !slices.Equal(got, want) {
+			t.Errorf("%s: TestFiles = %v, want %v", name, got, want)
+		}
+		got := domain.VerifyTrace(doc, cleanBranch(), map[int]bool{1: true, 2: true})
+		if slices.Contains(problemRules(got), domain.RuleTestMissing) {
+			t.Errorf("%s: problems = %v, want no test-missing", name, got)
+		}
+	}
+}
+
+func TestTestFirstNamesNoFile(t *testing.T) {
+	const cleanLine = "- Test first: `pong_test.go`: `TestPong` fails, because `Pong` does not exist."
+	raw, err := os.ReadFile("testdata/verify_clean.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Replace(string(raw), cleanLine, "- Test first: `TestPong` fails, because `Pong` does not exist.", 1)
+	if text == string(raw) {
+		t.Fatal("the task 1 line is not in the fixture")
+	}
+	doc, problems := domain.Parse(text)
+	if len(problems) != 0 {
+		t.Fatalf("parse problems: %v", problems)
+	}
+
+	got := domain.VerifyTrace(doc, cleanBranch(), map[int]bool{1: true, 2: true})
+
+	for _, p := range got {
+		if p.Rule == domain.RuleTestMissing && strings.Contains(p.Message, "names no test file") {
+			return
+		}
+	}
+	t.Errorf("problems = %v, want a test-missing problem that names no test file", got)
 }
 
 func TestTestFiles(t *testing.T) {
