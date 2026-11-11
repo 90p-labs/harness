@@ -2,6 +2,18 @@
 
 This page holds the binary details, the lint tools and the full setup of a repository, and the [README](../README.md) gives the short form.
 
+## Set up from a recipe
+
+A recipe is one folder of [`examples/`](../examples/). Run `harness recipe list` to see the names. Then run `harness recipe apply <name>` in your repository:
+
+- When the recipe has scaffold steps, run them first, as `harness recipe show <name>` lists them, in one shell. They end with the apply. These commands need `harness` on the `PATH`, see [the plugin binary](#the-plugin-binary).
+- Apply writes at the git top level, or in the current folder outside git.
+- It writes only the missing files. It prints `wrote` for a new file, `kept` for a file that is equal, and `differs` for a file with other bytes. A `differs` file is yours to merge by hand.
+- It never runs a scaffold step and never edits `.gitignore`. It prints the next steps, such as `harness gates init` and `harness verify`.
+- `harness recipe apply <name> --dry-run` prints `would write` and `would keep` and changes nothing.
+
+The design of recipes is in [ADR 0022](adr/0022-setup-recipes.md).
+
 ## The plugin binary
 
 The plugin starts the binary through `bin/harness`, which runs `dist/harness-OS-ARCH` of the plugin folder. When that binary is missing:

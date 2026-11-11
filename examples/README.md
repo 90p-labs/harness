@@ -1,6 +1,6 @@
 # Examples
 
-Each folder holds only the files that you add to a project to set up the harness. It is not a full app. Each example runs its gates in a Docker Compose toolchain service with a pinned image. The harness, the hooks and the guard run on the host.
+Each folder holds only the files that you add to a project to set up the harness. It is not a full app. Each folder with a `recipe.yaml` is a recipe. `harness recipe apply <name>` writes its missing files into your repository, and `harness recipe show <name>` prints its next steps. Each example runs its gates in a Docker Compose toolchain service with a pinned image. The harness, the hooks and the guard run on the host.
 
 | Example | Project | Gate source | Toolchain service |
 |---|---|---|---|

@@ -53,7 +53,7 @@ go-vet: go vet ./...
 go-test: go test ./...
 ```
 
-With no detected toolchain, write the `gates` key by hand, as in [docs/setup.md](docs/setup.md) and [examples/](examples/). The lint packs call Biome and oxlint: `npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0`.
+With no detected toolchain, run `harness recipe apply <name>` with one of the recipes `go`, `nextjs`, `python` or `symfony`. It writes only the missing files. Or write the `gates` key by hand, as in [docs/setup.md](docs/setup.md) and [examples/](examples/). The lint packs call Biome and oxlint: `npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0`.
 
 Without the plugin, `harness init --host claude` (or `--host codex`) writes the gates, the lint files and the baseline, and installs the hooks. Do not use it with the plugin, or each hook runs twice. [`docs/configuration.md`](docs/configuration.md) explains every config key.
 
