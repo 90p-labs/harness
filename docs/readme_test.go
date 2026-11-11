@@ -49,7 +49,7 @@ func TestReadmeInstallOrder(t *testing.T) {
 const (
 	readmeMaxLines  = 170
 	headingLine     = "## "
-	firstRunHeading = "\n## Your first run\n"
+	firstRunHeading = "\n### Your first run\n"
 	readmeImagesDir = "docs/images/"
 	runsImagesDir   = "images/"
 
