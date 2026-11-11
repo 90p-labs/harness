@@ -120,11 +120,13 @@ The guard acts on each tool call of the agent. For example, a merge goes to `har
 
 `harness plan view` writes the plan as one self-contained HTML page, with the diagrams, the file trees, the tasks and the state of each proof. The run also rewrites it on every phase change. In `awaiting_approval` the page holds a reply box: Approve copies a reply for the agent, and you paste it into the chat.
 
-![The plan summary with the acceptance criteria and their proof state](images/plan-view-summary.png)
+The page has three panes: a sidebar with each section and its count, the main list, and a properties pane. The properties pane holds the track, the branch and the progress bars. `j` and `k` move through the list, and `⌘K` opens a palette to jump to any section.
 
-![The tech specs: a marked flowchart, a stateDiagram-v2 and a classDiagram](images/plan-view-specs.png)
+![The plan summary: the goal, the acceptance criteria with their proof state, and the properties pane](images/plan-view-summary.png)
 
-![The files, the tasks, the commits and the traceability matrix](images/plan-view-tasks.png)
+![The tech specs with their criteria, the change colors and a layout sketch](images/plan-view-specs.png)
+
+![The task board: one column for each wave, with the test first, the files, the DoD and the commit](images/plan-view-tasks.png)
 
 ## Multi-run plan
 
