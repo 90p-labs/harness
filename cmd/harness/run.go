@@ -238,7 +238,7 @@ func (g planGate) Keep(run domain.Run) error {
 	return os.WriteFile(keptPlanPath(g.worktree, run.ID), content, keptPlanMode)
 }
 
-func (g planGate) TreeOnly(run domain.Run, approvedHash string) (bool, error) {
+func (g planGate) StructureKept(run domain.Run, approvedHash string) (bool, error) {
 	kept, err := os.ReadFile(keptPlanPath(g.worktree, run.ID))
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
@@ -250,7 +250,7 @@ func (g planGate) TreeOnly(run domain.Run, approvedHash string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return plandomain.TreeOnlyAmend(string(kept), approvedHash, string(current)), nil
+	return plandomain.StructureKeptAmend(string(kept), approvedHash, string(current)), nil
 }
 
 func keptPlanPath(worktree, runID string) string {

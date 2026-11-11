@@ -29,7 +29,7 @@ const (
 	callHas    = "has"
 	callLatest = "latest"
 	callKeep   = "keep"
-	callTree   = "tree"
+	callKept   = "structure-kept"
 	callRow    = "row"
 	callRead   = "read"
 
@@ -130,13 +130,13 @@ func (f *fakeTrace) End(ctx context.Context, run domain.Run) {
 }
 
 type fakeGate struct {
-	journal     *journal
-	submission  domain.Submission
-	err         error
-	runs        []domain.Run
-	treeOnly    bool
-	treeOnlyErr error
-	treeHashes  []string
+	journal    *journal
+	submission domain.Submission
+	err        error
+	runs       []domain.Run
+	kept       bool
+	keptErr    error
+	keptHashes []string
 }
 
 func (f *fakeGate) Submit(_ context.Context, run domain.Run) (domain.Submission, error) {
@@ -155,10 +155,10 @@ func (f *fakeGate) Keep(domain.Run) error {
 	return nil
 }
 
-func (f *fakeGate) TreeOnly(_ domain.Run, hash string) (bool, error) {
-	f.journal.calls = append(f.journal.calls, callTree)
-	f.treeHashes = append(f.treeHashes, hash)
-	return f.treeOnly, f.treeOnlyErr
+func (f *fakeGate) StructureKept(_ domain.Run, hash string) (bool, error) {
+	f.journal.calls = append(f.journal.calls, callKept)
+	f.keptHashes = append(f.keptHashes, hash)
+	return f.kept, f.keptErr
 }
 
 type fakeApprovals struct {
@@ -451,7 +451,6 @@ func TestWaiverSubmitPlan(t *testing.T) {
 	}{
 		{"a waived plan skips the approval", planningRun(), domain.EventSubmitPlan, true, domain.PhaseWorking},
 		{"a plan with no waiver waits for the approval", planningRun(), domain.EventSubmitPlan, false, domain.PhaseAwaitingApproval},
-		{"an amend never takes the waiver", workingRun(), domain.EventAmend, true, domain.PhaseAwaitingApproval},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -464,6 +463,57 @@ func TestWaiverSubmitPlan(t *testing.T) {
 
 			if got := f.repo.saved[0].Phase; got != tc.wantPhase {
 				t.Fatalf("phase = %s, want %s", got, tc.wantPhase)
+			}
+		})
+	}
+}
+
+func TestWaiverAmend(t *testing.T) {
+	errRead := errors.New("read failed")
+	reviewing := domain.Run{ID: runID, Key: key, Phase: domain.PhaseReviewing, Version: startedAt}
+	shipping := domain.Run{ID: runID, Key: key, Phase: domain.PhaseShipping, Version: startedAt}
+	live := workingRun()
+	live.LiveRound = 1
+	cases := []struct {
+		name      string
+		run       domain.Run
+		latestOK  bool
+		latestErr error
+		waived    bool
+		wantPhase domain.Phase
+		wantCalls []string
+	}{
+		{"a waived amend with no approval row stays in working", workingRun(), false, nil, true, domain.PhaseWorking,
+			[]string{callActive, callGate, callLatest, callBefore, callSave, callAfter}},
+		{"an amend with no approval row and no waiver needs the approval", workingRun(), false, nil, false, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callBefore, callSave, callAfter}},
+		{"a waived amend with an approval row and a changed structure needs the approval", workingRun(), true, nil, true, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callKept, callBefore, callSave, callAfter}},
+		{"a waived amend from reviewing needs the approval", reviewing, false, nil, true, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}},
+		{"a waived amend from shipping needs the approval", shipping, false, nil, true, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}},
+		{"a waived amend with a live round needs the approval", live, false, nil, true, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callBefore, callSave, callAfter}},
+		{"a waived amend with a latest error needs the approval", workingRun(), false, errRead, true, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callBefore, callSave, callAfter}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixtureWith(tc.run, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3})
+			f.approvals.latest, f.approvals.latestOK, f.approvals.latestErr = "approved-hash", tc.latestOK, tc.latestErr
+			f.gate.submission.ApprovalWaived = tc.waived
+
+			if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: domain.EventAmend}); err != nil {
+				t.Fatal(err)
+			}
+
+			assertCalls(t, f, tc.wantCalls...)
+			if got := f.repo.saved[0].Phase; got != tc.wantPhase {
+				t.Fatalf("phase = %s, want %s", got, tc.wantPhase)
+			}
+			if len(f.approvals.saved) != 0 {
+				t.Fatalf("saved approvals = %v, want none", f.approvals.saved)
 			}
 		})
 	}
@@ -739,7 +789,7 @@ func TestApproveKeepsPlan(t *testing.T) {
 	}
 }
 
-func TestAmendTreeOnly(t *testing.T) {
+func TestAmendStructureKept(t *testing.T) {
 	errRead := errors.New("read failed")
 	const approvedHash = "approved-hash"
 	reviewing := domain.Run{ID: runID, Key: key, Phase: domain.PhaseReviewing, Version: startedAt}
@@ -751,15 +801,15 @@ func TestAmendTreeOnly(t *testing.T) {
 		run       domain.Run
 		latestOK  bool
 		latestErr error
-		treeOnly  bool
-		treeErr   error
+		kept      bool
+		keptErr   error
 		wantPhase domain.Phase
 		wantCalls []string
 	}{
-		{"a tree-only amend from working needs no approval", workingRun(), true, nil, true, nil, domain.PhaseWorking,
-			[]string{callActive, callGate, callLatest, callTree, callBefore, callSave, callAfter}},
-		{"a change outside the trees needs the approval", workingRun(), true, nil, false, nil, domain.PhaseAwaitingApproval,
-			[]string{callActive, callGate, callLatest, callTree, callBefore, callSave, callAfter}},
+		{"a kept-structure amend from working needs no approval", workingRun(), true, nil, true, nil, domain.PhaseWorking,
+			[]string{callActive, callGate, callLatest, callKept, callBefore, callSave, callAfter}},
+		{"a change of the structure needs the approval", workingRun(), true, nil, false, nil, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callKept, callBefore, callSave, callAfter}},
 		{"a live round needs the approval", live, true, nil, true, nil, domain.PhaseAwaitingApproval,
 			[]string{callActive, callGate, callBefore, callSave, callAfter}},
 		{"an amend from reviewing needs the approval", reviewing, true, nil, true, nil, domain.PhaseAwaitingApproval,
@@ -770,14 +820,14 @@ func TestAmendTreeOnly(t *testing.T) {
 			[]string{callActive, callGate, callLatest, callBefore, callSave, callAfter}},
 		{"a latest error needs the approval", workingRun(), false, errRead, true, nil, domain.PhaseAwaitingApproval,
 			[]string{callActive, callGate, callLatest, callBefore, callSave, callAfter}},
-		{"a tree check error needs the approval", workingRun(), true, nil, true, errRead, domain.PhaseAwaitingApproval,
-			[]string{callActive, callGate, callLatest, callTree, callBefore, callSave, callAfter}},
+		{"a structure check error needs the approval", workingRun(), true, nil, true, errRead, domain.PhaseAwaitingApproval,
+			[]string{callActive, callGate, callLatest, callKept, callBefore, callSave, callAfter}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixtureWith(tc.run, domain.Policy{ApprovalNeeded: true, MaxReviewRounds: 3})
 			f.approvals.latest, f.approvals.latestOK, f.approvals.latestErr = approvedHash, tc.latestOK, tc.latestErr
-			f.gate.treeOnly, f.gate.treeOnlyErr = tc.treeOnly, tc.treeErr
+			f.gate.kept, f.gate.keptErr = tc.kept, tc.keptErr
 
 			if err := f.handler.Handle(context.Background(), transition.Command{Key: key, Event: domain.EventAmend}); err != nil {
 				t.Fatal(err)
@@ -787,8 +837,8 @@ func TestAmendTreeOnly(t *testing.T) {
 			if got := f.repo.saved[0].Phase; got != tc.wantPhase {
 				t.Fatalf("phase = %s, want %s", got, tc.wantPhase)
 			}
-			if slices.Contains(tc.wantCalls, callTree) && !slices.Equal(f.gate.treeHashes, []string{approvedHash}) {
-				t.Fatalf("tree hashes = %v, want [%s]", f.gate.treeHashes, approvedHash)
+			if slices.Contains(tc.wantCalls, callKept) && !slices.Equal(f.gate.keptHashes, []string{approvedHash}) {
+				t.Fatalf("structure kept hashes = %v, want [%s]", f.gate.keptHashes, approvedHash)
 			}
 			if slices.Contains(tc.wantCalls, callKeep) {
 				t.Fatal("a waived amend must not keep the plan")

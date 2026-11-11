@@ -225,8 +225,10 @@ func TestHarnessSkillAmend(t *testing.T) {
 		"edit `plan.md` first, then run `harness run amend`",
 		"ask the `Plan` question again, then run `harness run approve`",
 		"With `run.approval: false`, the run goes to `working`",
-		"A tree-only amend skips the approval only in `working` with no live review round",
-		"from `reviewing` or `shipping`, it needs the `Plan` answer",
+		"A kept-structure amend needs a recorded approval and a kept structure",
+		"A docs-only amend needs a plan that took the docs-only waiver, with no recorded approval",
+		"Both skip the approval only in `working` with no live review round",
+		"Any other amend needs the `Plan` answer",
 		"`harness run plan` never follows an amend",
 	} {
 		if !strings.Contains(skill, want) {

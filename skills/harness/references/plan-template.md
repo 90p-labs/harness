@@ -144,12 +144,21 @@ A single-run plan has 6 tasks at most (rule `plan-size`). Split a change of more
 
 Split a change of about 800 changed lines in the same way. The plan has no line count, so the advisor estimates it. See `harness plan --help`.
 
-## Tree-only amend
+## Kept-structure amend
 
 An amend in `working` with no live round needs no new approval in 2 cases.
 
-1. The plan changes only inside the 2 tree fences.
-2. The plan adds or removes a test path in an `Owned files` line.
+Case (a) is a kept-structure amend. The run has a recorded approval, and the plan keeps its structure against `approved-plan.md`. The amend may change only these parts:
+
+- The tree fences.
+- A test path added or removed in an `Owned files` line.
+- The free text under `## Goal`. The `Track:` line is not free text.
+- Any line under `## Decisions`.
+- Under `## Tasks` only, the prose of `- Test first:` and of `- DoD:`. `Test first` keeps its backticked names, and `DoD` keeps its criterion numbers.
+
+Headings and fence lines are never free text.
+
+A sketch link anywhere counts as structure. The parsed `DoD` numbers must stay equal. The parsed test file and test name of each task must stay equal.
 
 A test path comes from a closed list:
 
@@ -157,6 +166,8 @@ A test path comes from a closed list:
 - A Python name that starts with `test_` or ends in `_test.py`.
 - A JavaScript or TypeScript name with `.test.` or `.spec.` before its code extension.
 - A data file under a folder named exactly `testdata`, with the extension `.md`, `.json`, `.jsonl`, `.txt`, `.yaml`, `.yml` or `.golden`.
+
+Case (b) is a docs-only amend. The run has no recorded approval, usually because its plan took the docs-only waiver. The plan still has only `docs` commits and no open question. An approved plan relabeled to `docs` commits still needs approval. A docs-only amend has no approved copy to compare, so it may change the structure while the plan stays docs-only, like a fresh docs-only plan.
 
 Any other change needs the approval. This includes an amend from `reviewing` or `shipping`.
 
