@@ -44,6 +44,11 @@ const (
 	selfCheckProofHeader  = "| # | Proof | Exit |"
 	selfCheckWorkerText   = "the first model of the `worker` role"
 	selfCheckEvidenceText = "<criterion or file:line>"
+	selfCheckKeepPlanText = "The worker does not change a value, a name or a limit that `plan.md` sets. When a fix needs one, the worker writes `open` with `plan conflict:` in the evidence."
+	selfCheckLeadText     = "The lead takes each such row, and trims the fix or amends the plan."
+	selfCheckOtherText    = "Each other `open` check goes to a fix worker."
+	selfCheckConflictText = "A plan conflict in the report goes to the lead in place of a new worker."
+	selfCheckPlanPathText = "Give each worker, also a fix worker, the path of `plan.md`."
 	resultPass            = "`pass`"
 	resultFixed           = "`fixed`"
 	resultOpen            = "`open`"
@@ -177,6 +182,8 @@ func TestSkillSelfCheckStep(t *testing.T) {
 	pins := []string{
 		reviewerChecklistText, proofCommandText, proofPipeEscapeText,
 		selfCheckHeadText, selfCheckProofHeader, selfCheckWorkerText, selfCheckEvidenceText,
+		selfCheckKeepPlanText, selfCheckLeadText, selfCheckOtherText,
+		selfCheckConflictText, selfCheckPlanPathText,
 		resultPass, resultFixed, resultOpen,
 	}
 	for _, want := range append(pins, selfCheckIDs...) {

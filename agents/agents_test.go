@@ -29,6 +29,11 @@ const (
 	binaryName    = "harness"
 	helpFlag      = "--help"
 	workerFixLine = "For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test."
+	workerIntro   = "You implement one task of a plan, one fix or one self-check. The lead gives you the path of the harness binary, the path of `plan.md` and one input."
+	workerCheck   = "For a self-check, the lead gives the self-check brief of the harness skill."
+	workerTask    = "For a task, the lead gives the number of the task."
+	workerRead    = "For a fix, read the file of each finding, its test and the values that `plan.md` sets for them."
+	workerPlan    = "Keep each value, name and limit that `plan.md` sets. When your change needs another one, skip that change, name the conflict in the report and end with `ISSUES`. In a self-check, write the conflict as `open` in `self-check.md`, with `plan conflict:` in the evidence."
 )
 
 var (
@@ -114,7 +119,7 @@ func TestAgentBriefsPinReviewRound(t *testing.T) {
 	for path, wants := range map[string][]string{
 		reviewerAgent: {findingLine, filesReadLine, reReviewTitle, standardsRule, reviewAnswer},
 		verifierAgent: {verifierLine},
-		workerFile:    {workerFixLine},
+		workerFile:    {workerIntro, workerTask, workerFixLine, workerCheck, workerRead, workerPlan},
 	} {
 		raw := repository.Read(t, path)
 		for _, want := range wants {

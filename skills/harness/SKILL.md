@@ -53,11 +53,11 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
 4. `working`: you are the driver. You do not write the code of a task. `harness plan check` gives the waves (only for a clean single-run plan) and the model of each task.
    - A light-track run can use `sonnet` as the lead. `harness plan check` prints `advisor: off (light track)` on a light track. The text `(light track, risky path)` on the `on` line marks a light-track plan with a guard, security or hook path. On a light track, the lead does not ask a `sonnet` session to switch.
-   - For each wave, start one `worker` agent for each task, in the background, with the `model` field set to the `Model` of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap.
+   - For each wave, start one `worker` agent for each task, in the background, with the `model` field set to the `Model` of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap. Give each worker, also a fix worker, the path of `plan.md`.
    - Use low effort for a haiku task that is mundane: docs, a rename or a config change.
    - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.
    - Read a diff with `git diff --stat` first, then only the files that you check. Read a long output through `tail`, with `set -o pipefail` so that the exit code stays. Example: `set -o pipefail; go test ./... 2>&1 | tail -n 40`.
-   - Send a failed task once to a new `worker` agent, with the same `model` field.
+   - Send a failed task once to a new `worker` agent, with the same `model` field. A plan conflict in the report goes to the lead in place of a new worker. The lead trims the task or amends the plan.
    - Commit in plan order, one commit for each task.
    - Run `harness verify --commits <default branch>` in the foreground, with a Bash timeout of 600000 ms (600 s). When it does not fit in 600 s, run it in the background.
    - Self-check: start one `worker` agent with the `model` field set to the first model of the `worker` role. It reads `git diff <default branch>...HEAD`, the lens checklists of `agents/reviewer.md` and `plan.md`. It runs each proof command of `## Acceptance criteria`. A `|` in a proof command is written `\|` in the proof table.
@@ -84,7 +84,8 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - `spec-text`: each changed doc sentence agrees with the code and with the other docs.
    - `standards-rules`: the diff follows `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md` and the lint rules.
    - `standards-judgement`: edge cases, error paths, leaks, dead code and code smells.
-   - The worker fixes each miss test first. The lead commits each fix with `git commit --fixup=<sha>`, rebases with autosquash, and runs `harness verify --commits <default branch>` again. An `open` check goes to a fix worker.
+   - The worker does not change a value, a name or a limit that `plan.md` sets. When a fix needs one, the worker writes `open` with `plan conflict:` in the evidence. The lead takes each such row, and trims the fix or amends the plan.
+   - The worker fixes each miss test first. The lead commits each fix with `git commit --fixup=<sha>`, rebases with autosquash, and runs `harness verify --commits <default branch>` again. Each other `open` check goes to a fix worker.
    - Run plain `harness verify` after the last commit. It records the proofs that `harness run review` needs, and `verify --commits` does not.
    - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`. The command refuses a run folder with no `self-check.md` or no `Head: <sha>` line.
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
