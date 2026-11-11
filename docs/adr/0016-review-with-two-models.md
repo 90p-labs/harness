@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09. ADR 0017 replaces its third-reviewer rule. ADR 0018 replaces its round rule. Ship now needs every listed reviewer model of the host, and the floor of 2 models stays.
+Accepted, 2026-11-09. ADR 0017 replaces its third-reviewer rule. ADR 0018 replaces its round rule. Ship now needs every listed reviewer model of the host, and the floor of 2 models stays. Issue #90 adds a light panel: a light track with no guard, security or hook path gets one reviewer and a floor of 1 model.
 
 ## Context
 

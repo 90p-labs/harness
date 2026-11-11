@@ -264,11 +264,17 @@ plugins:
 
 The models of each agent role on each host. A host maps to a list of models, and a single model still loads as a list of one. The guard rule `agent-model-routing` denies an agent call whose model is not in the list of its role. A role with no model for the host is not checked.
 
-The rule `review-models` needs a counted review of every model of the final panel, and at least 2 models. The panel is every reviewer model of the host list, unless a small panel applies. A review counts when it read a changed file and it matches `HEAD`, the patch id, or the current run. The ship transition carries no host, so the rule picks the host list with the most recorded models.
+The rule `review-models` needs a counted review of every model of the final panel. It needs at least 2 models, or 1 model on a light panel. The panel is every reviewer model of the host list, unless a small or light panel applies. A review counts when it read a changed file and it matches `HEAD`, the patch id, or the current run. The ship transition carries no host, so the rule picks the host list with the most recorded models.
 
 The small panel is the first 2 reviewer models plus the models in the `Model` cell of the findings that the last `request-rework` reason names. It applies only when the last rework event is a `request-rework` and the fixup is at most `run.panel_fixup_lines` lines. Every named blocker or major finding needs a listed model in its `Model` cell. The fixup is the added plus deleted lines from the last `HEAD` that every listed model reviewed. Any missing fact gives every listed model. `harness review panel` prints the panel and the reason.
 
-A host that lists a `reviewer` role needs 2 or more models there, or `review-models` in `guard.disabled`. With one listed model, `harness run ship` is denied and the next step names `roles.reviewer`.
+A light panel applies to a light track with no guard, security or hook path. Both `plan.md` and `approved-plan.md` of the run must declare the light track, or an empty `Track:` when the changed tree classifies light. The code tree of the plan and the tree of the changed files must both classify light by the same rule. It needs fewer than 3 folders, no `domain`, `migrations`, `command` or `query` folder, and no `.sql` file. The changed files must also touch no guard, security or hook path.
+
+The approved copy must also match the latest approval record of the run. A run with no approval record never gets a light panel. Examples are a plan with only `docs` commits, which skips approval, and a run with `run.approval: false`.
+
+On a light panel, `harness review panel` prints one model, the first listed, with the reason `light panel: light track with no guard, security or hook path`. A light panel has a floor of 1 model, and the lead writes `self-check.md` with no self-check worker. No verifier runs. The base (`git.default_branch`, or origin HEAD) must name a local or origin branch. A tag or a revision such as `HEAD~1` gives the full panel.
+
+On a full panel, a host that lists a `reviewer` role needs 2 or more models there, or `review-models` in `guard.disabled`. With one listed model, `harness run ship` is denied on a full panel, and the next step names `roles.reviewer`. A light panel ships with one model.
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
@@ -331,7 +337,7 @@ The rule ids:
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` before `harness verify --commits` passes for `HEAD` |
 | `approval-no-forge` | `tool.before` | A question tool call with answers in its input, or a shell call of `harness hook` |
 | `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`). In `shipping`, the turn may end once `harness run wait --pr` records the pull request |
-| `review-models` | `run.transition.before` | `harness run ship` when a model of the final panel has no counted review, or fewer than 2 models have a record. The rule picks the host list with the most recorded models. A hook records the review when a `reviewer` agent stops in the reviewing phase, in the common list and in the final panel. A review counts only when its transcript shows a read of a changed file, and the deny names the model that did not. A verifier call and a re-review write no record. A Codex repository turns it off, because Codex sends no model in an agent call |
+| `review-models` | `run.transition.before` | `harness run ship` when a model of the final panel has no counted review, or fewer than 2 models have a record (1 on a light panel). The rule picks the host list with the most recorded models. A hook records the review when a `reviewer` agent stops in the reviewing phase, in the common list and in the final panel. A review counts only when its transcript shows a read of a changed file, and the deny names the model that did not. A verifier call and a re-review write no record. A Codex repository turns it off, because Codex sends no model in an agent call |
 | `review-findings` | `run.transition.before` | `harness run ship` while `findings.md` of the run has a real open blocker or major finding. With `run.strict_minor` on, a real open minor finding also denies. A missing file allows |
 
 ```yaml
