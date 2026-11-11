@@ -65,7 +65,7 @@ func (passingGate) Hash(domain.Run) (string, error) { return "", nil }
 
 func (passingGate) Keep(domain.Run) error { return nil }
 
-func (passingGate) TreeOnly(domain.Run, string) (bool, error) { return false, nil }
+func (passingGate) StructureKept(domain.Run, string) (bool, error) { return false, nil }
 
 type noApprovals struct{ domain.ApprovalRepository }
 

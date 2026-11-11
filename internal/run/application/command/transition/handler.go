@@ -89,7 +89,7 @@ func (f Flow) Move(ctx context.Context, run domain.Run, cmd domain.Command) (err
 		if cmd.Event == domain.EventSubmitPlan && submission.ApprovalWaived {
 			policy.ApprovalNeeded = false
 		}
-		if cmd.Event == domain.EventAmend && policy.ApprovalNeeded && run.Phase == domain.PhaseWorking && run.LiveRound == 0 && f.treeOnly(ctx, run) {
+		if f.amendSkipsApproval(ctx, run, cmd, policy, submission) {
 			policy.ApprovalNeeded = false
 		}
 		if cmd.Event == domain.EventApprovePlan && submission.QuestionsOpen {
@@ -161,13 +161,25 @@ func (f Flow) approved(ctx context.Context, run domain.Run, cmd domain.Command) 
 	return cmd, hash, nil
 }
 
-func (f Flow) treeOnly(ctx context.Context, run domain.Run) bool {
+func (f Flow) amendSkipsApproval(ctx context.Context, run domain.Run, cmd domain.Command, policy domain.Policy, submission domain.Submission) bool {
+	return cmd.Event == domain.EventAmend && policy.ApprovalNeeded && run.Phase == domain.PhaseWorking && run.LiveRound == 0 && f.amendSkipsApprovalCase(ctx, run, submission)
+}
+
+func (f Flow) amendSkipsApprovalCase(ctx context.Context, run domain.Run, submission domain.Submission) bool {
 	hash, ok, err := f.approvals.Latest(ctx, run.ID)
-	if err != nil || !ok {
+	if err != nil {
+		trace.SpanFromContext(ctx).RecordError(err)
 		return false
 	}
-	only, err := f.gate.TreeOnly(run, hash)
-	return err == nil && only
+	if !ok {
+		return submission.ApprovalWaived
+	}
+	kept, err := f.gate.StructureKept(run, hash)
+	if err != nil {
+		trace.SpanFromContext(ctx).RecordError(err)
+		return false
+	}
+	return kept
 }
 
 type Handler struct {
