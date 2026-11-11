@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"reflect"
 	"slices"
 	"sync"
 	"testing"
@@ -181,7 +182,7 @@ func TestVerifyCommits(t *testing.T) {
 		{SHA: "b2b2b2", Type: domain.CommitTypeFix, Passed: true},
 		{SHA: headSHA, Type: "chore", Passed: true},
 	}
-	if !slices.Equal(result.Commits, want) {
+	if !reflect.DeepEqual(result.Commits, want) {
 		t.Fatalf("commits = %+v, want %+v", result.Commits, want)
 	}
 	if !slices.Equal(f.commits.added, []string{"a1a1a1", "b2b2b2", headSHA}) {

@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 const (
@@ -11,10 +12,18 @@ const (
 	CommitTypeFix  = "fix"
 )
 
+type GateFailure struct {
+	Gate     string
+	Status   Status
+	Duration time.Duration
+	Tail     string
+}
+
 type CommitResult struct {
 	SHA    string
 	Type   string
 	Passed bool
+	Failed []GateFailure
 }
 
 func CommitType(subject string) string {
@@ -31,7 +40,7 @@ func JudgeCommits(commits []CommitResult) error {
 	for i, c := range commits {
 		if c.Type != CommitTypeTest || !testsMustFail {
 			if !c.Passed {
-				return fmt.Errorf("%w: commit %s (%s) must pass", ErrCommitRule, c.SHA, c.Type)
+				return fmt.Errorf("%w: commit %s (%s) must pass%s", ErrCommitRule, c.SHA, c.Type, failedSuffix(c.Failed))
 			}
 			continue
 		}
@@ -43,6 +52,17 @@ func JudgeCommits(commits []CommitResult) error {
 		}
 	}
 	return nil
+}
+
+func failedSuffix(failed []GateFailure) string {
+	if len(failed) == 0 {
+		return ""
+	}
+	ids := make([]string, len(failed))
+	for i, f := range failed {
+		ids[i] = f.Gate
+	}
+	return ": failed " + strings.Join(ids, ", ")
 }
 
 func hasImplementation(commits []CommitResult) bool {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/90p-labs/harness/internal/gate/domain"
 )
@@ -101,6 +102,54 @@ func TestJudgeCommits(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.wantSHA) {
 				t.Fatalf("error %q does not name %s", err, tc.wantSHA)
+			}
+		})
+	}
+}
+
+func TestJudgeCommitsNamesTheFailedGates(t *testing.T) {
+	failed := []domain.GateFailure{
+		{Gate: "test", Status: domain.StatusFail, Duration: 12 * time.Millisecond, Tail: "FAIL: TestWidget"},
+		{Gate: "lint", Status: domain.StatusVetoed},
+	}
+	cases := []struct {
+		name    string
+		commits []domain.CommitResult
+		want    string
+		absent  string
+	}{
+		{
+			name:    "must pass names the failed gates in order",
+			commits: []domain.CommitResult{{SHA: "a1", Type: domain.CommitTypeFeat, Failed: failed}},
+			want:    "commit a1 (feat) must pass: failed test, lint",
+		},
+		{
+			name:    "must pass with no failed gates keeps the message",
+			commits: []domain.CommitResult{{SHA: "a1", Type: domain.CommitTypeFeat}},
+			want:    "commit a1 (feat) must pass",
+			absent:  "failed",
+		},
+		{
+			name: "other messages do not name gates",
+			commits: []domain.CommitResult{
+				{SHA: "a1", Type: domain.CommitTypeTest, Passed: true},
+				{SHA: "b2", Type: domain.CommitTypeFeat, Passed: true},
+			},
+			want:   "commit a1 (test) must fail before the code that fixes it",
+			absent: "failed ",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := domain.JudgeCommits(tc.commits)
+			if !errors.Is(err, domain.ErrCommitRule) {
+				t.Fatalf("error = %v, want ErrCommitRule", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err, tc.want)
+			}
+			if tc.absent != "" && strings.Contains(strings.TrimPrefix(err.Error(), domain.ErrCommitRule.Error()), tc.absent) {
+				t.Fatalf("error %q contains %q", err, tc.absent)
 			}
 		})
 	}
