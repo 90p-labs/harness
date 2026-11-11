@@ -233,8 +233,8 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 
 | Rule | Event | Denies |
 |---|---|---|
-| `pr-no-merge` | `tool.before` | `gh pr merge` |
-| `pr-draft-only` | `tool.before` | `gh pr create` without `--draft` |
+| `pr-no-merge` | `tool.before` | `gh pr merge`. `harness pr policy` prints `merge: user` while this rule is on |
+| `pr-draft-only` | `tool.before` | `gh pr create` without `--draft`, and `gh pr ready`. `harness pr policy` prints `draft: required` while this rule is on |
 | `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. `harness pr body [--base <ref>]` prints a body skeleton. It has placeholders for the bottom line and Why. What lists the commit subjects over the base. How holds the mermaid fences of the active run plan. The base defaults to the default branch. A `--base` that starts with `-` is a usage error. |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch |
@@ -691,7 +691,7 @@ The track comes from `Classify`. It is `full` when the code tree touches 3 or mo
 
 The state file is `.harness/state.db` in the git common dir, so each linked worktree shares it. The DBAL base dir is the common dir, and the default DSN `sqlite:.harness/state.db` is relative to it.
 
-Only a `run` command, `plan check`, `pr body` and `report` load the config. Only a `run` command, `plan check` without `--file`, and `report` open the store. `report` reads only the active run, and an error gives the run line `none`. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
+Only a `run` command, `plan check`, `pr body`, `pr policy` and `report` load the config. Only a `run` command, `plan check` without `--file`, and `report` open the store. `report` reads only the active run, and an error gives the run line `none`. `cmd/harness` gives `cli.NewCommand` a connect function, which returns `cli.Handlers{Key, Start, Transition, Status}`, built by `run.NewModule`. So `harness version` and `harness config` need no store.
 
 `cmd/harness` wraps the `Args` of every command in a usage error, and a command with no `Args` takes none. A `run` command checks its required flag in its `Args` function, because cobra checks `MarkFlagRequired` after the `Args` step.
 
@@ -1186,7 +1186,7 @@ WAIVED ddd/file-suffix: the binary fixtures prove the built-in rule.
 
 ## Go-live
 
-Kodify stops at the pull request. The harness follows the run to production. The `live` module takes the run from the draft PR to a healthy release, or back to planning.
+Kodify stops at the pull request. The harness follows the run to production. The `live` module takes the run from the pull request to a healthy release, or back to planning.
 
 With `Policy.GoLive` on, `complete` moves the run to `releasing`. The merge and deploy records move it on. A regression in `releasing` or `observing` sends the same run back to `planning`. A repo with no deploy turns go-live off.
 

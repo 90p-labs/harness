@@ -90,7 +90,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`. The command refuses a run folder with no `self-check.md` or no `Head: <sha>` line.
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
 5. `reviewing`: on entering `reviewing`, and after `harness run rework`, read `references/reviewing.md` and follow it.
-6. `shipping`: start the `pr-open` skill. It pushes the branch and opens the pull request as a draft, with the body Why, What and How. The user merges it. Then run `harness run report`, then `harness run done --pr <url>`.
+6. `shipping`: start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body Why, What and How. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run report`, then `harness run done --pr <url>`.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
 
@@ -98,6 +98,6 @@ To change the approved plan, edit `plan.md` first, then run `harness run amend`.
 
 ## Guard
 
-The guard denies some calls, for example a merge, a forced push, a read of a secret or a push before `verify --commits`. Read the deny reason and do the step that it names. Do not work around a deny with another command.
+The guard denies some calls, for example a merge by default, a forced push, a read of a secret or a push before `verify --commits`. Read the deny reason and do the step that it names. Do not work around a deny with another command.
 
 On Codex, the agent call has no `model` field. Leave it out: the guard lets the call pass.

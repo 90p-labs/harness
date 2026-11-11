@@ -219,6 +219,37 @@ func TestHarnessSkillHandoff(t *testing.T) {
 	}
 }
 
+func TestHarnessShippingPolicy(t *testing.T) {
+	skill := repository.Read(t, skillFile)
+	_, step, found := strings.Cut(skill, "6. `shipping`")
+	if !found {
+		t.Fatalf("%s has no shipping item", skillFile)
+	}
+	step, _, _ = strings.Cut(step, "\n")
+	for _, want := range []string{"harness pr policy", "merge: user", "merge: agent", "checks pass"} {
+		if !strings.Contains(step, want) {
+			t.Errorf("%s: the shipping step does not name %q", skillFile, want)
+		}
+	}
+	if report, done := strings.Index(step, "harness run report"), strings.Index(step, "harness run done --pr <url>"); report < 0 || done < report {
+		t.Errorf("%s: the shipping step must run harness run report, then harness run done --pr <url>", skillFile)
+	}
+	for _, want := range []string{
+		"With `merge: user`, the user merges.",
+		"With `draft: optional` and `merge: agent`, the agent merges after the checks pass.",
+		"In every other case, the user merges.",
+	} {
+		if !strings.Contains(step, want) {
+			t.Errorf("%s: the shipping step does not say %q", skillFile, want)
+		}
+	}
+	for _, old := range []string{"The user merges it.", "as a draft, with", "With `merge: agent`, the agent merges"} {
+		if strings.Contains(step, old) {
+			t.Errorf("%s: the shipping step still says %q", skillFile, old)
+		}
+	}
+}
+
 func TestHarnessSkillAmend(t *testing.T) {
 	skill := repository.Read(t, skillFile)
 	for _, want := range []string{

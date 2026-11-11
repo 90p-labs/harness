@@ -1,6 +1,6 @@
 ---
 name: pr-open
-description: "Opens the pull request of a branch as a draft, or edits the body of the open one. The body starts with a bottom line, then answers Why, What and How, in this order. How holds the plan diagrams and the visuals of the done tasks. Use in the ship step of the harness loop, or when the user types /90p:pr-open (Codex: $90p:pr-open)."
+description: "Opens the pull request of a branch, as a draft or ready by the pull request policy, or edits its body. The body starts with a bottom line, then answers Why, What and How, in this order. How holds the plan diagrams and the visuals of the done tasks. Use in the ship step of the harness loop, or when the user types /90p:pr-open (Codex: $90p:pr-open)."
 argument-hint: "[base branch]"
 ---
 
@@ -18,8 +18,8 @@ Start: run harness version ("Binary"), then step 1
 ├── no run → step 2 applies the visual table to the changed files
 ├── a UI change → the wireframe row of the visual table
 ├── a visual to draw → references/visuals.md shows each kind
-├── no pull request for the branch → step 4 creates a draft
-├── a merged or closed pull request for the branch → step 4 creates a new draft
+├── no pull request for the branch → step 4 creates it, as a draft or ready by the policy
+├── a merged or closed pull request for the branch → step 4 creates a new one by the policy
 ├── an open pull request → step 4 edits its body
 └── the guard denies the body → fix the body file of step 3, and run the command again
 ```
@@ -92,11 +92,20 @@ The change adds no diagram.
 
 ## 4. Open or edit the pull request
 
-1. Run `harness verify --commits <base>`. The guard denies a push and a create before it passes.
-2. Run `harness pr check --body-file <literal absolute path of the body file>`. Fix every problem that it prints. Write the path as a literal, not as a variable.
-3. Push the branch: `git push -u origin HEAD`.
-4. Run `gh pr view --json url,state`. A failed call means no pull request. Only with `state` `OPEN`, run `gh pr edit <url> --body-file <body>`, with the `url` field.
-5. With no pull request, or with a `MERGED` or `CLOSED` one, run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file <body>`.
-6. Report the URL. Do not mark the pull request ready and do not merge it.
+1. Run `harness pr policy`. It prints `draft: required` or `draft: optional`, then `merge: user` or `merge: agent`. If `harness pr policy` fails, keep the draft, and the user merges.
+2. Run `harness verify --commits <base>`. The guard denies a push and a create before it passes.
+3. Run `harness pr check --body-file <literal absolute path of the body file>`. Fix every problem that it prints. Write the path as a literal, not as a variable.
+4. Push the branch: `git push -u origin HEAD`.
+5. Run `gh pr view --json url,state,isDraft`. A failed call means no pull request. Only with `state` `OPEN`, run `gh pr edit <url> --body-file <body>`, with the `url` field.
+6. With no pull request, or with a `MERGED` or `CLOSED` one, create it by the `draft` line of the policy.
+   - `draft: required`, or a failed policy: run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file <body>`.
+   - `draft: optional`: run the same command without `--draft`.
+7. With `draft: optional` and an open draft, run `gh pr ready <url>`. With `draft: required`, leave the draft as it is.
+8. Act on the `merge` line, after the create or the ready.
+   - `draft: required` with `merge: agent`: report the URL. The user marks it ready and merges, because the guard denies `gh pr ready`.
+   - A failed `harness pr policy`: report the URL. The user merges.
+   - `merge: user`: report the URL. The user merges.
+   - `draft: optional` with `merge: agent`: run `gh pr checks <url>`. Only when it exits 0, run `gh pr merge <url> --squash`. A failed, pending or missing check means stop and report.
+9. Report the URL and the state. The merge comes before `harness run report` and `harness run done --pr <url>` of the harness skill.
 
 When the guard denies the body, read the reason, fix the body file and run the command again.
