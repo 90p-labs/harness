@@ -33,7 +33,7 @@ cover:
 check:
 	test -z "$$(gofmt -l .)"
 	go vet ./...
-	go test ./...
+	$(MAKE) cover
 
 # Claude Code copies the plugin folder into its cache, so the binary must be in dist/ before the install.
 install-claude:
