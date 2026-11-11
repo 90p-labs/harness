@@ -25,8 +25,8 @@ These terms have one meaning in the code, the docs and the plans.
 - **Verifier**: one agent per review round that checks every finding and returns one line per finding, `real` or `not real`. It never edits a file and writes no review record.
 - **Re-review**: one `reviewer` agent that reads all the fixup diffs of a round and answers `closed` or `open` for each. It runs in `working` and writes no review record.
 - **Final panel**: the models that review the final `HEAD` after a rework. It is every listed `reviewer` model, or fewer after a small fixup. `harness review panel` prints it.
-- **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`.
-- **Tree-only amend**: an `amend` that skips the approval. It starts in `working` with no live round, and changes only the tree fences or the test paths of an `Owned files` line.
+- **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`. A docs-only amend in `working` skips it too, when the run has no recorded approval.
+- **Kept-structure amend**: an `amend` that skips the approval. It starts in `working` with no live round, and the plan keeps its structure against the approved plan. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names of `Test first` and the `DoD` numbers. A sketch link anywhere counts as structure.
 - **Review risk**: a line of `## Review risks` that names a risk. It points to a test name or to a decision.
 - **Threat model**: the section that names the attacker, the input forms and the fail-closed rule. A tree path with a `guard` or `security` folder needs it.
 

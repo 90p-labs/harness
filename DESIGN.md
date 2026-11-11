@@ -42,9 +42,11 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 
 A run moves through phases. The transition table is deterministic: a row is `(from, event, guard) -> to`. The guards of one `(from, event)` pair exclude each other, so only one row applies.
 
-`Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver. A waiver means every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` takes the waiver only as a tree-only amend. The run must start in `working` and have no live round. The plan may change only in the 2 tree fences, or by a test path added or removed in an `Owned files` line.
+`Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver. A waiver means every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` skips the approval only as a kept-structure amend or as a docs-only amend, and only the docs-only amend is a waiver. The run must start in `working` and have no live round. A kept-structure amend needs a recorded approval, and a docs-only amend needs none.
 
-The approve step keeps a copy of the plan, `approved-plan.md`, in the run folder. The copy counts only when its sha256 is the hash of the latest `plan_approvals` row of the run. A waived amend does not replace the copy. The plan domain holds the closed test path list. A path that is not in clean form, or that has a `..` segment, is never a test path. A path is a test path when it has one of these forms:
+A kept-structure amend keeps the structure of `approved-plan.md`. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names of `Test first` and the `DoD` numbers. A sketch link anywhere counts as structure. A docs-only amend needs the plan to keep only `docs` commits and no open question.
+
+The approve step keeps a copy of the plan, `approved-plan.md`, in the run folder. The copy counts only when its sha256 is the hash of the latest `plan_approvals` row of the run. An amend that skips the approval does not replace the copy. The plan domain holds the closed test path list. A path that is not in clean form, or that has a `..` segment, is never a test path. A path is a test path when it has one of these forms:
 
 - A Go file that ends in `_test.go`.
 - A Python file that starts with `test_` or ends in `_test.py`.
@@ -662,6 +664,8 @@ The `plan`, `amend` and `approve` events go through the `PlanGate` port of the r
 4. It returns a `Submission` with the plan track, the docs-only waiver and a flag for open questions. `Apply` keeps the stricter of the run track and the plan track, so the track never goes down.
 
 `cmd/harness` gives `run.NewModule` an adapter of the plan module as the `PlanGate`. The run context and the plan context never import each other. `PlanGate.Hash` returns the SHA-256 of `plan.md` in hex, so the run domain reads no file.
+
+`PlanGate.StructureKept` tells the run whether an `amend` is a kept-structure amend against `approved-plan.md`. The run asks it only when a recorded approval exists. Without one, the docs-only waiver decides.
 
 The plan approval is a record of the user answer, not a chat reply:
 

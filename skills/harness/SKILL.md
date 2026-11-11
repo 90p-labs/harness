@@ -94,7 +94,11 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
 
-To change the approved plan, edit `plan.md` first, then run `harness run amend`. When approval is needed, the run goes to `awaiting_approval`: ask the `Plan` question again, then run `harness run approve`. With `run.approval: false`, the run goes to `working` with no `Plan` answer. A tree-only amend skips the approval only in `working` with no live review round; from `reviewing` or `shipping`, it needs the `Plan` answer. `harness run plan` never follows an amend.
+To change the approved plan, edit `plan.md` first, then run `harness run amend`. When approval is needed, the run goes to `awaiting_approval`: ask the `Plan` question again, then run `harness run approve`. With `run.approval: false`, the run goes to `working` with no `Plan` answer.
+
+A kept-structure amend needs a recorded approval and a kept structure. A docs-only amend needs a plan that took the docs-only waiver, with no recorded approval. Both skip the approval only in `working` with no live review round. Any other amend needs the `Plan` answer. `harness run plan` never follows an amend.
+
+A kept-structure amend may change the prose of Goal, Decisions, Test first and DoD, the tree fences and the test paths. See `references/plan-template.md` for the rule.
 
 ## Guard
 

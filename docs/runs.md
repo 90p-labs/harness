@@ -211,7 +211,13 @@ stateDiagram-v2
     abandoned --> [*]
 ```
 
-With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes to `working`. A plan with only `docs` commits and `- none` under `## Open questions` also skips the approval on `submit-plan`. An `amend` skips it only as a tree-only amend. Only an `amend` in the `working` phase takes this waiver. `DESIGN.md` states the conditions. `docs/go-live.md` describes `releasing` and `observing`.
+With `run.approval` off, `amend` from `working`, `reviewing` or `shipping` goes to `working`. A plan with only `docs` commits and `- none` under `## Open questions` also skips the approval on `submit-plan`.
+
+An `amend` skips it only as a kept-structure amend or a docs-only amend. A docs-only amend has no approved copy to compare, so it may change the structure while the plan stays docs-only, like a fresh docs-only plan.
+
+Some runs have no approval row for another reason. A run approved before approvals were recorded has none. A run planned with `run.approval: false` has none. A docs-only amend skips approval on these runs too.
+
+Only an `amend` in the `working` phase skips the approval. `DESIGN.md` states the conditions. `docs/go-live.md` describes `releasing` and `observing`.
 
 | Part | Where it acts |
 |---|---|
