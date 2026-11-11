@@ -85,6 +85,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - `standards-rules`: the diff follows `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md` and the lint rules.
    - `standards-judgement`: edge cases, error paths, leaks, dead code and code smells.
    - The worker fixes each miss test first. The lead commits each fix with `git commit --fixup=<sha>`, rebases with autosquash, and runs `harness verify --commits <default branch>` again. An `open` check goes to a fix worker.
+   - Run plain `harness verify` after the last commit. It records the proofs that `harness run review` needs, and `verify --commits` does not.
    - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`. The command refuses a run folder with no `self-check.md` or no `Head: <sha>` line.
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
 5. `reviewing`: on entering `reviewing`, and after `harness run rework`, read `references/reviewing.md` and follow it.
