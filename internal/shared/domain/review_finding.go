@@ -57,6 +57,8 @@ type ReviewFinding struct {
 	Severity ReviewSeverity
 	Verdict  FindingVerdict
 	Status   FindingStatus
+	// Model is the optional Model cell: the reviewer model that raised the finding.
+	Model string
 }
 
 const (
@@ -64,6 +66,7 @@ const (
 	columnSeverity = "severity"
 	columnVerdict  = "verdict"
 	columnStatus   = "status"
+	columnModel    = "model"
 	tableBar       = "|"
 )
 
@@ -197,6 +200,9 @@ func findingOf(cells []string, columns map[string]int) (ReviewFinding, error) {
 		Severity: ReviewSeverity(values[1]),
 		Verdict:  FindingVerdict(values[2]),
 		Status:   FindingStatus(values[3]),
+	}
+	if at, ok := columns[columnModel]; ok && at < len(cells) {
+		finding.Model = cells[at]
 	}
 	switch {
 	case finding.ID == "":

@@ -37,7 +37,9 @@ const (
 	keyMaxLiveRounds    = "run.max_live_rounds"
 	keyMaxStopBlocks    = "run.max_stop_blocks"
 	keyStrictMinor      = "run.strict_minor"
+	keyPanelFixupLines  = "run.panel_fixup_lines"
 	keyPlugins          = "plugins"
+	keyHooksMatched     = "hooks.matched"
 	keyRoles            = "roles"
 	keyGuardDisabled    = "guard.disabled"
 	keyDeployDisabled   = "deploy.disabled"
@@ -64,6 +66,8 @@ const (
 	defaultStateDSN = "sqlite:.harness/state.db"
 	defaultRounds   = 3
 	defaultParallel = 1
+
+	defaultPanelFixupLines = 80
 )
 
 type Config struct {
@@ -79,6 +83,11 @@ type Config struct {
 	Verify  Verify              `mapstructure:"verify"`
 	Lint    Lint                `mapstructure:"lint"`
 	Live    Live                `mapstructure:"live"`
+	Hooks   Hooks               `mapstructure:"hooks"`
+}
+
+type Hooks struct {
+	Matched bool `mapstructure:"matched"`
 }
 
 type Live struct {
@@ -153,6 +162,7 @@ type Run struct {
 	MaxLiveRounds   int  `mapstructure:"max_live_rounds"`
 	MaxStopBlocks   int  `mapstructure:"max_stop_blocks"`
 	StrictMinor     bool `mapstructure:"strict_minor"`
+	PanelFixupLines int  `mapstructure:"panel_fixup_lines"`
 }
 
 type Plugin struct {
@@ -253,7 +263,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyMaxLiveRounds, defaultRounds)
 	v.SetDefault(keyMaxStopBlocks, defaultRounds)
 	v.SetDefault(keyStrictMinor, false)
+	v.SetDefault(keyPanelFixupLines, defaultPanelFixupLines)
 	v.SetDefault(keyPlugins, []any{})
+	v.SetDefault(keyHooksMatched, true)
 	v.SetDefault(keyGuardDisabled, []any{})
 	v.SetDefault(keyDeployDisabled, []any{})
 	v.SetDefault(keyGitBranch, "")
@@ -305,6 +317,7 @@ func (c *Config) validate() error {
 		keyMaxReviewRounds: c.Run.MaxReviewRounds,
 		keyMaxLiveRounds:   c.Run.MaxLiveRounds,
 		keyMaxStopBlocks:   c.Run.MaxStopBlocks,
+		keyPanelFixupLines: c.Run.PanelFixupLines,
 		keyVerifyParallel:  c.Verify.Parallel,
 	} {
 		if value < 1 {

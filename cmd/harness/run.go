@@ -139,7 +139,8 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 		reviewRecordAdapter{cfg: cfg}.Save,
 		reviewRecordAdapter{cfg: cfg}.Reviews,
 		reviewRecordAdapter{cfg: cfg}.ReworkReasons,
-		cfg.Run.StrictMinor)
+		cfg.Run.StrictMinor,
+		panelSource(cfg))
 	if err != nil {
 		return environment{}, err
 	}

@@ -373,3 +373,38 @@ func TestPatchIDSeesWhitespace(t *testing.T) {
 		t.Fatalf("PatchID after a re-indent = %q, %v, want an id other than %q", after, err, before)
 	}
 }
+
+func TestDiffLines(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("1\n2\n3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand(t, root, "add", "a.txt")
+	gitCommand(t, root, "commit", "-q", "-m", "a")
+	from, err := git.Head(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := git.DiffLines(ctx, root, from); err != nil || got != 0 {
+		t.Fatalf("DiffLines on the same commit = %d, %v, want 0", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("1\nX\n3\n4\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand(t, root, "commit", "-q", "-am", "b")
+	if got, err := git.DiffLines(ctx, root, from); err != nil || got != 3 {
+		t.Fatalf("DiffLines = %d, %v, want 3 (two added, one deleted)", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "bin.dat"), []byte{0, 1, 2, 0}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand(t, root, "add", "bin.dat")
+	gitCommand(t, root, "commit", "-q", "-m", "bin")
+	if _, err := git.DiffLines(ctx, root, from); err == nil {
+		t.Fatal("DiffLines with a binary file: want an error")
+	}
+	if _, err := git.DiffLines(ctx, root, "nope"); err == nil {
+		t.Fatal("DiffLines from an unknown commit: want an error")
+	}
+}

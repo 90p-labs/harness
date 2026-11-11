@@ -116,3 +116,18 @@ func TestNamesFinding(t *testing.T) {
 		})
 	}
 }
+
+func TestParseReviewFindingsModel(t *testing.T) {
+	text := "| ID | Severity | Verdict | Status | model |\n|---|---|---|---|---|\n| F1 | major | real | open | opus |\n| F2 | minor | real | open |\n"
+	got, err := domain.ParseReviewFindings(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Model != "opus" || got[1].Model != "" {
+		t.Fatalf("got %+v, want the Model cell of F1 and none for F2", got)
+	}
+	plain, err := domain.ParseReviewFindings("| ID | Severity | Verdict | Status |\n|---|---|---|---|\n| F1 | major | real | open |\n")
+	if err != nil || plain[0].Model != "" {
+		t.Fatalf("without the column: got %+v, %v, want no model", plain, err)
+	}
+}

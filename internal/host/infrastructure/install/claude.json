@@ -2,8 +2,8 @@
   "hooks": {
     "SessionStart": [{"hooks": [{"type": "command", "command": "harness hook --host claude session-start"}]}],
     "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "harness hook --host claude user-prompt"}]}],
-    "PreToolUse": [{"hooks": [{"type": "command", "command": "harness hook --host claude pre-tool-use"}]}],
-    "PostToolUse": [{"hooks": [{"type": "command", "command": "harness hook --host claude post-tool-use"}]}],
+    "PreToolUse": [{"matcher": "^(Agent|AskUserQuestion|Bash|Edit|Glob|Grep|MultiEdit|Read|Write)$|^mcp__.+_(Agent|AskUserQuestion|Bash|Edit|Glob|Grep|MultiEdit|Read|Write)$", "hooks": [{"type": "command", "command": "harness hook --host claude pre-tool-use"}]}],
+    "PostToolUse": [{"matcher": "^(Agent|AskUserQuestion|Bash|Edit|Glob|Grep|MultiEdit|Read|Write)$|^mcp__.+_(Agent|AskUserQuestion|Bash|Edit|Glob|Grep|MultiEdit|Read|Write)$", "hooks": [{"type": "command", "command": "harness hook --host claude post-tool-use"}]}],
     "Stop": [{"hooks": [{"type": "command", "command": "harness hook --host claude stop"}]}],
     "SubagentStart": [{"hooks": [{"type": "command", "command": "harness hook --host claude subagent-start"}]}],
     "SubagentStop": [{"hooks": [{"type": "command", "command": "harness hook --host claude subagent-stop"}]}],

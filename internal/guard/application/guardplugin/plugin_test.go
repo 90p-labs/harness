@@ -437,7 +437,7 @@ func TestDefaultBranchOverride(t *testing.T) {
 	})
 
 	t.Run("configured value skips git", func(t *testing.T) {
-		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil }, nil, nil, nil, false)
+		plugins, err := guard.NewPlugins(nil, branchDevelop, nil, t.TempDir(), &fakeStop{}, func(context.Context, string) (bool, error) { return true, nil }, nil, nil, nil, false, guardplugin.PanelSource{})
 		if err != nil {
 			t.Fatalf("new plugins: %v", err)
 		}

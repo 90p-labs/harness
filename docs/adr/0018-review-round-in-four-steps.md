@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09. It replaces the round rule of ADR 0016 and the pre-ship panel rule of ADR 0017. The ship rule `review-models` and the floor of 2 models stay. Superseded in part by ADR 0020, 2026-11-10: the strict minor rule and the item R3b.
+Accepted, 2026-11-09. It replaces the round rule of ADR 0016 and the pre-ship panel rule of ADR 0017. The ship rule `review-models` and the floor of 2 models stay. Superseded in part by ADR 0020, 2026-11-10: the strict minor rule and the item R3b. Amended 2026-11-11: one verifier and one re-review for each round.
 
 ## Context
 
@@ -28,7 +28,7 @@ The round has 4 steps and one final panel.
 
 After the re-reviews, the lead squashes the fixups and runs `harness run review`. The next common list is the final panel.
 
-- **Final panel**: the common list runs once more on the final `HEAD`, with every listed model. When the first common list has no real finding, it already covers `HEAD`, and the lead ships.
+- **Final panel**: the common list runs once more on the final `HEAD`, with every listed model. After a small fixup, the smaller panel of ADR 0017 runs. When the first common list has no real finding, it already covers `HEAD`, and the lead ships.
 - Lens Spec runs on the first model, lens Standards on the second, and lens Spec on every other model. Lens Standards does not report a rule that a gate checks.
 - The verifier is a new agent file, on the model of the `explorer` role. It is not a mode of the reviewer, because a `reviewer` agent call in `reviewing` writes a review record. A haiku verifier would count as the haiku review of `HEAD`.
 - The role set is fixed in code, so the verifier uses the model of the `explorer` role. The guard rule `agent-model-routing` leaves the agent type `verifier` unmapped, so it allows any model.
@@ -51,3 +51,12 @@ Run R3b does 2 items:
 - The verifier costs one cheap call for each finding. It stops a false finding from causing a fix.
 - The final panel adds one common list after a rework. Opus still reviews each final `HEAD`.
 - The guard does not check the model of a verifier. A verifier call that uses a wrong model passes.
+
+## Amendment 2026-11-11
+
+Step 2 and step 4 now run once for each round, not once for each finding or fixup.
+
+- **Verify**: one `verifier` agent gets all findings of the round and returns one line for each finding. A finding with no verifier line counts as real, and the lead keeps it.
+- **Re-review**: one `reviewer` agent gets all finding lines and all fixups of the round, with `git show <sha>` for each. It answers `closed` or `open` for each finding and lists each new defect.
+
+The reason is cost. Each agent start loads the brief and the diff again. One call for a round makes fewer agent starts, and the verdicts stay the same.

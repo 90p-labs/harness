@@ -16,6 +16,9 @@ run:
   max_live_rounds: 3
   max_stop_blocks: 3
   strict_minor: false
+  panel_fixup_lines: 80
+hooks:
+  matched: true
 plugins:
   - name: notify-approval
     command: [scripts/notify.sh]

@@ -38,11 +38,12 @@ func NewMarksPlugin(db func(ctx context.Context) (*dbal.DB, error)) shareddomain
 	})
 }
 
-func NewHostConnect(worktree func(ctx context.Context) (string, error)) cli.HostConnect {
+// NewHostConnect wires the host commands. The target gives the worktree and whether the Claude tool hooks match only the rule tools.
+func NewHostConnect(target func(ctx context.Context) (worktree string, matched bool, err error)) cli.HostConnect {
 	return func(context.Context) (cli.HostHandlers, error) {
 		return cli.HostHandlers{
 			Install: func(ctx context.Context, host shareddomain.Host) (string, error) {
-				root, err := worktree(ctx)
+				root, matched, err := target(ctx)
 				if err != nil {
 					return "", err
 				}
@@ -51,7 +52,7 @@ func NewHostConnect(worktree func(ctx context.Context) (string, error)) cli.Host
 						return "", err
 					}
 				}
-				return install.Install(root, host)
+				return install.Install(root, host, matched)
 			},
 			Codecs: codecs(),
 		}, nil

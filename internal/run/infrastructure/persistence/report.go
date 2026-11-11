@@ -14,8 +14,9 @@ const (
 	selectRepeatClass = "SELECT t.rework_class, count(*) AS n FROM run_transitions t JOIN runs r ON r.id = t.run_id " +
 		"WHERE r.repo = ? AND t.event IN (?, ?) AND t.rework_class <> '' GROUP BY t.rework_class HAVING count(*) >= ? ORDER BY n DESC, t.rework_class"
 
-	selectLastRework    = "SELECT at FROM run_transitions WHERE run_id = ? AND event IN (?, ?, ?) ORDER BY at DESC, id DESC LIMIT 1"
-	selectReworkReasons = "SELECT reason FROM run_transitions WHERE run_id = ? AND event = ? ORDER BY at, id"
+	selectLastRework      = "SELECT at FROM run_transitions WHERE run_id = ? AND event IN (?, ?, ?) ORDER BY at DESC, id DESC LIMIT 1"
+	selectLastReworkEvent = "SELECT event, reason FROM run_transitions WHERE run_id = ? AND event IN (?, ?, ?, ?) ORDER BY at DESC, id DESC LIMIT 1"
+	selectReworkReasons   = "SELECT reason FROM run_transitions WHERE run_id = ? AND event = ? ORDER BY at, id"
 
 	minRepeatCount = 2
 )
@@ -27,6 +28,17 @@ func (r SQLRunRepository) LastReworkAt(ctx context.Context, runID string) (time.
 		return time.Time{}, nil
 	}
 	return at.UTC(), err
+}
+
+func (r SQLRunRepository) LastReworkEvent(ctx context.Context, runID string) (domain.Event, string, error) {
+	var event domain.Event
+	var reason string
+	err := r.db.QueryRowContext(ctx, selectLastReworkEvent, runID, string(domain.EventRequestRework), string(domain.EventReworkMinor),
+		string(domain.EventAmend), string(domain.EventRegress)).Scan(&event, &reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", nil
+	}
+	return event, reason, err
 }
 
 func (r SQLRunRepository) ReworkReasons(ctx context.Context, runID string) ([]string, error) {

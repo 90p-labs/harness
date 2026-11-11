@@ -13,6 +13,7 @@ import (
 
 const (
 	skillFile           = "skills/harness/SKILL.md"
+	reviewingFile       = "skills/harness/references/reviewing.md"
 	explorerFile        = "agents/explorer.md"
 	skillDocName        = "SKILL.md"
 	skillDocs           = "skills/*/" + skillDocName
@@ -218,8 +219,8 @@ func TestSkillAgentStartsNameModelField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range skills {
-		started := map[string]bool{}
+	started := map[string]bool{}
+	for _, path := range append(skills, reviewingFile) {
 		for i, line := range strings.Split(repository.Read(t, path), "\n") {
 			match := roleAgentLine.FindStringSubmatch(line)
 			if match == nil {
@@ -227,17 +228,14 @@ func TestSkillAgentStartsNameModelField(t *testing.T) {
 			}
 			if !strings.Contains(line, modelFieldText) {
 				t.Errorf("%s:%d names a role agent or a role model and does not name the %s", path, i+1, modelFieldText)
-			} else if path == skillFile {
+			} else if path == skillFile || path == reviewingFile {
 				started[match[1]] = true
 			}
 		}
-		if path != skillFile {
-			continue
-		}
-		for _, role := range roleAgents {
-			if !started[role] {
-				t.Errorf("%s starts no %s agent with the %s", skillFile, role, modelFieldText)
-			}
+	}
+	for _, role := range roleAgents {
+		if !started[role] {
+			t.Errorf("%s and %s start no %s agent with the %s", skillFile, reviewingFile, role, modelFieldText)
 		}
 	}
 }

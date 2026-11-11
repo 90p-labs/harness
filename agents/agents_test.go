@@ -22,7 +22,7 @@ const (
 	filesReadLine = "Files read:"
 	reReviewTitle = "## Re-review"
 	standardsRule = "does not report a rule that a gate checks"
-	reviewAnswer  = "Answer `closed` or `open` for the finding."
+	reviewAnswer  = "Answer `closed` or `open`, to say whether its fixup fixes it."
 	explorerFile  = "agents/explorer.md"
 	templateName  = "references/plan-template.md"
 	templateRoot  = "skills/harness/"
@@ -115,6 +115,20 @@ func TestAgentBriefsPinReviewRound(t *testing.T) {
 		reviewerAgent: {findingLine, filesReadLine, reReviewTitle, standardsRule, reviewAnswer},
 		verifierAgent: {verifierLine},
 		workerFile:    {workerFixLine},
+	} {
+		raw := repository.Read(t, path)
+		for _, want := range wants {
+			if !strings.Contains(raw, want) {
+				t.Errorf("%s does not hold %q", path, want)
+			}
+		}
+	}
+}
+
+func TestVerifierBriefTakesRound(t *testing.T) {
+	for path, wants := range map[string][]string{
+		verifierAgent: {"all findings of a round", "one line for each finding", "no verifier line counts as real"},
+		reviewerAgent: {"all fixups of a round", "git show <sha>", "whether its fixup fixes it"},
 	} {
 		raw := repository.Read(t, path)
 		for _, want := range wants {

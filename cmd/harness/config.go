@@ -18,6 +18,11 @@ type configView struct {
 	Roles   map[string]map[string][]string `yaml:"roles"`
 	Guard   guardView                      `yaml:"guard"`
 	Git     gitView                        `yaml:"git"`
+	Hooks   hooksView                      `yaml:"hooks"`
+}
+
+type hooksView struct {
+	Matched bool `yaml:"matched"`
 }
 
 type guardView struct {
@@ -39,6 +44,7 @@ type runView struct {
 	MaxLiveRounds   int  `yaml:"max_live_rounds"`
 	MaxStopBlocks   int  `yaml:"max_stop_blocks"`
 	StrictMinor     bool `yaml:"strict_minor"`
+	PanelFixupLines int  `yaml:"panel_fixup_lines"`
 }
 
 type pluginView struct {
@@ -85,11 +91,13 @@ func viewOf(cfg config.Config) configView {
 			MaxLiveRounds:   cfg.Run.MaxLiveRounds,
 			MaxStopBlocks:   cfg.Run.MaxStopBlocks,
 			StrictMinor:     cfg.Run.StrictMinor,
+			PanelFixupLines: cfg.Run.PanelFixupLines,
 		},
 		Plugins: []pluginView{},
 		Roles:   map[string]map[string][]string{},
 		Guard:   guardView{Disabled: append([]string{}, cfg.Guard.Disabled...)},
 		Git:     gitView{DefaultBranch: cfg.Git.DefaultBranch},
+		Hooks:   hooksView{Matched: cfg.Hooks.Matched},
 	}
 	for _, p := range cfg.Plugins {
 		view.Plugins = append(view.Plugins, pluginView{Name: p.Name, Command: p.Command, Events: p.Events, Timeout: p.Timeout.String()})

@@ -43,6 +43,6 @@ End the report with `Files read:` and each path that you read. Then give one ver
 
 ## Re-review
 
-The lead gives you one finding line and one fixup diff. Read the diff and the changed files around it.
+The lead gives you all the finding lines of a round and all fixups of a round. Run `git show <sha>` for each fixup. Read each diff and the changed files around it.
 
-Answer `closed` or `open` for the finding. List each new defect of the diff as a finding line.
+Give one line for each finding. Answer `closed` or `open`, to say whether its fixup fixes it. List each new defect of the fixups as a finding line.

@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/90p-labs/harness/internal/host/domain"
+	"github.com/90p-labs/harness/internal/host/infrastructure/install"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+
 	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
@@ -95,6 +99,81 @@ func TestPluginManifests(t *testing.T) {
 		}
 		if _, err := os.Stat(repository.Path(t, path)); err != nil {
 			t.Errorf("manifest path %q: %v", path, err)
+		}
+	}
+}
+
+type matcherFile struct {
+	Hooks map[string][]struct {
+		Matcher string `json:"matcher"`
+	} `json:"hooks"`
+}
+
+func readMatchers(t *testing.T, path string) matcherFile {
+	t.Helper()
+	var file matcherFile
+	readJSON(t, path, &file)
+	return file
+}
+
+func TestClaudeHooksMatchRuleTools(t *testing.T) {
+	want := domain.ClaudeMatcher()
+	for _, path := range []string{claudeHooksFile, "internal/host/infrastructure/install/claude.json"} {
+		file := readMatchers(t, path)
+		for event, groups := range file.Hooks {
+			wantMatcher := ""
+			if event == "PreToolUse" || event == "PostToolUse" {
+				wantMatcher = want
+			}
+			for _, group := range groups {
+				if group.Matcher != wantMatcher {
+					t.Errorf("%s %s matcher = %q, want %q", path, event, group.Matcher, wantMatcher)
+				}
+			}
+		}
+	}
+
+	unmatched := readMatchers(t, "internal/host/infrastructure/install/claude_all.json")
+	for event, groups := range unmatched.Hooks {
+		for _, group := range groups {
+			if group.Matcher != "" {
+				t.Errorf("claude_all.json %s matcher = %q, want none", event, group.Matcher)
+			}
+		}
+	}
+
+	for _, matched := range []bool{true, false} {
+		worktree := t.TempDir()
+		path, err := install.Install(worktree, shareddomain.HostClaude, matched)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, _ := readSettings(t, path)
+		for _, event := range []string{"PreToolUse", "PostToolUse"} {
+			wantMatcher := ""
+			if matched {
+				wantMatcher = want
+			}
+			if got := s.Hooks[event][0].Matcher; got != wantMatcher {
+				t.Errorf("matched=%v %s matcher = %q, want %q", matched, event, got, wantMatcher)
+			}
+		}
+		if got := s.Hooks["Stop"][0].Matcher; got != "" {
+			t.Errorf("matched=%v Stop matcher = %q, want none", matched, got)
+		}
+	}
+
+	codex := t.TempDir()
+	path, err := install.Install(codex, shareddomain.HostCodex, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := readSettings(t, path)
+	for event, groups := range s.Hooks {
+		for _, group := range groups {
+			if group.Matcher != "" {
+				t.Errorf("codex %s matcher = %q, want none", event, group.Matcher)
+			}
 		}
 	}
 }

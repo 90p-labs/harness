@@ -73,7 +73,7 @@ func checkInstall(t *testing.T, host shareddomain.Host, relPath string) {
 
 	t.Run("creates the file in a worktree without it", func(t *testing.T) {
 		worktree := t.TempDir()
-		path, err := install.Install(worktree, host)
+		path, err := install.Install(worktree, host, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -124,7 +124,7 @@ func checkInstall(t *testing.T, host shareddomain.Host, relPath string) {
 			t.Fatal(err)
 		}
 
-		if _, err := install.Install(worktree, host); err != nil {
+		if _, err := install.Install(worktree, host, true); err != nil {
 			t.Fatal(err)
 		}
 		s, first := readSettings(t, path)
@@ -168,7 +168,7 @@ func checkInstall(t *testing.T, host shareddomain.Host, relPath string) {
 			t.Fatalf("events = %d, want %d", len(s.Hooks), hookEvents[host]+1)
 		}
 
-		if _, err := install.Install(worktree, host); err != nil {
+		if _, err := install.Install(worktree, host, true); err != nil {
 			t.Fatal(err)
 		}
 		_, second := readSettings(t, path)
@@ -187,7 +187,7 @@ func checkInstall(t *testing.T, host shareddomain.Host, relPath string) {
 		if err := os.WriteFile(path, bad, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := install.Install(worktree, host); err == nil {
+		if _, err := install.Install(worktree, host, true); err == nil {
 			t.Fatal("Install accepted bad JSON")
 		}
 		got, err := os.ReadFile(path)

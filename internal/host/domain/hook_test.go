@@ -1,6 +1,9 @@
 package domain_test
 
 import (
+	"regexp"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/90p-labs/harness/internal/host/domain"
@@ -52,6 +55,43 @@ func TestQuestionDecodeToolKind(t *testing.T) {
 	for tool, want := range cases {
 		if got := domain.ToolKindOf(tool); got != want {
 			t.Errorf("ToolKindOf(%q) = %q, want %q", tool, got, want)
+		}
+	}
+}
+
+func TestClaudeMatcher(t *testing.T) {
+	wantTools := "AskUserQuestion Agent Bash Edit Glob Grep MultiEdit Read Write"
+	got := domain.MatchedTools()
+	if !slices.IsSorted(got) || len(got) != len(strings.Fields(wantTools)) {
+		t.Fatalf("MatchedTools() = %v, want sorted %s", got, wantTools)
+	}
+	for _, tool := range strings.Fields(wantTools) {
+		if !slices.Contains(got, tool) {
+			t.Errorf("MatchedTools() = %v, misses %s", got, tool)
+		}
+	}
+	for _, tool := range []string{"apply_patch", "request_user_input"} {
+		if slices.Contains(got, tool) {
+			t.Errorf("MatchedTools() holds Codex tool %s", tool)
+		}
+	}
+
+	matcher := regexp.MustCompile(domain.ClaudeMatcher())
+	cases := map[string]bool{
+		"Bash":                                true,
+		"AskUserQuestion":                     true,
+		"mcp__x__life_Bash":                   true,
+		"mcp__x__act_AskUserQuestion":         true,
+		"mcp__crawl_ostrich__pilot_MultiEdit": true,
+		"WebFetch":                            false,
+		"mcp__x__web_Artifact":                false,
+		"BashOutput":                          false,
+		"mcp__x__life_BashOutput":             false,
+		"apply_patch":                         false,
+	}
+	for tool, want := range cases {
+		if matcher.MatchString(tool) != want {
+			t.Errorf("matcher on %q = %v, want %v", tool, !want, want)
 		}
 	}
 }

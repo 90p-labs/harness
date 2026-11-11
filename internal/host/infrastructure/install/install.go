@@ -30,13 +30,17 @@ var ErrUnsupportedHost = errors.New("unsupported host")
 //go:embed claude.json
 var claudeTemplate []byte
 
+//go:embed claude_all.json
+var claudeAllTemplate []byte
+
 //go:embed codex.json
 var codexTemplate []byte
 
 type group map[string]json.RawMessage
 
-func Install(worktree string, host shareddomain.Host) (string, error) {
-	path, template, err := targetOf(worktree, host)
+// Install writes the hooks of the host. For Claude, matched picks the template whose tool hooks match only the rule tools.
+func Install(worktree string, host shareddomain.Host, matched bool) (string, error) {
+	path, template, err := targetOf(worktree, host, matched)
 	if err != nil {
 		return "", err
 	}
@@ -92,10 +96,14 @@ func writeAtomic(path string, data []byte) error {
 	return os.Rename(temp.Name(), path)
 }
 
-func targetOf(worktree string, host shareddomain.Host) (string, []byte, error) {
+func targetOf(worktree string, host shareddomain.Host, matched bool) (string, []byte, error) {
 	switch host {
 	case shareddomain.HostClaude:
-		return filepath.Join(worktree, claudeSettingsDir, claudeSettingsFile), claudeTemplate, nil
+		template := claudeAllTemplate
+		if matched {
+			template = claudeTemplate
+		}
+		return filepath.Join(worktree, claudeSettingsDir, claudeSettingsFile), template, nil
 	case shareddomain.HostCodex:
 		return filepath.Join(worktree, codexSettingsDir, codexSettingsFile), codexTemplate, nil
 	default:

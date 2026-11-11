@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
@@ -83,4 +85,25 @@ func isQuestionTool(name string) bool {
 		}
 	}
 	return false
+}
+
+const codexOnlyTool = "apply_patch"
+
+// MatchedTools lists the Claude tools that a guard rule reads, sorted.
+func MatchedTools() []string {
+	tools := []string{shareddomain.QuestionTools[shareddomain.HostClaude].Name}
+	for tool := range toolKinds {
+		if tool != codexOnlyTool {
+			tools = append(tools, tool)
+		}
+	}
+	sort.Strings(tools)
+	return tools
+}
+
+// ClaudeMatcher is the matcher of the Claude PreToolUse and PostToolUse hooks.
+// It is a regex, so a host that prefixes the tool name, such as mcp__server__life_Bash, still matches.
+func ClaudeMatcher() string {
+	names := strings.Join(MatchedTools(), "|")
+	return "^(" + names + ")$|^mcp__.+_(" + names + ")$"
 }

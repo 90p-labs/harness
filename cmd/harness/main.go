@@ -7,13 +7,17 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/90p-labs/harness/internal/guard/application/guardplugin"
+	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
 	guardcli "github.com/90p-labs/harness/internal/guard/ui/cli"
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
@@ -86,6 +90,52 @@ func (s prBodySource) Commits(ctx context.Context, base string) ([]string, error
 		return nil, err
 	}
 	return strings.Split(out, "\n"), nil
+}
+
+// reviewPanelSource gives `harness review panel` the same call the guard makes, so both print one panel.
+func reviewPanelSource(flags *pflag.FlagSet) guardcli.PanelSource {
+	return func(ctx context.Context) ([]string, string, error) {
+		worktree, err := topLevel(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		cfg, err := config.Load(flags, worktree)
+		if err != nil {
+			return nil, "", err
+		}
+		runID := runRefFrom(ctx).ID
+		adapter := reviewRecordAdapter{cfg: cfg}
+		// Mirror the guard: an empty patch id never matches, and the run id only scopes a run that has findings.
+		scope := guarddomain.ReviewScope{}
+		base := cfg.Git.DefaultBranch
+		if base == "" {
+			base, err = git.DefaultBranch(ctx, worktree)
+		}
+		if err == nil {
+			if patchID, perr := git.PatchID(ctx, worktree, base); perr == nil {
+				scope.PatchID = patchID
+			}
+		}
+		if _, err := os.Stat(filepath.Join(worktree, shareddomain.RunFindingsFile(runID))); err == nil && !cfg.Run.StrictMinor {
+			scope.RunID = runID
+		}
+		reviews, err := adapter.Reviews(ctx, worktree, scope)
+		if err != nil {
+			return nil, "", err
+		}
+		counted, _ := guarddomain.ReviewedModels(reviews)
+		deps := guardplugin.Deps{
+			ReadFile: os.ReadFile,
+			Models:   modelsByHost(cfg.Roles),
+			Worktree: worktree,
+			Panel:    panelSource(cfg),
+		}
+		_, _, panel, reason := guardplugin.FinalPanel(ctx, deps, runID, counted)
+		if len(panel) == 0 {
+			return nil, "", errors.New("no reviewer models are listed under roles")
+		}
+		return panel, reason, nil
+	}
 }
 
 type usageError struct{ error }
@@ -172,6 +222,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newVerifyCommand(root.PersistentFlags()), newGatesCommand(root.PersistentFlags()), newLintCommand(root.PersistentFlags(), version), newLiveCommand(root.PersistentFlags()))
 	root.AddCommand(newInitCommand(root.PersistentFlags(), version))
 	root.AddCommand(newReportCommand(root.PersistentFlags()))
+	root.AddCommand(guardcli.NewReviewCommand(reviewPanelSource(root.PersistentFlags())))
 	root.AddCommand(guardcli.NewPRCommand(prBodySource{flags: root.PersistentFlags()}))
 	root.AddCommand(&cobra.Command{
 		Use:   commandVersion,

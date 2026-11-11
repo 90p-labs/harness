@@ -63,7 +63,7 @@ func TestLoadDefaults(t *testing.T) {
 	if got.State.DSN != "sqlite:.harness/state.db" {
 		t.Errorf("state.dsn = %q", got.State.DSN)
 	}
-	wantRun := config.Run{Approval: true, GoLive: false, MaxReviewRounds: 3, MaxLiveRounds: 3, MaxStopBlocks: 3}
+	wantRun := config.Run{Approval: true, GoLive: false, MaxReviewRounds: 3, MaxLiveRounds: 3, MaxStopBlocks: 3, PanelFixupLines: 80}
 	if got.Run != wantRun {
 		t.Errorf("run = %+v, want %+v", got.Run, wantRun)
 	}
@@ -591,6 +591,28 @@ func TestStrictMinor(t *testing.T) {
 	}
 }
 
+func TestPanelFixupLines(t *testing.T) {
+	got, err := load(t, "")
+	if err != nil || got.Run.PanelFixupLines != 80 {
+		t.Fatalf("default: got %v, %v, want 80", got.Run.PanelFixupLines, err)
+	}
+
+	got, err = load(t, "run:\n  panel_fixup_lines: 40\n")
+	if err != nil || got.Run.PanelFixupLines != 40 {
+		t.Fatalf("file: got %v, %v, want 40", got.Run.PanelFixupLines, err)
+	}
+
+	if _, err = load(t, "run:\n  panel_fixup_lines: 0\n"); err == nil {
+		t.Fatal("zero: want an error")
+	}
+
+	t.Setenv("HARNESS_RUN_PANEL_FIXUP_LINES", "120")
+	got, err = load(t, "")
+	if err != nil || got.Run.PanelFixupLines != 120 {
+		t.Fatalf("env: got %v, %v, want 120", got.Run.PanelFixupLines, err)
+	}
+}
+
 func TestLoadRejectsFilterOnOtherEvent(t *testing.T) {
 	_, err := load(t, `plugins:
   - {name: mixed, command: [a], events: [run.transition.after, tool.before], to: [working]}
@@ -598,5 +620,23 @@ func TestLoadRejectsFilterOnOtherEvent(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "mixed") {
 		t.Fatalf("err = %v, want one that names the plugin", err)
+	}
+}
+
+func TestHooksMatched(t *testing.T) {
+	got, err := load(t, "")
+	if err != nil || !got.Hooks.Matched {
+		t.Fatalf("default: got %v, %v, want true", got.Hooks.Matched, err)
+	}
+
+	got, err = load(t, "hooks:\n  matched: false\n")
+	if err != nil || got.Hooks.Matched {
+		t.Fatalf("file: got %v, %v, want false", got.Hooks.Matched, err)
+	}
+
+	t.Setenv("HARNESS_HOOKS_MATCHED", "false")
+	got, err = load(t, "")
+	if err != nil || got.Hooks.Matched {
+		t.Fatalf("env: got %v, %v, want false", got.Hooks.Matched, err)
 	}
 }

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09. It replaces the third-reviewer rule of ADR 0016. ADR 0018 replaces its pre-ship panel rule. The ship rule needs every listed model of the host, and the floor of 2 models stays.
+Accepted, 2026-11-09. It replaces the third-reviewer rule of ADR 0016. ADR 0018 replaces its pre-ship panel rule. The ship rule needs every model of the final panel, and the floor of 2 models stays. The amendment below says when the panel is smaller than the listed models.
 
 ## Context
 
@@ -31,3 +31,14 @@ The third reviewer joined only on a large diff or a named risk. The majors neede
 - A rework moves `HEAD`, so each round starts on the first 2 models again.
 - A list of 2 models needs no panel step.
 - A Codex repository still sets `guard.disabled: [review-models]`.
+
+## Amendment 2026-11-11
+
+The final panel can shrink after a rework with a small fixup.
+
+- The panel is the first 2 reviewer models plus the models in the Model cell of the reworked findings.
+- The reworked findings are the real blocker or major IDs that the last `request-rework` reason names.
+- The panel shrinks only when the fixup is small. The fixup is the changed lines since the last HEAD that every listed model reviewed.
+- The limit is `run.panel_fixup_lines`, default 80.
+- Any missing fact gives the full panel of every listed model. Examples are no rework, no Model cell, or no reviewed HEAD.
+- The command `harness review panel` prints the panel models and the reason. The guard calls the same function.

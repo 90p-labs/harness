@@ -105,7 +105,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		return err
 	}
 	cfg, worktree := env.cfg, env.key.Worktree
-	hostHandlers, err := host.NewHostConnect(func(context.Context) (string, error) { return worktree, nil })(ctx)
+	hostHandlers, err := host.NewHostConnect(func(context.Context) (string, bool, error) { return worktree, cfg.Hooks.Matched, nil })(ctx)
 	if err != nil {
 		return err
 	}
