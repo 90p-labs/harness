@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"fmt"
+	"path"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -100,15 +102,33 @@ func testOf(doc Document, t Task) (file, name string) {
 	if m := testName.FindStringSubmatch(t.TestFirst); m != nil {
 		name = m[1]
 	}
-	if m := ownedPath.FindStringSubmatch(t.TestFirst); m != nil {
-		file = strings.TrimPrefix(m[1], currentDir)
-	}
-	for _, owned := range ownedFiles(doc, t) {
-		if owned == file || strings.HasSuffix(owned, pathSeparator+file) {
-			return owned, name
+	owned := ownedFiles(doc, t)
+	best := -1
+	for _, token := range ownedPaths(t.TestFirst) {
+		candidate, score := token, 0
+		if i := slices.IndexFunc(owned, func(o string) bool { return o == token || strings.HasSuffix(o, pathSeparator+token) }); i >= 0 {
+			candidate, score = owned[i], 1
+		} else if token == "" || strings.ContainsAny(token, " \t") || !strings.Contains(path.Base(token), ".") {
+			continue
+		}
+		if looksLikeTestFile(candidate) {
+			score += 2
+		}
+		if score > best {
+			file, best = candidate, score
 		}
 	}
 	return file, name
+}
+
+// testStemPattern matches a file stem that names a test: a test or spec word
+// between separators, in any case, or a CamelCase Test suffix such as PongTest.
+// The suffix is case sensitive so that a stem such as latest is not a test.
+var testStemPattern = regexp.MustCompile(`(?i:(?:^|[._-])(?:tests?|spec)(?:$|[._-]))|Tests?$`)
+
+func looksLikeTestFile(p string) bool {
+	base := path.Base(p)
+	return testStemPattern.MatchString(strings.TrimSuffix(base, path.Ext(base)))
 }
 
 func VerifyTrace(doc Document, branch Branch, proofs map[int]bool) []Problem {
@@ -242,7 +262,11 @@ func ownedByTasks(doc Document, numbers []int, file string) bool {
 func verifyTests(doc Document, sources map[string]string, add report) {
 	for _, t := range doc.Tasks {
 		file, name := testOf(doc, t)
-		if name == "" {
+		switch {
+		case name == "":
+			continue
+		case file == "":
+			add(t.FieldLines[FieldTestFirst], RuleTestMissing, "task %d: the Test first line names no test file", t.Number)
 			continue
 		}
 		if !strings.Contains(sources[file], fmt.Sprintf(testFuncFormat, name)) {
