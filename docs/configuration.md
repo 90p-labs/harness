@@ -158,6 +158,8 @@ The guard also allows one stop for each phase change when `handoff.md` is ready.
 - `## Unreviewed commits`
 - `## Decisions`
 
+One refusal lists every problem. It names the Phase line, the Step line, and each missing or empty section. Each section has at least one `- ` line.
+
 The file has at most 4096 bytes, and `harness run status` prints `handoff: ready (step <n>)` after the stop. The run stores the step in the column `handoff_step`. A second stop at the same step blocks, as `max_stop_blocks` says. `handoff.md` is a checkpoint. The `handoff:` line ends with `then continue`: the lead writes the file, then continues with the `next:` step. No host resumes a run by itself: a new session reads `harness run status` and `handoff.md`.
 
 ```yaml
