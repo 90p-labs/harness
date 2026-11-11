@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,11 +22,15 @@ import (
 )
 
 const (
-	repo     = "github.com/90p-labs/harness"
-	workDir  = "/work/harness"
-	baseRef  = "main"
-	headSHA  = "c3c3c3"
-	testGate = "go-test"
+	repo    = "github.com/90p-labs/harness"
+	workDir = "/work/harness"
+	baseRef = "main"
+	headSHA = "c3c3c3"
+	baseSHA = "0a83514a6119"
+
+	testGate   = "go-test"
+	originBase = "origin/main"
+	failTail   = "FAIL: TestWidget expected 2 got 3"
 
 	spanVerifyCommits = "gate.verify_commits"
 	spanVerifyCommit  = "gate.verify_commit"
@@ -40,18 +45,28 @@ var fixedNow = time.Date(2026, 11, 8, 5, 0, 0, 0, time.UTC)
 var errInjected = errors.New("injected")
 
 type fakeCommits struct {
-	list      []domain.Commit
-	added     []string
-	removed   []string
-	headErr   error
-	listErr   error
-	addErr    error
-	removeErr error
+	base       domain.Base
+	list       []domain.Commit
+	resolved   []string
+	listed     []string
+	added      []string
+	removed    []string
+	headErr    error
+	resolveErr error
+	listErr    error
+	addErr     error
+	removeErr  error
 }
 
 func (f *fakeCommits) Head(context.Context, string) (string, error) { return headSHA, f.headErr }
 
-func (f *fakeCommits) List(context.Context, string, string) ([]domain.Commit, error) {
+func (f *fakeCommits) ResolveBase(_ context.Context, _, base string) (domain.Base, error) {
+	f.resolved = append(f.resolved, base)
+	return f.base, f.resolveErr
+}
+
+func (f *fakeCommits) List(_ context.Context, _, base string) ([]domain.Commit, error) {
+	f.listed = append(f.listed, base)
 	return f.list, f.listErr
 }
 
@@ -78,6 +93,7 @@ type fakeRunner struct {
 	mu       sync.Mutex
 	passDirs map[string]bool
 	err      error
+	tail     string
 	ranDirs  []string
 }
 
@@ -91,7 +107,7 @@ func (f *fakeRunner) Run(_ context.Context, dir string, g domain.Gate) (domain.O
 	if f.passDirs[dir] {
 		return domain.Outcome{Result: domain.ResultPass}, nil
 	}
-	return domain.Outcome{Result: domain.ResultFail}, nil
+	return domain.Outcome{Result: domain.ResultFail, Tail: f.tail}, nil
 }
 
 type fakeEvidence struct{}
@@ -140,9 +156,19 @@ type fixture struct {
 	handler verifycommits.Handler
 }
 
+type denyAll struct{ reason string }
+
+func (d denyAll) Dispatch(context.Context, shareddomain.Envelope) (shareddomain.DispatchResult, error) {
+	return shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictDeny, Reason: d.reason}}, nil
+}
+
 func newFixture(source domain.GateSource, passDirs ...string) *fixture {
+	return newFixtureWith(source, allowAll{}, passDirs...)
+}
+
+func newFixtureWith(source domain.GateSource, dispatcher shareddomain.Dispatcher, passDirs ...string) *fixture {
 	f := &fixture{
-		commits: &fakeCommits{list: []domain.Commit{
+		commits: &fakeCommits{base: domain.Base{Ref: baseRef, SHA: baseSHA}, list: []domain.Commit{
 			{SHA: "a1a1a1", Subject: "test: reproduce the crash"},
 			{SHA: "b2b2b2", Subject: "fix(gate): stop the crash"},
 			{SHA: headSHA, Subject: "chore: tidy"},
@@ -158,7 +184,7 @@ func newFixture(source domain.GateSource, passDirs ...string) *fixture {
 	readFile := func(string) ([]byte, error) { return nil, fs.ErrNotExist }
 	exists := func(string) (bool, error) { return false, nil }
 	inner := verify.NewHandler(
-		fakeHasher{}, f.runner, fakeEvidence{}, noSetups{}, allowAll{}, source,
+		fakeHasher{}, f.runner, fakeEvidence{}, noSetups{}, dispatcher, source,
 		readFile, exists, tracer, noop.NewMeterProvider().Meter("test"), func() time.Time { return fixedNow },
 	)
 	f.handler = verifycommits.NewHandler(f.commits, inner, f.checks, func() time.Time { return fixedNow }, tracer)
@@ -178,7 +204,7 @@ func TestVerifyCommits(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []domain.CommitResult{
-		{SHA: "a1a1a1", Type: domain.CommitTypeTest, Passed: false},
+		{SHA: "a1a1a1", Type: domain.CommitTypeTest, Passed: false, Failed: []domain.GateFailure{{Gate: testGate, Status: domain.StatusFail}}},
 		{SHA: "b2b2b2", Type: domain.CommitTypeFix, Passed: true},
 		{SHA: headSHA, Type: "chore", Passed: true},
 	}
@@ -194,6 +220,79 @@ func TestVerifyCommits(t *testing.T) {
 	wantCheck := domain.CommitCheck{Repo: repo, HeadSHA: headSHA, Base: baseRef, Passed: true, At: fixedNow}
 	if !slices.Equal(f.checks.saved, []domain.CommitCheck{wantCheck}) {
 		t.Fatalf("saved = %+v, want %+v", f.checks.saved, wantCheck)
+	}
+}
+
+func TestVerifyCommitsResolvesTheBase(t *testing.T) {
+	f := newFixture(nil, "/tmp/wt-b2b2b2", "/tmp/wt-"+headSHA)
+	f.commits.base = domain.Base{Ref: originBase, SHA: baseSHA}
+
+	result, err := f.handler.Handle(context.Background(), command())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.commits.resolved, []string{baseRef}) || !slices.Equal(f.commits.listed, []string{originBase}) {
+		t.Fatalf("resolved = %v, listed = %v, want %s resolved and %s listed", f.commits.resolved, f.commits.listed, baseRef, originBase)
+	}
+	if result.Base != f.commits.base {
+		t.Fatalf("base = %+v, want %+v", result.Base, f.commits.base)
+	}
+	if len(f.checks.saved) != 1 || f.checks.saved[0].Base != originBase {
+		t.Fatalf("saved = %+v, want the check base %s", f.checks.saved, originBase)
+	}
+
+	empty := newFixture(nil)
+	empty.commits.base = f.commits.base
+	empty.commits.list = nil
+	_, err = empty.handler.Handle(context.Background(), command())
+	if !errors.Is(err, domain.ErrNoCommits) || !strings.Contains(err.Error(), originBase+"..HEAD") {
+		t.Fatalf("error = %v, want ErrNoCommits naming %s..HEAD", err, originBase)
+	}
+}
+
+func TestVerifyCommitsKeepsTheFailedGates(t *testing.T) {
+	f := newFixture(nil, "/tmp/wt-b2b2b2", "/tmp/wt-"+headSHA)
+	f.runner.tail = failTail
+
+	result, err := f.handler.Handle(context.Background(), command())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.GateFailure{{Gate: testGate, Status: domain.StatusFail, Tail: failTail}}
+	if !reflect.DeepEqual(result.Commits[0].Failed, want) {
+		t.Fatalf("failed = %+v, want %+v", result.Commits[0].Failed, want)
+	}
+	if result.Commits[1].Failed != nil || result.Commits[2].Failed != nil {
+		t.Fatalf("passing commits = %+v, want no failed gate", result.Commits[1:])
+	}
+
+	broken := newFixture(nil)
+	broken.runner.tail = failTail
+	broken.commits.list = []domain.Commit{{SHA: "b2b2b2", Subject: "fix(gate): stop the crash"}}
+	result, err = broken.handler.Handle(context.Background(), command())
+	if !errors.Is(err, domain.ErrCommitRule) || !strings.Contains(err.Error(), "failed "+testGate) {
+		t.Fatalf("error = %v, want the rule error naming %s", err, testGate)
+	}
+	if result.Base != broken.commits.base || len(result.Commits) != 1 || !reflect.DeepEqual(result.Commits[0].Failed, want) {
+		t.Fatalf("result = %+v, want the base and the failed gates also when the rule breaks", result)
+	}
+}
+
+func TestVerifyCommitsKeepsAVetoedGate(t *testing.T) {
+	const reason = "a rule vetoed the gate"
+	f := newFixtureWith(nil, denyAll{reason: reason})
+	f.commits.list = []domain.Commit{{SHA: "b2b2b2", Subject: "fix(gate): stop the crash"}}
+
+	result, err := f.handler.Handle(context.Background(), command())
+
+	if !errors.Is(err, domain.ErrCommitRule) {
+		t.Fatalf("error = %v, want the commit rule error", err)
+	}
+	want := []domain.GateFailure{{Gate: testGate, Status: domain.StatusVetoed, Tail: reason}}
+	if len(result.Commits) != 1 || result.Commits[0].Passed || !reflect.DeepEqual(result.Commits[0].Failed, want) {
+		t.Fatalf("commits = %+v, want one failed commit with %+v", result.Commits, want)
 	}
 }
 
@@ -280,6 +379,7 @@ func TestVerifyCommitsRemovesWorktreesAfterACancel(t *testing.T) {
 func TestVerifyCommitsErrors(t *testing.T) {
 	cases := map[string]func(f *fixture){
 		"head":            func(f *fixture) { f.commits.headErr = errInjected },
+		"resolve base":    func(f *fixture) { f.commits.resolveErr = errInjected },
 		"list":            func(f *fixture) { f.commits.listErr = errInjected },
 		"add worktree":    func(f *fixture) { f.commits.addErr = errInjected },
 		"remove worktree": func(f *fixture) { f.commits.removeErr = errInjected },

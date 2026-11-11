@@ -31,6 +31,7 @@ type Command struct {
 }
 
 type Result struct {
+	Base    domain.Base
 	Commits []domain.CommitResult
 }
 
@@ -63,30 +64,36 @@ func (h Handler) Handle(ctx context.Context, cmd Command) (result Result, err er
 	if err != nil {
 		return Result{}, err
 	}
-	listed, err := h.commits.List(ctx, cmd.Dir, cmd.Base)
+	base, err := h.commits.ResolveBase(ctx, cmd.Dir, cmd.Base)
+	if err != nil {
+		return Result{}, err
+	}
+	listed, err := h.commits.List(ctx, cmd.Dir, base.Ref)
 	if err != nil {
 		return Result{}, err
 	}
 	if len(listed) == 0 {
-		return Result{}, fmt.Errorf("%w: %s..HEAD", domain.ErrNoCommits, cmd.Base)
+		return Result{}, fmt.Errorf("%w: %s..HEAD", domain.ErrNoCommits, base.Ref)
 	}
 	results := make([]domain.CommitResult, 0, len(listed))
 	for _, commit := range listed {
-		passed, err := h.passes(ctx, cmd, commit.SHA)
+		passed, failed, err := h.passes(ctx, cmd, commit.SHA)
 		if err != nil {
 			return Result{}, err
 		}
-		results = append(results, domain.CommitResult{SHA: commit.SHA, Type: domain.CommitType(commit.Subject), Passed: passed})
+		results = append(results, domain.CommitResult{SHA: commit.SHA, Type: domain.CommitType(commit.Subject), Passed: passed, Failed: failed})
 	}
 	judged := domain.JudgeCommits(results)
-	check := domain.CommitCheck{Repo: cmd.Repo, HeadSHA: head, Base: cmd.Base, Passed: judged == nil, At: h.now()}
+	check := domain.CommitCheck{Repo: cmd.Repo, HeadSHA: head, Base: base.Ref, Passed: judged == nil, At: h.now()}
 	if err := h.checks.Save(ctx, check); err != nil {
 		return Result{}, err
 	}
-	return Result{Commits: results}, judged
+	return Result{Base: base, Commits: results}, judged
 }
 
-func (h Handler) passes(ctx context.Context, cmd Command, sha string) (passed bool, err error) {
+// passes returns the failed or vetoed gate lines of the commit, in result order.
+// The commit passes when the verify result has not failed.
+func (h Handler) passes(ctx context.Context, cmd Command, sha string) (passed bool, failed []domain.GateFailure, err error) {
 	ctx, span := h.tracer.Start(ctx, spanVerifyCommit, trace.WithAttributes(attrCommit.String(sha)))
 	defer span.End()
 	defer func() {
@@ -98,11 +105,16 @@ func (h Handler) passes(ctx context.Context, cmd Command, sha string) (passed bo
 
 	path, err := h.commits.AddWorktree(ctx, cmd.Dir, sha)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	defer func() {
 		err = errors.Join(err, h.commits.RemoveWorktree(context.WithoutCancel(ctx), cmd.Dir, path))
 	}()
 	result, err := h.verify.HandleConfigured(ctx, verify.Command{Repo: cmd.Repo, Dir: path, Setup: cmd.Setup, Gates: cmd.Gates, Parallel: cmd.Parallel})
-	return !result.Failed, err
+	for _, line := range result.Lines {
+		if line.Status == domain.StatusFail || line.Status == domain.StatusVetoed {
+			failed = append(failed, domain.GateFailure{Gate: line.Gate, Status: line.Status, Duration: line.Duration, Tail: line.Tail})
+		}
+	}
+	return !result.Failed, failed, err
 }

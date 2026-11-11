@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -25,6 +27,11 @@ const (
 	modeFieldIndex     = 0
 	blobFieldIndex     = 1
 	minEntryFields     = 2
+	remoteName         = "origin"
+	remoteRefsPrefix   = "refs/remotes/"
+	headRevision       = "HEAD"
+	revisionMarks      = "~^@:"
+	noExit             = 1
 )
 
 type Tree struct{}
@@ -76,6 +83,58 @@ func inputFiles(ctx context.Context, dir string, gate domain.Gate) (string, erro
 
 func (Tree) Head(ctx context.Context, dir string) (string, error) {
 	return git.Head(ctx, dir)
+}
+
+func (Tree) ResolveBase(ctx context.Context, dir, base string) (domain.Base, error) {
+	local, err := mergeBase(ctx, dir, base)
+	if err != nil {
+		return domain.Base{}, err
+	}
+	if !isPlainBranch(base) {
+		return domain.Base{Ref: base, SHA: local}, nil
+	}
+	remoteRef := remoteName + "/" + base
+	exists, err := gitYes(ctx, dir, "show-ref", "--verify", "--quiet", remoteRefsPrefix+remoteRef)
+	if err != nil {
+		return domain.Base{}, fmt.Errorf("probe %s: %w", remoteRef, err)
+	}
+	if !exists {
+		return domain.Base{Ref: base, SHA: local}, nil
+	}
+	remote, err := mergeBase(ctx, dir, remoteRef)
+	if err != nil {
+		return domain.Base{}, err
+	}
+	newer, err := gitYes(ctx, dir, "merge-base", "--is-ancestor", local, remote)
+	if err != nil {
+		return domain.Base{}, fmt.Errorf("compare the merge bases of %s and %s: %w", base, remoteRef, err)
+	}
+	if !newer {
+		return domain.Base{Ref: base, SHA: local}, nil
+	}
+	return domain.Base{Ref: remoteRef, SHA: remote}, nil
+}
+
+// gitYes runs a git test command: exit 0 is yes, exit 1 is no, any other failure is an error.
+func gitYes(ctx context.Context, dir string, args ...string) (bool, error) {
+	_, err := git.Run(ctx, dir, nil, args...)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == noExit {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func isPlainBranch(base string) bool {
+	return base != headRevision && !strings.ContainsAny(base, revisionMarks) && !strings.HasPrefix(base, remoteName+"/")
+}
+
+func mergeBase(ctx context.Context, dir, ref string) (string, error) {
+	sha, err := git.Run(ctx, dir, nil, "merge-base", ref, headRevision)
+	if err != nil {
+		return "", fmt.Errorf("merge base of %s and %s: %w", ref, headRevision, err)
+	}
+	return sha, nil
 }
 
 func (Tree) List(ctx context.Context, dir, base string) ([]domain.Commit, error) {
