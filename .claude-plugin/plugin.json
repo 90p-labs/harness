@@ -1,6 +1,6 @@
 {
   "name": "90p",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Drives a coding agent through a fixed loop: plan, work, review, ship and watch production, with guard hooks from a Go binary.",
   "author": {
     "name": "Jorge Arco"
