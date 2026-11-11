@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -15,6 +16,8 @@ import (
 var (
 	ErrNotRepository = errors.New("not in a git repository")
 	ErrNoHead        = errors.New("repository has no commit")
+	// ErrNotBranch means a name is neither a local branch nor an origin branch.
+	ErrNotBranch = errors.New("not a branch")
 )
 
 const (
@@ -43,6 +46,23 @@ func DefaultBranch(ctx context.Context, dir string) (string, error) {
 		return "", err
 	}
 	return strings.TrimPrefix(out, originRemotePrefix), nil
+}
+
+// BranchRef returns the full ref of a branch: refs/heads/<name>, else refs/remotes/origin/<name>.
+// A revision such as HEAD~1 or a tag is an error, so a diff base cannot hide earlier changes.
+// The full ref also stops a tag of the same name from winning in git's ref resolution.
+func BranchRef(ctx context.Context, dir, name string) (string, error) {
+	for _, ref := range []string{"refs/heads/" + name, "refs/remotes/" + originRemotePrefix + name} {
+		_, err := Run(ctx, dir, nil, "show-ref", "--verify", "--quiet", ref)
+		if err == nil {
+			return ref, nil
+		}
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != quietMissingRefExit {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("%w: %s", ErrNotBranch, name)
 }
 
 func TopLevel(ctx context.Context, dir string) (string, error) {
@@ -156,7 +176,38 @@ func PatchID(ctx context.Context, dir, base string) (string, error) {
 }
 
 func ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
-	out, err := run(ctx, dir, nil, "", "diff", "--name-only", "-z", base+"...HEAD")
+	return changedFilesWith(ctx, dir, nil, nil, "diff", "--name-only", "-z", base+"...HEAD")
+}
+
+// ChangedFilesNoRenames lists the changed names without rename detection, so a moved file names its old path too.
+func ChangedFilesNoRenames(ctx context.Context, dir, base string) ([]string, error) {
+	// A replace ref, a graft or a forged commit graph can rewrite history, so the list reads the real parents.
+	// Local diff.ignoreSubmodules and diff.relative can hide or shorten a path, so the args override them.
+	// The -c flag turns the commit graph off and works on git before 2.31, which reads no GIT_CONFIG_COUNT env.
+	env := []string{
+		"GIT_NO_REPLACE_OBJECTS=1",
+		"GIT_GRAFT_FILE=" + os.DevNull,
+	}
+	// An inherited GIT_DIR or object path can point the diff at another history, so git finds the repo from dir.
+	// Config variables stay, because the args already override the diff options and GIT_CONFIG_GLOBAL holds the user setup.
+	return changedFilesWith(ctx, dir, env, locationVars, "-c", "core.commitGraph=false", "diff", "--name-only", "--no-renames", "--ignore-submodules=none", "--no-relative", "-z", base+"...HEAD")
+}
+
+// locationVars are the variables that tell git where the repository, its objects and its index are.
+var locationVars = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_COMMON_DIR",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_INDEX_FILE",
+	"GIT_NAMESPACE",
+	"GIT_CEILING_DIRECTORIES",
+	"GIT_DISCOVERY_ACROSS_FILESYSTEM",
+}
+
+func changedFilesWith(ctx context.Context, dir string, env, unset []string, args ...string) ([]string, error) {
+	out, err := runWith(ctx, dir, env, unset, "", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,25 +226,49 @@ func Run(ctx context.Context, dir string, env []string, args ...string) (string,
 }
 
 func run(ctx context.Context, dir string, env []string, stdin string, args ...string) (string, error) {
+	return runWith(ctx, dir, env, nil, stdin, args...)
+}
+
+// runWith drops the unset variables from the inherited environment before it adds env.
+func runWith(ctx context.Context, dir string, env, unset []string, stdin string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
 	// git translates its messages, and the C locale keeps the matched text stable.
-	cmd.Env = append(append(os.Environ(), "LC_ALL=C"), env...)
+	inherited := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		for _, key := range unset {
+			if strings.HasPrefix(kv, key+"=") {
+				return true
+			}
+		}
+		return false
+	})
+	cmd.Env = append(append(inherited, "LC_ALL=C"), env...)
 	out, err := cmd.Output()
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) && bytes.Contains(exitErr.Stderr, []byte(notRepositoryMessage)) {
 		return "", ErrNotRepository
 	}
 	if exitErr != nil {
-		return "", fmt.Errorf("git %s in %s: %w: %s", args[0], dir, err, bytes.TrimSpace(exitErr.Stderr))
+		return "", fmt.Errorf("git %s in %s: %w: %s", subcommand(args), dir, err, bytes.TrimSpace(exitErr.Stderr))
 	}
 	if err != nil {
-		return "", fmt.Errorf("git %s in %s: %w", args[0], dir, err)
+		return "", fmt.Errorf("git %s in %s: %w", subcommand(args), dir, err)
 	}
 	return string(out), nil
+}
+
+// subcommand skips leading `-c name=value` pairs, so an error names the command and not the flag.
+func subcommand(args []string) string {
+	for len(args) >= 2 && args[0] == "-c" {
+		args = args[2:]
+	}
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
 }
 
 // DiffLines returns the added plus deleted lines of `git diff --numstat` from a commit to HEAD.

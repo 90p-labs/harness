@@ -1,7 +1,11 @@
 package git_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"os"
 	"os/exec"
@@ -305,6 +309,42 @@ func commitFile(t *testing.T, dir, name string) {
 	gitCommand(t, dir, "commit", "-q", "-m", name)
 }
 
+func TestBranchRef(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	commitFile(t, dir, "a.txt")
+	commitFile(t, dir, "b.txt")
+	gitCommand(t, dir, "branch", "feature")
+	gitCommand(t, dir, "update-ref", "refs/remotes/origin/remote-only", "HEAD")
+	gitCommand(t, dir, "tag", "tag-only", "HEAD~1")
+	gitCommand(t, dir, "branch", "both", "HEAD")
+	gitCommand(t, dir, "tag", "both", "HEAD~1")
+
+	ok := map[string]string{
+		"feature":     "refs/heads/feature",
+		"remote-only": "refs/remotes/origin/remote-only",
+		"both":        "refs/heads/both",
+	}
+	for name, want := range ok {
+		got, err := git.BranchRef(ctx, dir, name)
+		if err != nil || got != want {
+			t.Errorf("BranchRef(%q) = %q, %v, want %q", name, got, err, want)
+		}
+	}
+	for _, name := range []string{"HEAD~1", "tag-only", "-x"} {
+		if got, err := git.BranchRef(ctx, dir, name); !errors.Is(err, git.ErrNotBranch) {
+			t.Errorf("BranchRef(%q) = %q, %v, want ErrNotBranch", name, got, err)
+		}
+	}
+}
+
+func TestBranchRefNotARepoIsNotMissing(t *testing.T) {
+	got, err := git.BranchRef(context.Background(), t.TempDir(), "main")
+	if err == nil || errors.Is(err, git.ErrNotBranch) {
+		t.Errorf("BranchRef in a non-repo dir = %q, %v, want a git error that is not ErrNotBranch", got, err)
+	}
+}
+
 func TestPatchIDAndChangedFiles(t *testing.T) {
 	ctx := context.Background()
 	root := initRepo(t)
@@ -345,6 +385,232 @@ func TestPatchIDAndChangedFiles(t *testing.T) {
 	if err != nil || changed == "" || changed == before {
 		t.Fatalf("PatchID after a new commit = %q, %v, want a new id", changed, err)
 	}
+}
+
+func TestChangedFilesNoRenamesIgnoresReplaceRefs(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "base.txt")
+
+	gitCommand(t, root, "checkout", "-q", "-b", "fake")
+	makeDir(t, root, "cmd")
+	commitFile(t, root, "cmd/m.go")
+	fake := revParse(t, root, "HEAD")
+
+	gitCommand(t, root, "checkout", "-q", "main")
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	makeDir(t, root, "internal/guard")
+	commitFile(t, root, "internal/guard/x.go")
+	realTip := revParse(t, root, "HEAD")
+
+	gitCommand(t, root, "replace", realTip, fake)
+	if got := revParse(t, root, "HEAD"); got != realTip {
+		t.Fatalf("HEAD = %s, want %s", got, realTip)
+	}
+
+	files, err := git.ChangedFilesNoRenames(ctx, root, "main")
+	if err != nil || !slices.Equal(files, []string{"internal/guard/x.go"}) {
+		t.Fatalf("ChangedFilesNoRenames with a replace ref = %v, %v, want internal/guard/x.go", files, err)
+	}
+}
+
+func TestChangedFilesNoRenamesErrorNamesDiff(t *testing.T) {
+	root := initRepo(t)
+	commitFile(t, root, "base.txt")
+
+	_, err := git.ChangedFilesNoRenames(context.Background(), root, "no-such-branch")
+	if err == nil || !strings.Contains(err.Error(), "git diff in ") {
+		t.Fatalf("ChangedFilesNoRenames on a missing base = %v, want an error naming git diff", err)
+	}
+}
+
+func TestChangedFilesNoRenamesIgnoresGrafts(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "base.txt")
+	tip := revParse(t, root, "HEAD")
+
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	makeDir(t, root, "internal/guard")
+	commitFile(t, root, "internal/guard/x.go")
+	first := revParse(t, root, "HEAD")
+	makeDir(t, root, "cmd")
+	commitFile(t, root, "cmd/m.go")
+
+	graftPath := gitPath(t, root, "info/grafts")
+	if err := os.WriteFile(graftPath, []byte(tip+" "+first+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := git.ChangedFilesNoRenames(ctx, root, "refs/heads/main")
+	if err != nil || !slices.Contains(files, "internal/guard/x.go") {
+		t.Fatalf("ChangedFilesNoRenames with a graft = %v, %v, want internal/guard/x.go", files, err)
+	}
+}
+
+func TestChangedFilesNoRenamesIgnoresCommitGraph(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "b")
+
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	makeDir(t, root, "internal/guard")
+	commitFile(t, root, "internal/guard/x.go")
+	guard := revParse(t, root, "HEAD")
+	makeDir(t, root, "cmd")
+	commitFile(t, root, "cmd/m.go")
+
+	gitCommand(t, root, "checkout", "-q", "main")
+	commitFile(t, root, "m1")
+	m1 := revParse(t, root, "HEAD")
+	commitFile(t, root, "m2")
+	gitCommand(t, root, "checkout", "-q", "feature")
+
+	gitCommand(t, root, "commit-graph", "write", "--reachable", "--no-progress")
+	graphPath := gitPath(t, root, "objects/info/commit-graph")
+	data, err := os.ReadFile(graphPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chunks := map[string]uint64{}
+	for i := 0; i <= int(data[6]); i++ {
+		off := 8 + i*12
+		chunks[string(data[off:off+4])] = binary.BigEndian.Uint64(data[off+4 : off+12])
+	}
+	oidf, oidl, cdat := chunks["OIDF"], chunks["OIDL"], chunks["CDAT"]
+	if oidf == 0 || oidl == 0 || cdat == 0 {
+		t.Fatal("commit-graph has no OIDF, OIDL or CDAT chunk, so the forge does not apply")
+	}
+	n := int(binary.BigEndian.Uint32(data[oidf+255*4:]))
+	position := func(oid string) uint32 {
+		raw, err := hex.DecodeString(oid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < n; i++ {
+			start := int(oidl) + i*20
+			if bytes.Equal(data[start:start+20], raw) {
+				return uint32(i)
+			}
+		}
+		t.Fatalf("commit %s is not in the commit-graph", oid)
+		return 0
+	}
+	binary.BigEndian.PutUint32(data[int(cdat)+int(position(m1))*36+20:], position(guard))
+	sum := sha1.Sum(data[:len(data)-20])
+	copy(data[len(data)-20:], sum[:])
+	if err := os.Remove(graphPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(graphPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	baseOut, err := exec.Command("git", "-C", root, "merge-base", "main", "HEAD").Output()
+	if got := strings.TrimSpace(string(baseOut)); err != nil || got != guard {
+		t.Fatalf("merge-base = %q, %v, want %s: the forge depends on the commit-graph format", got, err, guard)
+	}
+
+	files, err := git.ChangedFilesNoRenames(ctx, root, "refs/heads/main")
+	if err != nil || !slices.Contains(files, "internal/guard/x.go") {
+		t.Fatalf("ChangedFilesNoRenames with a forged commit-graph = %v, %v, want internal/guard/x.go", files, err)
+	}
+}
+
+func TestChangedFilesNoRenamesIgnoresDiffRelative(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "b")
+	gitCommand(t, root, "config", "diff.relative", "true")
+
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	makeDir(t, root, "internal/guard")
+	makeDir(t, root, "docs")
+	commitFile(t, root, "internal/guard/x.go")
+	commitFile(t, root, "docs/a.md")
+
+	files, err := git.ChangedFilesNoRenames(ctx, filepath.Join(root, "docs"), "refs/heads/main")
+	if err != nil || !slices.Contains(files, "internal/guard/x.go") {
+		t.Fatalf("ChangedFilesNoRenames with diff.relative = %v, %v, want internal/guard/x.go", files, err)
+	}
+}
+
+func TestChangedFilesNoRenamesIgnoresInheritedGitLocation(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "b")
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	makeDir(t, root, "internal/guard")
+	commitFile(t, root, "internal/guard/x.go")
+
+	decoy := initRepo(t)
+	gitCommand(t, decoy, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, decoy, "b")
+	gitCommand(t, decoy, "checkout", "-q", "-b", "feature")
+	makeDir(t, decoy, "docs")
+	commitFile(t, decoy, "docs/a.md")
+
+	t.Setenv("GIT_DIR", filepath.Join(decoy, ".git"))
+	files, err := git.ChangedFilesNoRenames(ctx, root, "refs/heads/main")
+	if err != nil || !slices.Contains(files, "internal/guard/x.go") {
+		t.Fatalf("ChangedFilesNoRenames with an inherited GIT_DIR = %v, %v, want internal/guard/x.go", files, err)
+	}
+}
+
+func TestChangedFilesNoRenamesIgnoresSubmoduleConfig(t *testing.T) {
+	ctx := context.Background()
+	root := initRepo(t)
+	gitCommand(t, root, "symbolic-ref", "HEAD", "refs/heads/main")
+	commitFile(t, root, "b")
+
+	gitCommand(t, root, "checkout", "-q", "-b", "feature")
+	gitCommand(t, root, "update-index", "--add", "--cacheinfo", "160000,"+revParse(t, root, "HEAD")+",internal/hooks/sub")
+	gitCommand(t, root, "commit", "-q", "-m", "gitlink")
+	gitCommand(t, root, "config", "diff.ignoreSubmodules", "all")
+
+	files, err := git.ChangedFilesNoRenames(ctx, root, "refs/heads/main")
+	if err != nil || !slices.Contains(files, "internal/hooks/sub") {
+		t.Fatalf("ChangedFilesNoRenames with diff.ignoreSubmodules = %v, %v, want internal/hooks/sub", files, err)
+	}
+}
+
+func makeDir(t *testing.T, root, rel string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(root, rel), 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// gitPath resolves a path inside the git dir to an absolute path and makes its parent folder.
+func gitPath(t *testing.T, root, rel string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", root, "rev-parse", "--git-path", rel).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(root, p)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func revParse(t *testing.T, dir, rev string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", dir, "rev-parse", rev).Output()
+	if err != nil {
+		t.Fatalf("git rev-parse %s: %v", rev, err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestPatchIDSeesWhitespace(t *testing.T) {

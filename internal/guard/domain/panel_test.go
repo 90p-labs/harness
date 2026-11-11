@@ -76,3 +76,24 @@ func TestPanelModels(t *testing.T) {
 		})
 	}
 }
+
+func TestPanelModelsLight(t *testing.T) {
+	listed := []string{"haiku", "sonnet", "opus"}
+	const lightReason = "light panel: light track with no guard, security or hook path"
+
+	models, reason := PanelModels(PanelFacts{Listed: listed, Light: true})
+	if !slices.Equal(models, []string{"haiku"}) || reason != lightReason {
+		t.Errorf("light with a list = %v, %q, want [haiku] and %q", models, reason, lightReason)
+	}
+
+	models, reason = PanelModels(PanelFacts{Light: true})
+	fullModels, fullReason := PanelModels(PanelFacts{})
+	if !slices.Equal(models, fullModels) || reason != fullReason {
+		t.Errorf("light with an empty list = %v, %q, want the full panel %v, %q", models, reason, fullModels, fullReason)
+	}
+
+	models, reason = PanelModels(PanelFacts{Listed: listed})
+	if !slices.Equal(models, listed) || !strings.HasPrefix(reason, "full panel:") {
+		t.Errorf("not light = %v, %q, want the full list and a full panel reason", models, reason)
+	}
+}

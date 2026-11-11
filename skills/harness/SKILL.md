@@ -60,6 +60,8 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - Send a failed task once to a new `worker` agent, with the same `model` field. A plan conflict in the report goes to the lead in place of a new worker. The lead trims the task or amends the plan.
    - Commit in plan order, one commit for each task.
    - Run `harness verify --commits <default branch>` in the foreground, with a Bash timeout of 600000 ms (600 s). When it does not fit in 600 s, run it in the background.
+   - Before the self-check, run `harness review panel`. When it prints `light panel:`, the lead runs no self-check worker. The lead writes `self-check.md` itself from the output of `harness verify --commits <default branch>`, in the format below with the `Head` line. Then it runs plain `harness verify` and `harness run review`. Skip only the "Self-check" item below and its "The worker writes" item.
+   - On a light panel, the lead fills each check row of `self-check.md` from the verify output. For a row that verify cannot judge, such as `spec-scope` or `standards-judgement`, write `pass` with the evidence "light panel: the reviewer checks it". It writes one proof row for each criterion of `## Acceptance criteria`.
    - Self-check: start one `worker` agent with the `model` field set to the first model of the `worker` role. It reads `git diff <default branch>...HEAD`, the lens checklists of `agents/reviewer.md` and `plan.md`. It runs each proof command of `## Acceptance criteria`. A `|` in a proof command is written `\|` in the proof table.
    - The worker writes `self-check.md` in the run folder, in this format. The results are `pass`, `fixed` or `open`. The proof table has one row for each criterion.
      ```text

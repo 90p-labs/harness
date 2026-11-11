@@ -144,11 +144,11 @@ func reviewPanelSource(flags *pflag.FlagSet) guardcli.PanelSource {
 			Worktree: worktree,
 			Panel:    panelSource(cfg),
 		}
-		_, _, panel, reason := guardplugin.FinalPanel(ctx, deps, runID, counted)
-		if len(panel) == 0 {
+		result := guardplugin.FinalPanel(ctx, deps, runID, counted)
+		if len(result.Panel) == 0 {
 			return nil, "", errors.New("no reviewer models are listed under roles")
 		}
-		return panel, reason, nil
+		return result.Panel, result.Reason, nil
 	}
 }
 

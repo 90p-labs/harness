@@ -50,7 +50,16 @@ func ReviewedModels(reviews []Review) (counted, unread []string) {
 	return counted, unread
 }
 
-func DenyReviewModels(models, unread []string, listed map[shareddomain.Host][]string) (string, bool) {
+// ReviewFloor is the count of different models a review needs: one on a light review, else the full panel floor.
+func ReviewFloor(light bool) int {
+	if light {
+		return 1
+	}
+	return minReviewModels
+}
+
+// DenyReviewModels denies a review that has fewer counted models than floor, or misses a listed model.
+func DenyReviewModels(models, unread []string, listed map[shareddomain.Host][]string, floor int) (string, bool) {
 	host, list := FullestList(models, listed)
 	found := noModel
 	if len(models) > 0 {
@@ -62,14 +71,18 @@ func DenyReviewModels(models, unread []string, listed map[shareddomain.Host][]st
 			missing = append(missing, model)
 		}
 	}
-	if len(models) < minReviewModels {
-		reason := fmt.Sprintf("the review of this HEAD needs %d different models, and it has %s", minReviewModels, found)
+	if len(models) < floor {
+		noun := "models"
+		if floor == 1 {
+			noun = "model"
+		}
+		reason := fmt.Sprintf("the review of this HEAD needs %d different %s, and it has %s", floor, noun, found)
 		if len(missing) > 0 {
 			reason += fmt.Sprintf(" and misses %s of %s", strings.Join(missing, modelSeparator), host)
 		}
 		reason += unreadNote(unread)
 		nextStep := nextStepReviewModels
-		if len(list) > 0 && len(list) < minReviewModels {
+		if len(list) > 0 && len(list) < floor {
 			nextStep = NextStepReviewerList
 		} else if len(missing) > 0 {
 			nextStep = nextStepMissingModels

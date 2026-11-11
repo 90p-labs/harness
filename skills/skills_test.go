@@ -74,6 +74,15 @@ const (
 	reReviewBulletStart     = "- **Re-review** (in `working`)"
 	reReviewBinaryText      = "Give it the path of `plan.md`, the default branch and the full path of the harness binary."
 	tailPipefailRuleText    = "Read a long output through `tail` with `set -o pipefail` in the same command, so that the exit code stays: `" + tailPipefailText + "`."
+	reviewPanelText         = "`harness review panel`"
+	lightPanelText          = "`light panel:`"
+	lightNoSelfCheckText    = "the lead runs no self-check worker"
+	lightSelfCheckWriteText = "writes `self-check.md` itself from the output of `harness verify --commits <default branch>`"
+	lightHeadText           = "with the `Head` line"
+	lightPlainVerifyText    = "Then it runs plain `harness verify` and `harness run review`"
+	lightBothLensesText     = "runs both lenses, `Spec` and `Standards`"
+	lightNoVerifierText     = "No verifier runs"
+	reviewerBothLensesText  = "applies both checklists and sets the severity of each finding itself"
 )
 
 var (
@@ -204,6 +213,36 @@ func TestSkillSelfCheckStep(t *testing.T) {
 		if !strings.Contains(item, want) {
 			t.Errorf("the working item does not name %q", want)
 		}
+	}
+}
+
+func TestSkillLightTrackReview(t *testing.T) {
+	doc := repository.Read(t, skillFile)
+	start := strings.Index(doc, workingItemStart)
+	end := strings.Index(doc, reviewingItemStart)
+	if start < 0 || end < start {
+		t.Fatalf("%s has no phase working item before the phase reviewing item", skillFile)
+	}
+	item := doc[start:end]
+	panel := strings.Index(item, reviewPanelText)
+	light := strings.Index(item, lightPanelText)
+	selfCheck := strings.Index(item, selfCheckWorkerText)
+	if panel < 0 || light < panel || selfCheck < light {
+		t.Errorf("the working item must name %q, then %q, then the self-check worker", reviewPanelText, lightPanelText)
+	}
+	for _, want := range []string{lightNoSelfCheckText, lightSelfCheckWriteText, lightHeadText, lightPlainVerifyText} {
+		if !strings.Contains(item, want) {
+			t.Errorf("the working item does not name %q", want)
+		}
+	}
+	reviewing := repository.Read(t, reviewingFile)
+	for _, want := range []string{lightPanelText, lightBothLensesText, lightNoVerifierText} {
+		if !strings.Contains(reviewing, want) {
+			t.Errorf("%s does not name %q", reviewingFile, want)
+		}
+	}
+	if !strings.Contains(repository.Read(t, reviewerAgent), reviewerBothLensesText) {
+		t.Errorf("%s does not name %q", reviewerAgent, reviewerBothLensesText)
 	}
 }
 

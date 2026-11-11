@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09. It replaces the round rule of ADR 0016 and the pre-ship panel rule of ADR 0017. The ship rule `review-models` and the floor of 2 models stay. Superseded in part by ADR 0020, 2026-11-10: the strict minor rule and the item R3b. Amended 2026-11-11: one verifier and one re-review for each round.
+Accepted, 2026-11-09. It replaces the round rule of ADR 0016 and the pre-ship panel rule of ADR 0017. The ship rule `review-models` and the floor of 2 models stay. Superseded in part by ADR 0020, 2026-11-10: the strict minor rule and the item R3b. Amended 2026-11-11: one verifier and one re-review for each round. Issue #90 adds a light panel: a light track with no guard, security or hook path gets one reviewer and a floor of 1 model.
 
 ## Context
 

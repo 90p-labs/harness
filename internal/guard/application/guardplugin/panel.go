@@ -16,7 +16,18 @@ type PanelSource struct {
 	LastRework    func(ctx context.Context, dir, runID string) (domain.ReworkEvent, error)
 	ReviewedByAll func(ctx context.Context, dir, runID string, models []string) (head string, err error)
 	FixupLines    func(ctx context.Context, dir, from string) (int, error)
-	Limit         int
+	// LightReview reports whether the run is a light review with no risky path.
+	LightReview func(ctx context.Context, dir, runID string) (bool, error)
+	Limit       int
+}
+
+// PanelResult is the final panel with the host and list it comes from.
+type PanelResult struct {
+	Host   shareddomain.Host
+	List   []string
+	Panel  []string
+	Reason string
+	Light  bool
 }
 
 // ReviewerLists returns the reviewer models of each host in role order, without duplicates.
@@ -39,16 +50,27 @@ func ReviewerLists(models map[shareddomain.Host]map[string][]string) map[sharedd
 // FinalPanel gathers the facts of the run and picks the final review panel.
 // The guard and `harness review panel` both call it, so they print the same panel.
 // counted are the models with a counted review, which pick the host list. It returns that host and list too.
-func FinalPanel(ctx context.Context, deps Deps, runID string, counted []string) (host shareddomain.Host, list, panel []string, reason string) {
+func FinalPanel(ctx context.Context, deps Deps, runID string, counted []string) PanelResult {
 	lists := ReviewerLists(deps.Models)
-	host, list = domain.FullestList(counted, lists)
-	full := func(why string) (shareddomain.Host, []string, []string, string) {
-		return host, list, slices.Clone(list), "full panel: " + why
+	host, list := domain.FullestList(counted, lists)
+	result := PanelResult{Host: host, List: list}
+	full := func(why string) PanelResult {
+		result.Panel, result.Reason = slices.Clone(list), "full panel: "+why
+		return result
 	}
 	if len(list) == 0 || runID == "" {
 		return full("no reviewer list or no run")
 	}
 	src := deps.Panel
+	// The light fact comes first: a first light review has no findings file.
+	// An error, a nil function or false keeps the full path.
+	if src.LightReview != nil {
+		if light, err := src.LightReview(ctx, deps.Worktree, runID); err == nil && light {
+			result.Light = true
+			result.Panel, result.Reason = domain.PanelModels(domain.PanelFacts{Listed: list, Light: true})
+			return result
+		}
+	}
 	if src.LastRework == nil || src.ReviewedByAll == nil || src.FixupLines == nil {
 		return full("a fact source is missing")
 	}
@@ -73,8 +95,8 @@ func FinalPanel(ctx context.Context, deps Deps, runID string, counted []string) 
 			facts.Fixup = domain.FixupSize{Lines: lines, Known: true}
 		}
 	}
-	panel, reason = domain.PanelModels(facts)
-	return host, list, panel, reason
+	result.Panel, result.Reason = domain.PanelModels(facts)
+	return result
 }
 
 func readFindings(deps Deps, runID string) ([]shareddomain.ReviewFinding, error) {

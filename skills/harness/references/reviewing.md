@@ -1,6 +1,6 @@
 # Reviewing the round
 
-This is phase 5 of the harness loop, `reviewing`. Read it on entering `reviewing`, and after `harness run rework`. Run the steps below in order. After a rework, the next list is the final panel: `harness review panel` prints its models. Start each agent in a fresh context.
+This is phase 5 of the harness loop, `reviewing`. Read it on entering `reviewing`, and after `harness run rework`. Run the steps below in order. After a rework, the next list is the final panel: `harness review panel` prints its models. Start each agent in a fresh context. On a light panel, the **Light panel** item replaces the Common list and the Verify steps.
 
 - **Common list**: start one `reviewer` agent for each listed model, in parallel, on the same `HEAD`. Set the `model` field of each agent call.
 - Lens `Spec` runs on the first model of the `reviewer` role, lens `Standards` on the second, and lens `Spec` on every other model. Set the `model` field for each. Give each reviewer, also of the final panel, its lens, the path of `plan.md`, the default branch and the full path of the harness binary.
@@ -13,12 +13,13 @@ This is phase 5 of the harness loop, `reviewing`. Read it on entering `reviewing
   | F2 | minor | not real | closed | sonnet | docs/b.md:3 | The name differs. |
   ```
 - The lead writes the `Model` cell: the model of the reviewer that raised the finding, copied from the `reviewer` role list. The final panel shrinks after a rework only when each reworked blocker or major finding has a `Model` cell naming a listed model. A missing or unlisted `Model` cell gives the full panel.
-- The verifier sets `Verdict`. The lead sets `Status` to `closed` after a fix and its re-review, or after a minor fixup.
+- The verifier sets `Verdict`. On a light panel, the single reviewer sets it. The lead sets `Status` to `closed` after a fix and its re-review, or after a minor fixup.
 - The lead does not commit while a reviewer runs. The recorder reads `HEAD` when the reviewer stops.
 - A review counts only when its transcript shows that the reviewer read a changed file. A `Read` call, a diff header in a tool result or a shell command that names the file all count.
 - A reviewer with no result gets one new `reviewer` agent, with the same `model` field. A second gap is not a pass.
-- **Verify**: start one `verifier` agent for all the findings of a round, with the `model` field set to the model of the `explorer` role. It returns one line for each finding, and a finding with no verifier line counts as real. The lead drops each finding that it calls not real, and takes the severity of the verifier.
-- With no real open finding, run `harness run ship`. The guard needs a review of every model of the final panel, and 2 or more models. `harness review panel` prints the panel. The rule `review-findings` refuses a ship while `findings.md` has a real open blocker or major finding.
+- **Light panel**: when `harness review panel` prints a reason that starts with `light panel:`, it lists one model. Start one `reviewer` agent with the `model` field set to that model. It runs both lenses, `Spec` and `Standards`. It sets the `Verdict` and the severity of each finding. No verifier runs, and the final panel is that one model too. The guard accepts one counted review.
+- **Verify**: on a full panel only. Start one `verifier` agent for all the findings of a round, with the `model` field set to the model of the `explorer` role. It returns one line for each finding, and a finding with no verifier line counts as real. The lead drops each finding that it calls not real, and takes the severity of the verifier.
+- With no real open finding, run `harness run ship`. The guard needs a review of every model of the final panel: 2 or more models on a full panel, 1 on a light panel. `harness review panel` prints the panel. The rule `review-findings` refuses a ship while `findings.md` has a real open blocker or major finding.
 - With real findings, run `harness run rework --findings "<id, severity, file:line for each>" --class <implementation|spec-gap|gate-checkable|minor>` once for the whole list. Then go to `working`.
 - The command reads `findings.md`. A real open blocker or major finding raises `review_round` by 1, once for the whole list. Only real open minor findings keep `review_round` and give the event `rework-minor`. A file with no real open finding is refused.
 - With `run.strict_minor: true`, a minor finding counts like a major one. An amend keeps `review_round`. Only a regress resets it.
@@ -34,8 +35,8 @@ This is phase 5 of the harness loop, `reviewing`. Read it on entering `reviewing
 - One more `worker` agent, with the same `model` field, fixes all real minor findings after the blocker and major fixes.
 - **Re-review** (in `working`): start one `reviewer` agent for all the blocker and major fixups of a round. Set the `model` field to the first model of the `reviewer` role. Give it the path of `plan.md`, the default branch and the full path of the harness binary.
 - The reviewer gets all the finding lines of the round and runs `git show <sha>` for each fixup. It reads each diff and the changed files around it.
-- The lead adds each new defect of a re-review to `findings.md`. It goes through Verify and Fix like the other findings.
+- The lead adds each new defect of a re-review to `findings.md`. It goes through Verify and Fix like the other findings. On a light panel, the reviewer sets its verdict and Verify is skipped.
 - A fix that fails its re-review goes once to a new `worker` agent, with the same `model` field.
 - Then run `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base <default branch>`, `harness verify --commits <default branch>` and `harness run review`.
-- **Final panel**: run `harness review panel`. Start one `reviewer` agent for each model that it prints, with the `model` field set to that model, on the final `HEAD`. After a small fixup it can be fewer than every listed model. Its findings go through Verify and a new rework.
+- **Final panel**: run `harness review panel`. Start one `reviewer` agent for each model that it prints, with the `model` field set to that model, on the final `HEAD`. After a small fixup it can be fewer than every listed model. Its findings go through Verify (full panel only) and a new rework.
 - The limit is `run.max_review_rounds` (default 3). Past it, the run blocks.

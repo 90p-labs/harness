@@ -22,7 +22,7 @@ const (
 	proofOnlyNextStep  = "next: run harness verify, then run harness run review again"
 	proofMixedNextStep = "next: fix the problems, commit, run harness verify, then run harness run review again"
 
-	selfCheckNextStep = "next: run the self-check worker, write the file with a Head: <sha> line, then run harness run review again"
+	selfCheckNextStep = "next: write self-check.md with a Head: <sha> line, then run harness run review again"
 )
 
 var selfCheckHead = regexp.MustCompile(`(?m)^Head:[ \t]*[0-9a-f]{7,40}[ \t]*\r?$`)

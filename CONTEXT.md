@@ -22,9 +22,9 @@ These terms have one meaning in the code, the docs and the plans.
 - **Review finding**: one row of `findings.md` with an ID, a severity, a verdict and a status. Only a real open row counts for a rework or a ship.
 - **Patch id**: the `git patch-id --verbatim` of the diff from the merge base to `HEAD`. A clean rebase keeps it, so the reviews stay valid. A change of whitespace only changes it.
 - **Common list**: the findings that one `reviewer` agent for each listed model returns in one pass on the same `HEAD`. The lead merges them and removes duplicates.
-- **Verifier**: one agent per review round that checks every finding and returns one line per finding, `real` or `not real`. It never edits a file and writes no review record.
+- **Verifier**: one agent per review round that checks every finding and returns one line per finding, `real` or `not real`. It never edits a file and writes no review record. On a light panel no verifier runs.
 - **Re-review**: one `reviewer` agent that reads all the fixup diffs of a round and answers `closed` or `open` for each. It runs in `working` and writes no review record.
-- **Final panel**: the models that review the final `HEAD` after a rework. It is every listed `reviewer` model, or fewer after a small fixup. `harness review panel` prints it.
+- **Final panel**: the models that review the final `HEAD` after a rework. It is every listed `reviewer` model, or fewer after a small fixup. On a light panel it is the first listed model. `harness review panel` prints it.
 - **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`. A docs-only amend in `working` skips it too, when the run has no recorded approval.
 - **Kept-structure amend**: an `amend` that skips the approval. It starts in `working` with no live round, and the plan keeps its structure against the approved plan. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names of `Test first` and the `DoD` numbers. A sketch link anywhere counts as structure.
 - **Review risk**: a line of `## Review risks` that names a risk. It points to a test name or to a decision.

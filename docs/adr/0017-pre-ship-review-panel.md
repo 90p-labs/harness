@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-09. It replaces the third-reviewer rule of ADR 0016. ADR 0018 replaces its pre-ship panel rule. The ship rule needs every model of the final panel, and the floor of 2 models stays. The amendment below says when the panel is smaller than the listed models.
+Accepted, 2026-11-09. It replaces the third-reviewer rule of ADR 0016. ADR 0018 replaces its pre-ship panel rule. The ship rule needs every model of the final panel, and the floor of 2 models stays. The amendment below says when the panel is smaller than the listed models. Issue #90 adds a light panel: a light track with no guard, security or hook path gets one reviewer and a floor of 1 model.
 
 ## Context
 

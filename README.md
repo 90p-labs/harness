@@ -99,7 +99,7 @@ Last, look at the order of the work. Each task starts with a failing test and na
 
 **4. Answer and approve.** The agent asks about each open decision. In this plan, the decision was that a cancel does not refund a paid order. Then it asks the `Plan` question with `Approve` and `Change the plan`. Your code does not change before you pick `Approve`. To let a model approve instead, run `harness run approve --by <model> --reason "<one line>"`.
 
-**5. Let it work.** You do nothing in this step. A worker takes each task in wave order, commits the failing test, then the code. `harness verify` runs the gates and the 4 criteria. Then two or more models review the change, a verifier checks each finding, and a worker fixes the real ones.
+**5. Let it work.** You do nothing in this step. A worker takes each task in wave order, commits the failing test, then the code. `harness verify` runs the gates and the 4 criteria. On the full track, two or more models review the change, a verifier checks each finding, and a worker fixes the real ones. A light track with no guard, security or hook path gets one reviewer and no verifier.
 
 **6. Merge the pull request.** By default the agent opens a draft and stops. Only you can merge it, because the guard denies a merge. `guard.disabled` can let the agent mark it ready and merge. Run `harness pr policy` to see which. After the merge, the agent closes the run with `harness run done --pr <url>`.
 
@@ -133,7 +133,7 @@ An agent should not merge what you did not approve, or claim what it did not pro
 - **You approve the plan first.** The plan holds the goal, the criteria, the diagrams and the tasks. The agent starts work only after your answer.
 - **Proof, not claims.** A gate is one shell command that proves one property, such as the tests. `harness verify` runs the gates and each criterion, and keeps the evidence.
 - **Tests before code.** A `test:` commit must fail a gate, and every other commit must pass.
-- **More than one reviewer.** Two or more models review the change, and a verifier checks each finding.
+- **More than one reviewer.** Two or more models review the change, and a verifier checks each finding. A light track with no guard, security or hook path gets one reviewer, and the floor is 1 model.
 - **Hard limits.** The guard rules run on the host hooks. They deny a PR merge, a PR that is not a draft, a forced push, a read of a secret and an early stop. `guard.disabled` can turn off the two PR rules, see `harness pr policy`.
 - **Clean architecture.** Lint packs for DDD, event sourcing, observability, Next.js and shadcn, with a baseline ratchet.
 - **Open to your tools.** An exec plugin reads a JSON event on stdin and prints a verdict. It can veto a transition, a plan or a gate.

@@ -32,6 +32,8 @@ type PanelFacts struct {
 	Last     ReworkEvent
 	Fixup    FixupSize
 	Limit    int
+	// Light marks a light review: a light track with no guard, security or hook path.
+	Light bool
 }
 
 // PanelModels picks the models that must review before a ship, with a short reason.
@@ -39,6 +41,9 @@ type PanelFacts struct {
 func PanelModels(facts PanelFacts) (models []string, reason string) {
 	full := func(why string) ([]string, string) {
 		return slices.Clone(facts.Listed), "full panel: " + why
+	}
+	if facts.Light && len(facts.Listed) > 0 {
+		return slices.Clone(facts.Listed[:1]), "light panel: light track with no guard, security or hook path"
 	}
 	switch facts.Last.Name {
 	case "":

@@ -31,6 +31,10 @@ Lens Standards does not report a rule that a gate checks.
 
 Then look for edge cases, error paths, leaks, dead code and code smells. Mark these as judgement calls.
 
+## Both lenses
+
+When the lead starts you with both lenses, `Spec` and `Standards`, you check both lists above. The reviewer applies both checklists and sets the severity of each finding itself. No verifier follows. Use the ids `spec-1` and `standards-1` by lens.
+
 ## Report
 
 List every finding of the lens in one pass, the most severe first. Give each finding on one line of at most 50 words:

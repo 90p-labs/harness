@@ -49,7 +49,7 @@ func TestDenyReviewModels(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			reason, denied := DenyReviewModels(c.models, nil, c.listed)
+			reason, denied := DenyReviewModels(c.models, nil, c.listed, minReviewModels)
 			if denied != c.deny {
 				t.Fatalf("denied = %v (%q), want %v", denied, reason, c.deny)
 			}
@@ -82,15 +82,35 @@ func TestReviewReadNoChangedFile(t *testing.T) {
 		t.Fatalf("counted = %v, unread = %v, want [opus sonnet] and [haiku]", counted, unread)
 	}
 
-	reason, denied := DenyReviewModels([]string{testSonnet}, unread, bothLists)
+	reason, denied := DenyReviewModels([]string{testSonnet}, unread, bothLists, minReviewModels)
 	if !denied || !strings.Contains(reason, testHaiku+" read no changed file") {
 		t.Errorf("one counted model: denied = %v, reason %q, want a deny that names haiku", denied, reason)
 	}
-	reason, denied = DenyReviewModels([]string{testOpus, testSonnet}, unread, bothLists)
+	reason, denied = DenyReviewModels([]string{testOpus, testSonnet}, unread, bothLists, minReviewModels)
 	if !denied || !strings.Contains(reason, testHaiku+" read no changed file") {
 		t.Errorf("list misses haiku: denied = %v, reason %q, want a deny that names haiku", denied, reason)
 	}
-	if reason, denied := DenyReviewModels([]string{testOpus, testSonnet}, unread, nil); denied {
+	if reason, denied := DenyReviewModels([]string{testOpus, testSonnet}, unread, nil, minReviewModels); denied {
 		t.Errorf("two counted models and no list: denied with %q, want allow", reason)
+	}
+}
+
+func TestDenyReviewModelsFloor(t *testing.T) {
+	if ReviewFloor(true) != 1 || ReviewFloor(false) != 2 {
+		t.Fatalf("ReviewFloor(true) = %d, ReviewFloor(false) = %d, want 1 and 2", ReviewFloor(true), ReviewFloor(false))
+	}
+
+	if reason, denied := DenyReviewModels([]string{testOpus}, nil, opusOnly, 1); denied {
+		t.Errorf("floor 1, one listed model, one counted: denied with %q, want allow", reason)
+	}
+
+	reason, denied := DenyReviewModels([]string{testOpus}, nil, opusOnly, 2)
+	if !denied || !strings.Contains(reason, "needs 2 different models") || !strings.Contains(reason, NextStepReviewerList) {
+		t.Errorf("floor 2, one counted: denied = %v, reason %q, want a deny that needs 2 models", denied, reason)
+	}
+
+	reason, denied = DenyReviewModels(nil, nil, opusOnly, 1)
+	if !denied || !strings.Contains(reason, "needs 1 different model,") {
+		t.Errorf("floor 1, no counted: denied = %v, reason %q, want a deny that needs 1 model", denied, reason)
 	}
 }
