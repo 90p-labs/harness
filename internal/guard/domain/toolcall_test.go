@@ -144,3 +144,40 @@ func TestToolCallOf(t *testing.T) {
 		})
 	}
 }
+
+func TestToolCallOfMCPName(t *testing.T) {
+	patchInput, err := json.Marshal(map[string]string{"command": samplePatch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		tool, mcp string
+		kind      shareddomain.ToolKind
+		input     string
+	}{
+		{"Bash", "mcp__crawl_ostrich__life_Bash", shareddomain.ToolKindShell, `{"command":"git push origin main"}`},
+		{"Edit", "mcp__crawl_ostrich__pilot_Edit", shareddomain.ToolKindEdit, `{"file_path":"/r/a_test.go","new_string":"return 1"}`},
+		{"MultiEdit", "mcp__crawl_ostrich__pilot_MultiEdit", shareddomain.ToolKindEdit, `{"file_path":"/r/a.ts","edits":[{"new_string":"one"},{"new_string":"two"}]}`},
+		{"Write", "mcp__crawl_ostrich__cradle_Write", shareddomain.ToolKindWrite, `{"file_path":"/r/b.go","content":"package b"}`},
+		{"Read", "mcp__crawl_ostrich__pole_Read", shareddomain.ToolKindRead, `{"file_path":"/r/.env"}`},
+		{"Grep", "mcp__crawl_ostrich__x_Grep", shareddomain.ToolKindSearch, `{"pattern":"x","path":"/r/src"}`},
+		{"Glob", "mcp__crawl_ostrich__x_Glob", shareddomain.ToolKindSearch, `{"path":"/r/src"}`},
+		{"Agent", "mcp__crawl_ostrich__verb_Agent", shareddomain.ToolKindAgent, `{"subagent_type":"worker","model":"sonnet"}`},
+		{"apply_patch", "mcp__srv__apply_patch", shareddomain.ToolKindEdit, string(patchInput)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			plain, err := domain.ToolCallOf(shareddomain.ToolPayload{Tool: tc.tool, Kind: tc.kind, Input: []byte(tc.input)})
+			if err != nil {
+				t.Fatalf("plain ToolCallOf: %v", err)
+			}
+			got, err := domain.ToolCallOf(shareddomain.ToolPayload{Tool: tc.mcp, Kind: tc.kind, Input: []byte(tc.input)})
+			if err != nil {
+				t.Fatalf("mcp ToolCallOf: %v", err)
+			}
+			if !reflect.DeepEqual(got, plain) {
+				t.Fatalf("ToolCallOf(%s) = %+v, want %+v", tc.mcp, got, plain)
+			}
+		})
+	}
+}

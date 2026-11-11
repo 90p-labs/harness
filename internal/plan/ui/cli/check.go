@@ -43,6 +43,7 @@ type Handlers struct {
 	RepoTop     string
 	DefaultPlan func(ctx context.Context) (checkplan.Query, error)
 	DefaultView func(ctx context.Context) (renderview.Command, error)
+	Open        func(ctx context.Context, page string) error
 }
 
 type Connect func(ctx context.Context) (Handlers, func() error, error)

@@ -202,3 +202,67 @@ func TestPlanViewCommand(t *testing.T) {
 		}
 	})
 }
+
+func TestViewOpen(t *testing.T) {
+	errOpen := errors.New("no browser")
+	valid, err := os.ReadFile(validPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withOpen := func(open func(context.Context, string) error) cli.Connect {
+		inner := viewConnect(&pageRenderer{}, nil)
+		return func(ctx context.Context) (cli.Handlers, func() error, error) {
+			handlers, closeStore, err := inner(ctx)
+			handlers.Open = open
+			return handlers, closeStore, err
+		}
+	}
+	plan := func(t *testing.T) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "plan.md")
+		if err := os.WriteFile(path, valid, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	t.Run("the flag opens the written page and still prints the path", func(t *testing.T) {
+		var opened []string
+		path := plan(t)
+
+		out, err := execute(t, withOpen(func(_ context.Context, page string) error {
+			opened = append(opened, page)
+			return nil
+		}), subView, flagFile, path, "--open")
+
+		page := filepath.Join(filepath.Dir(path), pageName)
+		if err != nil || strings.TrimSpace(out) != page {
+			t.Fatalf("err = %v, out = %q, want %q", err, out, page)
+		}
+		if len(opened) != 1 || opened[0] != page {
+			t.Errorf("opened = %v, want [%s]", opened, page)
+		}
+		if got, _ := os.ReadFile(page); string(got) != pageBody {
+			t.Errorf("page = %q, want %q", got, pageBody)
+		}
+	})
+
+	t.Run("without the flag nothing opens", func(t *testing.T) {
+		_, err := execute(t, withOpen(func(context.Context, string) error {
+			t.Error("Open called")
+			return nil
+		}), subView, flagFile, plan(t))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("an open error is returned", func(t *testing.T) {
+		_, err := execute(t, withOpen(func(context.Context, string) error { return errOpen }), subView, flagFile, plan(t), "--open")
+
+		if !errors.Is(err, errOpen) {
+			t.Errorf("err = %v, want the open error", err)
+		}
+	})
+}
