@@ -156,7 +156,7 @@ The guard also allows one stop for each phase change when `handoff.md` is ready.
 - `## Unreviewed commits`
 - `## Decisions`
 
-The file has at most 4096 bytes, and `harness run status` prints `handoff: ready (step <n>)` after the stop. The run stores the step in the column `handoff_step`. A second stop at the same step blocks, as `max_stop_blocks` says. A Codex host has no pane restart. The handoff stop ends the turn, and the next prompt continues the same session.
+The file has at most 4096 bytes, and `harness run status` prints `handoff: ready (step <n>)` after the stop. The run stores the step in the column `handoff_step`. A second stop at the same step blocks, as `max_stop_blocks` says. `handoff.md` is a checkpoint. The `handoff:` line ends with `then continue`: the lead writes the file, then continues with the `next:` step. No host resumes a run by itself: a new session reads `harness run status` and `handoff.md`.
 
 ```yaml
 run:

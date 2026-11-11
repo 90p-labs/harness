@@ -231,11 +231,15 @@ func TestHandoffDocs(t *testing.T) {
 		"## Unreviewed commits",
 		"## Decisions",
 		"handoff_step",
-		"no pane restart",
-		"next prompt continues the same session",
+		"`handoff.md` is a checkpoint",
+		"The `handoff:` line ends with `then continue`",
+		"No host resumes a run by itself",
 	}
 	for _, file := range []string{designFile, configDocFile} {
 		doc := repository.Read(t, file)
+		if strings.Contains(doc, "no pane restart") {
+			t.Errorf("%s still says %q", file, "no pane restart")
+		}
 		for _, want := range wants {
 			if !strings.Contains(doc, want) {
 				t.Errorf("%s does not name %q", file, want)
