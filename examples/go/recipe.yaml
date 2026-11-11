@@ -1,0 +1,16 @@
+name: go
+summary: Go module with go-arch-lint and the gates in Docker Compose
+files:
+  - .go-arch-lint.yml
+  - .harness.yaml
+  - .harness/plugins/go-arch-lint.sh
+  - compose.yaml
+  - lint/architecture/pack.yaml
+next:
+  - "in compose.yaml, set the top-level name: my-go-app to the name of your module"
+  - "in .go-arch-lint.yml, edit the components and deps to match the contexts under internal/"
+  - "in .gitignore, add the lines .harness/* and !.harness/plugins/"
+  - docker compose pull
+  - harness lint init
+  - harness lint baseline
+  - harness verify

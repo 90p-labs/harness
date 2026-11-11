@@ -1,0 +1,26 @@
+name: symfony
+summary: Symfony with Makefile gates, deptrac and Docker Compose
+files:
+  - .harness.yaml
+  - .harness/plugins/deptrac.sh
+  - .harness/plugins/make-gates.sh
+  - .php-cs-fixer.dist.php
+  - Makefile
+  - compose.yaml
+  - deptrac.yaml
+  - lint/architecture/pack.yaml
+scaffold:
+  - composer create-project symfony/skeleton:v7.4.99 app
+  - cd app
+  - git init
+  - harness recipe apply symfony
+next:
+  - "require phpunit/phpunit, phpstan/phpstan, friendsofphp/php-cs-fixer and deptrac/deptrac in require-dev"
+  - "in compose.yaml, set the top-level name: my-symfony-app to the name of your project"
+  - "in deptrac.yaml, edit the layers to match the contexts under src/"
+  - "in .gitignore, add the lines .harness/* and !.harness/plugins/"
+  - docker compose pull
+  - harness gates init
+  - harness lint init
+  - harness lint baseline
+  - harness verify

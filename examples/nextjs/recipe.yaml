@@ -1,0 +1,21 @@
+name: nextjs
+summary: Next.js with shadcn, the ddd pack and gates in Docker Compose
+files:
+  - .harness.yaml
+  - Dockerfile
+  - compose.yaml
+scaffold:
+  - pnpm dlx create-next-app@16.4.5 app --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-pnpm --disable-git --yes
+  - cd app
+  - pnpm dlx shadcn@4.23.0 init --defaults --yes
+  - rm -rf node_modules
+  - git init
+  - harness recipe apply nextjs
+next:
+  - "in compose.yaml, set the top-level name: my-next-app to the name of your project"
+  - "in .gitignore, add the line .harness/"
+  - docker compose build
+  - npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0
+  - harness lint init
+  - harness lint baseline
+  - harness verify
