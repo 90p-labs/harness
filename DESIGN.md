@@ -1350,7 +1350,21 @@ The launcher `bin/harness` rules:
 - A command with no binary downloads the asset `harness-OS-ARCH` of release `v<version>` (from `.claude-plugin/plugin.json`) with `gh`. Then it builds with Go. With neither, it exits 127 with the fix.
 - A hook with no binary never builds. It starts the `gh` download in the background under a lock (a lock older than 10 minutes is stale), prints `{}` and names the cause on stderr. A failed download leaves its error in `dist/.download.failed`. Each hook then prints that error with no new download, until the file is older than 10 minutes. A hook reads that file only while it holds the lock, and releases the lock before it skips. So a download that fails while a hook starts never gives a second download.
 
-A release is a `v*` tag. The workflow `release.yml` stops when the tag is not `v` plus the version of both manifests. Then it runs `make dist`, which builds `harness-OS-ARCH` for darwin and linux on amd64 and arm64, and publishes the four binaries.
+A release is a `vX.Y.Z` tag. The release bot sets the version of both plugin manifests, not a person.
+
+- Each push to `main` runs the workflow `auto-release.yml`.
+- `scripts/release.sh next` reads the conventional commits since the last `vX.Y.Z` tag. With no tag, the base is the manifest version.
+- A `fix` commit gives a patch. A `feat` commit gives a minor. A `!` or a `BREAKING CHANGE:` footer gives a major, but a minor while the major is 0. Other types give no release.
+- The `tag` job writes the version in both plugin manifests. It commits `chore(release): vX.Y.Z` as `github-actions[bot]` and runs `make dist` before the push. Then it pushes the commit and an annotated tag in one atomic push.
+- Then the `release` job calls `release.yml` through `workflow_call`. A tag pushed with `GITHUB_TOKEN` starts no workflow, so a call is needed.
+- The loop guard has three parts. A push with `GITHUB_TOKEN` starts no workflow. The `tag` job skips a head commit that starts with `chore(release):`. A `chore` commit gives no bump.
+- `release.yml` also runs for a `v*` tag that a person pushes. It runs `release.sh check`, which stops when the tag is not the version of both manifests. Then it runs `make dist`, which builds `harness-OS-ARCH` for darwin and linux on amd64 and arm64.
+- It publishes the four binaries with notes from `release.sh notes`. The notes have the groups Breaking changes, Features, Fixes and Other changes.
+- When the publish fails after the push, re-run the failed jobs of the run.
+- The `tag` job runs `release.sh check` before the push. So a manifest with no version line pushes no tag.
+- Checkout keeps no token. Only the push step reads `GITHUB_TOKEN`.
+- The `tag` job pushes to `main` directly. A branch protection on `main` would block that push, so it needs a bypass for the bot first.
+- A person makes the `v1.0.0` release by hand. They set `1.0.0` in both manifests and commit `chore(release): v1.0.0`. Then they tag that commit `v1.0.0` and push the commit and the tag. The `tag` job skips the commit, and `release.yml` runs for the tag.
 
 ```mermaid
 classDiagram
