@@ -147,6 +147,9 @@ func TestCheckRules(t *testing.T) {
 		{"proof with spaced redirections", []edit{{"`make check`", "`cmd < in > out`"}}, nil},
 		{"owned path with a dot slash", []edit{{"`internal/ping/domain/pong.go`, ", "`./internal/ping/domain/pong.go`, "}}, nil},
 		{"depends with a full stop", []edit{{"- Depends on: task 1", "- Depends on: task 1."}}, nil},
+		{"test commit in a docs change", []edit{{"`feat: add the pong domain`", "`test: add the pong domain`"}, {"`feat: add the ping query`", "`docs: add the ping query`"}}, []string{"plan.md:114: commit-split:"}},
+		{"test commit with a feat", []edit{{"`feat: add the pong domain`", "`test: add the pong domain`"}}, nil},
+		{"test commit with a fix", []edit{{"`feat: add the pong domain`", "`test: add the pong domain`"}, {"`feat: add the ping query`", "`fix: add the ping query`"}}, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

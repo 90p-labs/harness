@@ -104,6 +104,7 @@ Each line gives the rule id, what it checks, and the fix.
 - `tree-unowned`: a tree file is in the owned files of no task. Add the path to `Owned files`.
 - `task-uncommitted`: a task is in no commit. Add the task to a commit line.
 - `commit-format`: a commit line is not a conventional commit with its tasks. Use `type: subject` and `(task n)`.
+- `commit-split`: a plan has a `test:` commit and a `docs:` commit, and no `feat:` or `fix:` commit. Drop the test commit and prove the docs with a proof command: a docs-only change is one `docs:` commit.
 - `pr-sequence`: the PR list does not mark exactly one `(this run)`. Mark one PR.
 - `spec-criteria`: a tech spec has no valid `Criteria` line. List the criteria that it covers.
 - `trace-unlinked`: a criterion has no tech spec, or a task owns no tree file. Link it.

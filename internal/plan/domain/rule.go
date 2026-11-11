@@ -22,4 +22,5 @@ const (
 	RuleRiskUnanchored   RuleID = "risk-unanchored"
 	RuleThreatModel      RuleID = "threat-model"
 	RulePlanSize         RuleID = "plan-size"
+	RuleCommitSplit      RuleID = "commit-split"
 )
