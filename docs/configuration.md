@@ -317,7 +317,7 @@ The rule ids:
 |---|---|---|
 | `pr-no-merge` | `tool.before` | `gh pr merge` |
 | `pr-draft-only` | `tool.before` | `gh pr create` without `--draft` |
-| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. |
+| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. It denies a body with an em dash, on any line. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch (see `git`) |
 | `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |

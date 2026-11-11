@@ -6,6 +6,47 @@ import (
 	"testing"
 )
 
+// TestBodyProblemsEmDash checks the em dash problems. They come after the
+// section problems, in line order with the other line problems, and an em dash
+// in a fence counts too. A mermaid mark problem comes at the closing fence.
+func TestBodyProblemsEmDash(t *testing.T) {
+	const dash = string(emDashRune)
+	const next = ". rewrite the line with commas, colons or sentences"
+	const head = "Bottom line.\n\n## Why\n"
+	const tail = "\n\n## How\ny"
+	cases := map[string]struct {
+		body string
+		want []string
+	}{
+		"clean body": {
+			head + "x\n\n## What\nz" + tail,
+			nil,
+		},
+		"plain line": {
+			head + "x " + dash + " y\n\n## What\nz" + tail,
+			[]string{"line 4 has an em dash" + next},
+		},
+		"fenced code block": {
+			head + "x\n\n## What\n```\na " + dash + " b\n```" + tail,
+			[]string{"line 8 has an em dash" + next},
+		},
+		"mermaid fence": {
+			head + "x\n\n## What\n```mermaid\nflowchart TD\n  A[a " + dash + " b] --> B\n```" + tail,
+			// The mark problem comes at the closing fence, so after the line problem.
+			[]string{"line 9 has an em dash" + next, "the mermaid diagram is not marked: no mark: draw the marks with harness diagram. draw it with `harness diagram`"},
+		},
+		"two lines in line order": {
+			head + "x " + dash + " y\n\n## What\n```\na " + dash + " b\n```" + tail,
+			[]string{"line 4 has an em dash" + next, "line 8 has an em dash" + next},
+		},
+	}
+	for name, tc := range cases {
+		if got := BodyProblems(tc.body); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: problems = %q, want %q", name, got, tc.want)
+		}
+	}
+}
+
 func TestBodyProblems(t *testing.T) {
 	const good = "Bottom line: the guard checks X.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."
 	long := func(n int) string { return strings.TrimSpace(strings.Repeat("word ", n)) }
