@@ -202,7 +202,7 @@ func ruleCases() map[string][]ruleCase {
 			{name: "tee", call: bash("echo x | tee internal/a.go"), deny: true, step: "Edit or Write"},
 			{name: "sed in place with empty suffix", call: bash("sed -i '' s/a/b/ a.go"), deny: true, step: "Edit or Write"},
 			{name: "sed in place", call: bash("sed -i s/a/b/ web/a.ts"), deny: true, step: "Edit or Write"},
-			{name: "perl in place", call: bash("perl -pi -e s/a/b/ a.py"), deny: true, step: "literal absolute path"},
+			{name: "perl in place", call: bash("perl -pi -e s/a/b/ a.py"), deny: true, step: "Edit or Write"},
 			{name: "cp into source", call: bash("cp /tmp/x.go main.go"), deny: true, step: "Edit or Write"},
 			{name: "mv into source", call: bash("mv /tmp/x docs/main.md"), deny: true, step: "Edit or Write"},
 			{name: "cp into a directory", call: bash("cp /tmp/new.go internal/"), deny: true, step: "Edit or Write"},

@@ -204,9 +204,8 @@ func sedInPlace(c Command) bool {
 	})
 }
 
-// sedTargets splits the arguments of an in-place sed into the script word and
-// the file operands. The BSD form passes an empty suffix word after -i,
-// which is not an operand.
+// sedTargets splits in-place sed arguments into the script word and the files.
+// It drops the empty BSD suffix word after -i.
 func sedTargets(args []string) (script string, files []string) {
 	kept := make([]string, 0, len(args))
 	for i, a := range args {
@@ -222,7 +221,6 @@ func sedTargets(args []string) (script string, files []string) {
 	return operands[0], operands[1:]
 }
 
-// sedScript returns the script word of an in-place sed.
 func sedScript(c Command) (string, bool) {
 	if !sedInPlace(c) {
 		return "", false
@@ -251,21 +249,122 @@ func isSourcePath(path string, rc RuleContext) bool {
 }
 
 func mainShellWriteSource(call ToolCall, rc RuleContext) bool {
+	_, found := firstSourceTarget(call, rc)
+	return found
+}
+
+// firstSourceTarget returns the first target of the call that is a source
+// path, the sed script word included, in the order of the invocations.
+func firstSourceTarget(call ToolCall, rc RuleContext) (string, bool) {
 	for _, c := range invocations(call.Command) {
-		script, hasScript := sedScript(c)
-		if hasScript && isSourcePath(script, rc) ||
-			slices.ContainsFunc(writeTargets(c), func(path string) bool { return isSourcePath(path, rc) }) {
-			return true
+		if script, ok := sedScript(c); ok && isSourcePath(script, rc) {
+			return script, true
+		}
+		targets := writeTargets(c)
+		if i := slices.IndexFunc(targets, func(path string) bool { return isSourcePath(path, rc) }); i >= 0 {
+			return targets[i], true
 		}
 	}
-	return false
+	return "", false
+}
+
+// unresolvedParts returns the variable, substitution, backtick and leading ~
+// parts of a target in order. An unclosed part makes the whole target the part.
+func unresolvedParts(target string) []string {
+	var parts []string
+	start := 0
+	if strings.HasPrefix(target, homePrefix) {
+		end := strings.Index(target, pathSeparator)
+		if end < 0 {
+			end = len(target)
+		}
+		parts = append(parts, target[:end])
+		start = end
+	}
+	for i := start; i < len(target); i++ {
+		end := -1
+		switch target[i] {
+		case '`':
+			if j := strings.IndexByte(target[i+1:], '`'); j >= 0 {
+				end = i + 1 + j + 1
+			}
+		case '$':
+			if i+1 >= len(target) {
+				continue
+			}
+			switch next := target[i+1]; {
+			case next == '{':
+				end = closingIndex(target, i+1, '{', '}')
+			case next == '(':
+				end = closingIndex(target, i+1, '(', ')')
+			case isNameStart(next):
+				end = i + 2
+				for end < len(target) && (isNameStart(target[end]) || target[end] >= '0' && target[end] <= '9') {
+					end++
+				}
+			case strings.IndexByte(specialParams, next) >= 0:
+				end = i + 2
+			default:
+				continue
+			}
+		default:
+			continue
+		}
+		if end < 0 {
+			return []string{target}
+		}
+		parts = append(parts, target[i:end])
+		i = end - 1
+	}
+	return parts
+}
+
+func isNameStart(b byte) bool {
+	return b == '_' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+}
+
+// closingIndex returns the index after the bracket that closes the one at
+// open, or -1 when it does not close.
+func closingIndex(s string, open int, left, right byte) int {
+	depth := 0
+	for i := open; i < len(s); i++ {
+		switch s[i] {
+		case left:
+			depth++
+		case right:
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return -1
+}
+
+func joinParts(parts []string) string {
+	quoted := make([]string, len(parts))
+	for i, p := range parts {
+		quoted[i] = "`" + p + "`"
+	}
+	if len(quoted) == 1 {
+		return quoted[0]
+	}
+	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
+}
+
+func notFlatReason(target string) (string, string) {
+	if parts := unresolvedParts(target); len(parts) > 0 {
+		return fmt.Sprintf("%s, and the target `%s` holds %s", reasonNotFlat, target, joinParts(parts)), nextStepAbsolute
+	}
+	return fmt.Sprintf("%s, and it writes `%s`", reasonNotFlat, target), nextStepEditTool
 }
 
 func denyShellWriteSource(call ToolCall, rc RuleContext) (string, bool) {
 	commands, flat := flatInvocations(call.Command)
 	if !flat {
-		if mainShellWriteSource(call, rc) {
-			return deny(reasonNotFlat, nextStepAbsolute)
+		if target, found := firstSourceTarget(call, rc); found {
+			reason, next := notFlatReason(target)
+			return deny(reason, next)
 		}
 		return "", false
 	}
