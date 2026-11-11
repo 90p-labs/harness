@@ -29,15 +29,23 @@ func (d domainStop) DecideStop(context.Context, bool) (bool, string, error) {
 	return verdict.Block, verdict.Reason, nil
 }
 
+// hostReasonCap is the byte cap of the host stop reason. The domain
+// budget is 300 (guardSuffixBudget in internal/run/domain/stop_test.go), which
+// leaves 40 for the guard suffix.
+const hostReasonCap = 340
+
 func TestStopDenyReasonSentToHostIsShort(t *testing.T) {
 	long := strings.Repeat("x", 500)
+	multibyte := strings.Repeat("é", 500)
+	const sectionsProblem = `needs ## Next, ## Open findings, ## Unreviewed commits, ## Decisions, each with a "- " line`
 	type tc struct {
 		phase   domain.Phase
 		handoff error
+		every   []string
 	}
 	cases := map[string]tc{
-		"handoff missing": {domain.PhaseReviewing, domain.ErrHandoffMissing},
-		"handoff nil":     {domain.PhaseReviewing, nil},
+		"handoff missing": {domain.PhaseReviewing, domain.ErrHandoffMissing, nil},
+		"handoff nil":     {domain.PhaseReviewing, nil, nil},
 	}
 	for _, phase := range []domain.Phase{domain.PhasePlanning, domain.PhaseWorking, domain.PhaseReviewing, domain.PhaseShipping} {
 		run := domain.Run{Phase: phase, Step: 12345}
@@ -60,7 +68,23 @@ func TestStopDenyReasonSentToHostIsShort(t *testing.T) {
 			if refusal == nil {
 				t.Fatalf("%s: want a refusal", name)
 			}
-			cases[string(phase)+" "+name] = tc{phase, refusal}
+			cases[string(phase)+" "+name] = tc{phase, refusal, nil}
+		}
+		// The worst case and the multibyte case must name every problem.
+		unfinished := "## Next\n## Open findings\n## Unreviewed commits\n"
+		for name, value := range map[string]struct{ raw, clipped string }{
+			"worst case": {long, "xxxxxxxxxxxx..."},
+			"multibyte":  {multibyte, "éééééé..."},
+		} {
+			refusal := domain.CheckHandoff(run, []byte("Phase: "+value.raw+"\nStep: "+value.raw+"\n"+unfinished))
+			if refusal == nil {
+				t.Fatalf("%s: want a refusal", name)
+			}
+			cases[string(phase)+" "+name] = tc{phase, refusal, []string{
+				"phase " + value.clipped + ", want " + string(phase),
+				"step " + value.clipped + ", want 12345",
+				sectionsProblem,
+			}}
 		}
 	}
 	for name, c := range cases {
@@ -82,8 +106,13 @@ func TestStopDenyReasonSentToHostIsShort(t *testing.T) {
 					}
 				}
 			}
-			if len(verdict.Reason) > 200 {
-				t.Errorf("host reason has %d characters, want at most 200: %q", len(verdict.Reason), verdict.Reason)
+			if len(verdict.Reason) > hostReasonCap {
+				t.Errorf("host reason has %d bytes, want at most %d: %q", len(verdict.Reason), hostReasonCap, verdict.Reason)
+			}
+			for _, want := range c.every {
+				if !strings.Contains(verdict.Reason, want) {
+					t.Errorf("reason %q lacks the problem %q", verdict.Reason, want)
+				}
 			}
 			for _, want := range []string{string(c.phase), "no background agent or shell task", "in the background"} {
 				if !strings.Contains(verdict.Reason, want) {

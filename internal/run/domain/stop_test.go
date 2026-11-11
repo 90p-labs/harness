@@ -52,13 +52,19 @@ func TestDecideStop(t *testing.T) {
 }
 
 // guardSuffixBudget is the room the guard plugin needs for ". " plus
-// StopHoldsTurnNextStep (34 characters). The guard domain is not imported here,
-// so the budget is hardcoded with margin: 200 - 40.
-const guardSuffixBudget = 160
+// StopHoldsTurnNextStep (34 bytes). The guard domain is not imported here,
+// so the budget is hardcoded with margin: the host cap is 340 bytes
+// (hostReasonCap in cmd/harness/guard_test.go), minus 40 for the suffix.
+// Counts are in bytes, so a multibyte reason stays under the cap too.
+const guardSuffixBudget = 300
 
 func TestStopReasonIsShort(t *testing.T) {
 	policy := domain.Policy{MaxStopBlocks: 2}
 	long := strings.Repeat("x", 500)
+	multibyte := strings.Repeat("é", 500)
+	const sectionsProblem = `needs ## Next, ## Open findings, ## Unreviewed commits, ## Decisions, each with a "- " line`
+	const clippedLong = "xxxxxxxxxxxx..."
+	const clippedMultibyte = "éééééé..."
 	for _, phase := range []domain.Phase{domain.PhasePlanning, domain.PhaseWorking, domain.PhaseReviewing, domain.PhaseShipping} {
 		for _, header := range []domain.Phase{domain.PhaseAwaitingApproval, domain.PhaseReleasing, domain.PhaseObserving, domain.PhaseAbandoned, domain.Phase(long)} {
 			run := domain.Run{Phase: phase, Step: 12345}
@@ -73,6 +79,21 @@ func TestStopReasonIsShort(t *testing.T) {
 				"empty section":  "Phase: " + string(phase) + "\nStep: 12345\n## Next\n## Open findings\n- a\n## Unreviewed commits\n- a\n## Decisions\n- a\n",
 				"no unreviewed":  "Phase: " + string(phase) + "\nStep: 12345\n## Next\n- a\n## Open findings\n- a\n## Unreviewed commits\n## Decisions\n- a\n",
 			}
+			// Each worst-case body must name every problem in its reason.
+			every := map[string][]string{
+				"worst case": {
+					"phase " + clippedLong + ", want " + string(phase),
+					"step " + clippedLong + ", want 12345",
+					sectionsProblem,
+				},
+				"multibyte": {
+					"phase " + clippedMultibyte + ", want " + string(phase),
+					"step " + clippedMultibyte + ", want 12345",
+					sectionsProblem,
+				},
+			}
+			bodies["worst case"] = "Phase: " + long + "\nStep: " + long + "\n## Next\n## Open findings\n## Unreviewed commits\n"
+			bodies["multibyte"] = "Phase: " + multibyte + "\nStep: " + multibyte + "\n## Next\n## Open findings\n## Unreviewed commits\n"
 			for name, body := range bodies {
 				t.Run(string(phase)+"/"+string(header)+"/"+name, func(t *testing.T) {
 					var raw []byte
@@ -88,7 +109,12 @@ func TestStopReasonIsShort(t *testing.T) {
 					verdict, _ := domain.DecideStop(current, policy, false, refusal)
 
 					if len(verdict.Reason) > guardSuffixBudget {
-						t.Errorf("reason has %d characters, want at most %d: %q", len(verdict.Reason), guardSuffixBudget, verdict.Reason)
+						t.Errorf("reason has %d bytes, want at most %d: %q", len(verdict.Reason), guardSuffixBudget, verdict.Reason)
+					}
+					for _, want := range every[name] {
+						if !strings.Contains(verdict.Reason, want) {
+							t.Errorf("reason %q lacks the problem %q", verdict.Reason, want)
+						}
 					}
 					for _, want := range []string{string(phase), "no background agent or shell task", "in the background"} {
 						if !strings.Contains(verdict.Reason, want) {
@@ -103,7 +129,7 @@ func TestStopReasonIsShort(t *testing.T) {
 		run := domain.Run{Phase: domain.PhaseReviewing, Step: 1, HandoffStep: 1}
 		verdict, _ := domain.DecideStop(run, policy, false, nil)
 		if len(verdict.Reason) > guardSuffixBudget {
-			t.Errorf("reason has %d characters: %q", len(verdict.Reason), verdict.Reason)
+			t.Errorf("reason has %d bytes: %q", len(verdict.Reason), verdict.Reason)
 		}
 	})
 }
