@@ -19,6 +19,7 @@ Start: run harness version ("Binary"), then step 1
 ├── a UI change → the wireframe row of the visual table
 ├── a visual to draw → references/visuals.md shows each kind
 ├── no pull request for the branch → step 4 creates a draft
+├── a merged or closed pull request for the branch → step 4 creates a new draft
 ├── an open pull request → step 4 edits its body
 └── the guard denies the body → fix the body file of step 3, and run the command again
 ```
@@ -94,8 +95,8 @@ The change adds no diagram.
 1. Run `harness verify --commits <base>`. The guard denies a push and a create before it passes.
 2. Run `harness pr check --body-file <literal absolute path of the body file>`. Fix every problem that it prints. Write the path as a literal, not as a variable.
 3. Push the branch: `git push -u origin HEAD`.
-4. Run `gh pr view --json url,state`. With an open pull request, run `gh pr edit --body-file <body>`.
-5. With no pull request, run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file <body>`.
+4. Run `gh pr view --json url,state`. A failed call means no pull request. Only with `state` `OPEN`, run `gh pr edit <url> --body-file <body>`, with the `url` field.
+5. With no pull request, or with a `MERGED` or `CLOSED` one, run `gh pr create --draft --base <base> --title "<the first commit subject>" --body-file <body>`.
 6. Report the URL. Do not mark the pull request ready and do not merge it.
 
 When the guard denies the body, read the reason, fix the body file and run the command again.
