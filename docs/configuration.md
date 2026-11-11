@@ -489,10 +489,9 @@ live:
 
 ### A new repository
 
-1. Run `harness init --host claude` (or `--host codex`) at the repository root. It chooses `lint.packs`, writes `gates`, writes the lint files and installs the hooks.
+1. Run `harness init --host claude` (or `--host codex`) at the repository root. It chooses `lint.packs`, writes `gates`, writes the lint files, installs the hooks and adds `.harness/runs/` to `.gitignore`.
 2. Read its output. A line `next: run the lint-setup skill` names a language that needs the `lint-setup` skill.
-3. Add `.harness/` to `.gitignore`.
-4. Commit `.harness.yaml`, `.harness-lint/` and the host config.
+3. Commit `.harness.yaml`, `.harness-lint/`, `.gitignore` and the host config.
 
 The [setup page](setup.md#step-by-step) gives the step by step setup without `harness init`.
 

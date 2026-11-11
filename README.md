@@ -44,7 +44,7 @@ For a given release, write `download/v0.5.0` in place of `latest/download`. With
 
 ## Set up a repository
 
-In your repository, run `harness gates init`. It detects the gates and writes the `gates` key of `.harness.yaml`. Add `.harness/` to `.gitignore`, then commit both files.
+In your repository, run `harness gates init`. It detects the gates and writes the `gates` key of `.harness.yaml`. `harness init` adds `.harness/runs/` to `.gitignore`. Then commit the files.
 
 ```console
 $ harness gates init
@@ -55,7 +55,7 @@ go-test: go test ./...
 
 With no detected toolchain, write the `gates` key by hand, as in [docs/setup.md](docs/setup.md) and [examples/](examples/). The lint packs call Biome and oxlint: `npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0`.
 
-Without the plugin, `harness init --host claude` (or `--host codex`) writes the gates, the lint files and the baseline, and installs the hooks. Do not use it with the plugin, or each hook runs twice. [`docs/configuration.md`](docs/configuration.md) explains every config key.
+Without the plugin, `harness init --host claude` (or `--host codex`) writes the gates, the lint files and the baseline, installs the hooks, and adds `.harness/runs/` to `.gitignore`. Do not use it with the plugin, or each hook runs twice. [`docs/configuration.md`](docs/configuration.md) explains every config key.
 
 ## Usage
 

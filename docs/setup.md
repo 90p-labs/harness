@@ -71,7 +71,7 @@ The config is `.harness.yaml` at the git top level. Run the commands below from 
 
 `harness init` always installs the hooks of the host. With the plugin, each hook then runs twice: use the step by step setup below.
 
-`harness init --host claude` (or `--host codex`) sets up the repository in one step. It keeps `lint.packs`, or it chooses the packs from the repository files: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it writes the gates, the lint files and the lint baseline, and installs the hooks. On a NestJS repository with the scripts `typecheck` and `test`:
+`harness init --host claude` (or `--host codex`) sets up the repository in one step. It keeps `lint.packs`, or it chooses the packs from the repository files: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it writes the gates, the lint files and the lint baseline, installs the hooks, and adds `.harness/runs/` to `.gitignore`. On a NestJS repository with the scripts `typecheck` and `test`:
 
 ```console
 $ harness init --host claude
@@ -80,9 +80,10 @@ gates: wrote node-typecheck, node-test, lint
 lint init: wrote .harness-lint
 lint baseline: wrote .harness-lint/baseline.json (3 findings, run harness lint to see them)
 host: wrote /home/dev/shop/.claude/settings.json
+gitignore: added .harness/runs/
 ```
 
-The baseline keeps the findings that exist today, so the `lint` gate fails only on new ones. Run `harness lint` to see them. Commit the host config .claude/settings.json (or `.codex/hooks.json`) with `.harness.yaml` and `.harness-lint/`, so each clone gets the hooks.
+The baseline keeps the findings that exist today, so the `lint` gate fails only on new ones. Run `harness lint` to see them. Commit the host config .claude/settings.json (or `.codex/hooks.json`) with `.harness.yaml`, `.harness-lint/` and `.gitignore`, so each clone gets the hooks.
 
 A second run keeps `lint.packs` and the `gates` key, and the other steps are safe to repeat. With no pack, it skips the baseline. With no gate to write, it prints `gates: none detected` and writes no `gates` key. An empty `gates` or `setup` list counts as absent. When it chooses packs but the `gates` key holds a gate, it stops before it writes: set `lint.packs` and the `lint` gate by hand, or remove the `gates` key. Without a lint engine on the `PATH`, it stops at the baseline step: install the engine and run it again. After a full run, do step 5 below.
 
@@ -92,7 +93,7 @@ A second run keeps `lint.packs` and the `gates` key, and the other steps are saf
 2. Run `harness lint init` to write the engine files of the packs into `.harness-lint/`. Lint init keeps `baseline.json`. Run `harness lint` to see the findings, and `harness lint baseline` to record them as the baseline. The lint gate fails only on a new `error` finding. A later `harness lint baseline` only removes the keys that no longer match, so the baseline only shrinks.
 3. Run `harness gates init` to detect the gates. It reads the toolchain (Go, pnpm, npm, Biome) and the deploy plugins, and writes the `gates` key. It refuses to change an existing key.
 4. Skip this step when you use the plugin: the plugin installs the hooks. Else run `harness host install --host claude` (or `--host codex`). It merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key. `harness host capabilities --host codex` prints each host event and whether the host supports it.
-5. Commit `.harness.yaml`, `.harness-lint/` and the host config, if you wrote one. Add `.harness/` to `.gitignore`: it holds the run folders.
+5. Commit `.harness.yaml`, `.harness-lint/`, `.gitignore` and the host config, if you wrote one. `harness init` adds `.harness/runs/` to `.gitignore`, so the run folders stay out of git.
 
 ## Example config
 
