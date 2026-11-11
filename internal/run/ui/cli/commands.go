@@ -12,6 +12,7 @@ import (
 
 	"github.com/90p-labs/harness/internal/run/application/command/start"
 	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/command/waitpr"
 	"github.com/90p-labs/harness/internal/run/application/query/report"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
@@ -22,6 +23,7 @@ const (
 	commandRun    = "run"
 	commandStart  = "start"
 	commandStatus = "status"
+	commandWait   = "wait"
 
 	flagFindings = "findings"
 	flagReason   = "reason"
@@ -33,7 +35,7 @@ const (
 	reasonPrefix       = "reason: "
 	nextPrefix         = "next: "
 	handoffReadyFormat = "handoff: ready (step %d)"
-	handoffWriteFormat = "handoff: write %s with Phase: %s and Step: %d, then continue"
+	handoffWriteFormat = `handoff: write %s with Phase: %s, Step: %d and the sections %s, each with a "- " line, then continue`
 	noActiveRun        = "active: no"
 	missingFlagMsg     = "required flag %q not set"
 	pairedFlagsMsg     = "flags %q and %q go together"
@@ -58,7 +60,7 @@ var phaseHints = map[domain.Phase]string{
 	domain.PhaseAwaitingApproval: "ask the Plan question; when the user picks Approve, run harness run approve",
 	domain.PhaseWorking:          "implement test first, run harness verify, then harness run review",
 	domain.PhaseReviewing:        "review the change, then harness run ship, or harness run rework --findings \"<id, severity, file:line>\" --class <" + reworkClassNames("|", "|") + ">",
-	domain.PhaseShipping:         "merge the change, then harness run done --pr URL",
+	domain.PhaseShipping:         "open the pull request and run harness run wait --pr URL, then after the merge harness run done --pr URL",
 	domain.PhaseReleasing:        "deploy the change and wait for the live check",
 	domain.PhaseObserving:        "watch the signals until the live check ends the run",
 	domain.PhaseBlocked:          "fix the cause, then harness run resume, or harness run abandon",
@@ -110,6 +112,7 @@ type Handlers struct {
 	Key        domain.RunKey
 	Start      start.Handler
 	Transition transition.Handler
+	WaitPR     waitpr.Handler
 	Status     status.Handler
 	Report     report.Handler
 }
@@ -138,7 +141,7 @@ var transitionSpecs = []transitionSpec{
 
 func NewCommand(connect Connect) *cobra.Command {
 	cmd := &cobra.Command{Use: commandRun, Short: "Drive the active run"}
-	cmd.AddCommand(startCommand(connect), statusCommand(connect), reportCommand(connect))
+	cmd.AddCommand(startCommand(connect), statusCommand(connect), reportCommand(connect), waitCommand(connect))
 	for _, spec := range transitionSpecs {
 		cmd.AddCommand(transitionCommand(connect, spec))
 	}
@@ -160,7 +163,7 @@ func HandoffWriteLine(s status.Status) string {
 	if !s.Phase.HoldsTheTurn() {
 		return ""
 	}
-	return fmt.Sprintf(handoffWriteFormat, shareddomain.RunHandoffFile(s.ID), s.Phase, s.Step)
+	return fmt.Sprintf(handoffWriteFormat, shareddomain.RunHandoffFile(s.ID), s.Phase, s.Step, strings.Join(domain.HandoffSections(), ", "))
 }
 
 func hint(s status.Status) string {
@@ -204,6 +207,34 @@ func statusCommand(connect Connect) *cobra.Command {
 			})
 		},
 	}
+}
+
+func waitCommand(connect Connect) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   commandWait,
+		Short: "Wait on the open pull request",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.NoArgs(cmd, args); err != nil {
+				return err
+			}
+			if flagValue(cmd, flagPR) == "" {
+				return fmt.Errorf(missingFlagMsg, flagPR)
+			}
+			_, err := shareddomain.ParsePRURL(flagValue(cmd, flagPR))
+			return err
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
+				if err := h.WaitPR.Handle(ctx, waitpr.Command{Key: h.Key, PRURL: flagValue(cmd, flagPR)}); err != nil {
+					return err
+				}
+				_, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}, nil)
+				return err
+			})
+		},
+	}
+	cmd.Flags().String(flagPR, "", "the "+flagPR+" of the change")
+	return cmd
 }
 
 func transitionCommand(connect Connect, spec transitionSpec) *cobra.Command {

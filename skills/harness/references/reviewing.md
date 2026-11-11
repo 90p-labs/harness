@@ -3,7 +3,7 @@
 This is phase 5 of the harness loop, `reviewing`. Read it on entering `reviewing`, and after `harness run rework`. Run the steps below in order. After a rework, the next list is the final panel: `harness review panel` prints its models. Start each agent in a fresh context.
 
 - **Common list**: start one `reviewer` agent for each listed model, in parallel, on the same `HEAD`. Set the `model` field of each agent call.
-- Lens `Spec` runs on the first model of the `reviewer` role, lens `Standards` on the second, and lens `Spec` on every other model. Set the `model` field for each.
+- Lens `Spec` runs on the first model of the `reviewer` role, lens `Standards` on the second, and lens `Spec` on every other model. Set the `model` field for each. Give each reviewer, also of the final panel, its lens, the path of `plan.md`, the default branch and the full path of the harness binary.
 - Each reviewer returns every finding of its lens in one pass. The lead merges the lists into `findings.md` in the run folder, removes the duplicates and numbers them `F1`, `F2`.
 - `findings.md` holds one or more tables. The columns `ID`, `Severity`, `Verdict` and `Status` are required. The other columns are free. The severity is `blocker`, `major` or `minor`. The verdict is `real` or `not real`. The status is `open` or `closed`.
   ```text
@@ -26,13 +26,13 @@ This is phase 5 of the harness loop, `reviewing`. Read it on entering `reviewing
 - The reviews of the run still count after `HEAD` changes, until the last `request-rework`, `amend` or `regress` of the run. This holds only while `findings.md` exists in the run folder. A clean rebase keeps the reviews by patch id, also with the strict rule. A change of whitespace only changes the patch id.
 - Every real blocker or major finding goes through `harness run rework`. The command refuses a `--findings` text that does not name each real open blocker or major ID. The rule `review-findings` refuses a ship when a real blocker or major finding has an ID that no `request-rework` reason names. An ID matches as a whole word: `F1` does not match `F10`.
 - Known limit: a lead that edits `findings.md`, for example sets a major to minor, can still pass the rule.
-- **Fix** (in `working`): start one `worker` agent for each blocker and major finding. Set the `model` field to the first model of the `worker` role.
+- **Fix** (in `working`): start one `worker` agent for each blocker and major finding. Set the `model` field to the first model of the `worker` role. Give each fix worker its finding lines, the path of `plan.md` and the full path of the harness binary.
 - Start blockers first. Run in parallel only when the files do not overlap.
 - The lead fixes with git a real finding that no worker can fix, such as the commit order.
 - Each worker fixes only its finding, test first where a test can show it. It does not commit.
 - The lead commits each fix with `git commit --fixup=<sha>`, one fixup for each target commit: the commit of the task that owns the file. A file outside the plan trees needs `harness run amend` first.
 - One more `worker` agent, with the same `model` field, fixes all real minor findings after the blocker and major fixes.
-- **Re-review** (in `working`): start one `reviewer` agent for all the blocker and major fixups of a round. Set the `model` field to the first model of the `reviewer` role.
+- **Re-review** (in `working`): start one `reviewer` agent for all the blocker and major fixups of a round. Set the `model` field to the first model of the `reviewer` role. Give it the path of `plan.md`, the default branch and the full path of the harness binary.
 - The reviewer gets all the finding lines of the round and runs `git show <sha>` for each fixup. It reads each diff and the changed files around it.
 - The lead adds each new defect of a re-review to `findings.md`. It goes through Verify and Fix like the other findings.
 - A fix that fails its re-review goes once to a new `worker` agent, with the same `model` field.

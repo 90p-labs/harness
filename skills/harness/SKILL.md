@@ -37,11 +37,11 @@ Start: run harness version ("Binary")
 - `abandon`: run `harness run abandon` and report.
 - Any other text with no active run: run `harness run start "<text>"`.
 
-Each `run` command prints the phase and a `next:` line. Do the `next:` step. When a `handoff:` line asks for it, write `handoff.md` in the run folder as a checkpoint, then continue with the `next:` step. Do not end the turn, except for a question to the user, such as the `Plan` question, or when your context is near its limit. A new session resumes from `harness run status` and `handoff.md`.
+Each `run` command prints the phase and a `next:` line. Do the `next:` step. When a `handoff:` line asks for it, write `handoff.md` in the run folder as a checkpoint, then continue with the `next:` step. Do not end the turn, except for a question to the user, such as the `Plan` question, or when your context is near its limit. In `shipping`, the turn may also end while the run waits on the merge after `harness run wait`. A new session resumes from `harness run status` and `handoff.md`.
 
 ## Phases
 
-1. `planning`: start the `explorer` agent. Set the `model` field of the agent call to the model of the `explorer` role, from the `models:` line of `harness run start` or `harness run status`. Give it the prompt. It reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the code that the change touches. It returns the facts and the open decisions.
+1. `planning`: start the `explorer` agent. Set the `model` field of the agent call to the model of the `explorer` role, from the `models:` line of `harness run start` or `harness run status`. Give it the prompt and the full path of the harness binary. It reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the code that the change touches. It returns the facts and the open decisions.
 2. `planning`: on Claude, compare the session model with the model of the `lead` role in the `models:` line. When they differ, tell the user to run `/model` to switch, and continue: it is guidance, not a deny. Then write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`.
    - Run `harness plan check`. It prints an advisor line from the plan complexity, then one line for each wave of tasks. The wave lines print only for a clean single-run plan.
    - On `advisor: on, model <m>`, with or without the text `(light track, risky path)`, start the `advisor` agent, with the `model` field set to `<m>`, the model that the line names. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept.
@@ -53,7 +53,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
 4. `working`: you are the driver. You do not write the code of a task. `harness plan check` gives the waves (only for a clean single-run plan) and the model of each task.
    - A light-track run can use `sonnet` as the lead. `harness plan check` prints `advisor: off (light track)` on a light track. The text `(light track, risky path)` on the `on` line marks a light-track plan with a guard, security or hook path. On a light track, the lead does not ask a `sonnet` session to switch.
-   - For each wave, start one `worker` agent for each task, in the background, with the `model` field set to the `Model` of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap. Give each worker, also a fix worker, the path of `plan.md`.
+   - For each wave, start one `worker` agent for each task, in the background, with the `model` field set to the `Model` of the task. The model must be in the `worker` role list. Start the tasks of a wave in parallel when their owned files do not overlap. Give each worker, also a fix worker, the path of `plan.md`. Give each worker, also a fix worker and a self-check worker, the full path of the harness binary.
    - Use low effort for a haiku task that is mundane: docs, a rename or a config change.
    - Check each result: the owned files (`git diff --stat`), the red and green lines, and `harness verify`.
    - Read a diff with `git diff --stat` first, then only the files that you check. Read a long output through `tail`, with `set -o pipefail` so that the exit code stays. Example: `set -o pipefail; go test ./... 2>&1 | tail -n 40`.
@@ -90,11 +90,16 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`. The command refuses a run folder with no `self-check.md` or no `Head: <sha>` line.
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
 5. `reviewing`: on entering `reviewing`, and after `harness run rework`, read `references/reviewing.md` and follow it.
-6. `shipping`: start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body Why, What and How. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run report`, then `harness run done --pr <url>`.
+6. `shipping`: start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body Why, What and How. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run wait --pr <url>`, then `harness run report`, then `harness run done --pr <url>`.
+   - The turn may stop while the run waits on the merge. After a `resume` into `shipping`, run the wait again.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
 
-To change the approved plan, edit `plan.md` first, then run `harness run amend`. When approval is needed, the run goes to `awaiting_approval`: ask the `Plan` question again, then run `harness run approve`. With `run.approval: false`, the run goes to `working` with no `Plan` answer. A tree-only amend skips the approval only in `working` with no live review round; from `reviewing` or `shipping`, it needs the `Plan` answer. `harness run plan` never follows an amend.
+To change the approved plan, edit `plan.md` first, then run `harness run amend`. When approval is needed, the run goes to `awaiting_approval`: ask the `Plan` question again, then run `harness run approve`. With `run.approval: false`, the run goes to `working` with no `Plan` answer.
+
+A kept-structure amend needs a recorded approval and a kept structure. A docs-only amend needs a plan that took the docs-only waiver, with no recorded approval. Both skip the approval only in `working` with no live review round. Any other amend needs the `Plan` answer. `harness run plan` never follows an amend.
+
+A kept-structure amend may change the prose of Goal, Decisions, Test first and DoD, the tree fences and the test paths. See `references/plan-template.md` for the rule.
 
 ## Guard
 

@@ -158,6 +158,8 @@ The guard also allows one stop for each phase change when `handoff.md` is ready.
 - `## Unreviewed commits`
 - `## Decisions`
 
+One refusal lists every problem. It names the Phase line, the Step line, and each missing or empty section. Each section has at least one `- ` line.
+
 The file has at most 4096 bytes, and `harness run status` prints `handoff: ready (step <n>)` after the stop. The run stores the step in the column `handoff_step`. A second stop at the same step blocks, as `max_stop_blocks` says. `handoff.md` is a checkpoint. The `handoff:` line ends with `then continue`: the lead writes the file, then continues with the `next:` step. No host resumes a run by itself: a new session reads `harness run status` and `handoff.md`.
 
 ```yaml
@@ -317,7 +319,7 @@ The rule ids:
 |---|---|---|
 | `pr-no-merge` | `tool.before` | `gh pr merge`. `harness pr policy` prints `merge: user` while this rule is on |
 | `pr-draft-only` | `tool.before` | `gh pr create` without `--draft`, and `gh pr ready`. `harness pr policy` prints `draft: required` while this rule is on |
-| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. |
+| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. It denies a body with an em dash, on any line. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch (see `git`) |
 | `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |
@@ -328,7 +330,7 @@ The rule ids:
 | `agent-model-routing` | `tool.before` | An agent call on a model that is not the model of its role (see `roles`) |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` before `harness verify --commits` passes for `HEAD` |
 | `approval-no-forge` | `tool.before` | A question tool call with answers in its input, or a shell call of `harness hook` |
-| `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`) |
+| `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`). In `shipping`, the turn may end once `harness run wait --pr` records the pull request |
 | `review-models` | `run.transition.before` | `harness run ship` when a model of the final panel has no counted review, or fewer than 2 models have a record. The rule picks the host list with the most recorded models. A hook records the review when a `reviewer` agent stops in the reviewing phase, in the common list and in the final panel. A review counts only when its transcript shows a read of a changed file, and the deny names the model that did not. A verifier call and a re-review write no record. A Codex repository turns it off, because Codex sends no model in an agent call |
 | `review-findings` | `run.transition.before` | `harness run ship` while `findings.md` of the run has a real open blocker or major finding. With `run.strict_minor` on, a real open minor finding also denies. A missing file allows |
 

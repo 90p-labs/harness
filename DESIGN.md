@@ -42,9 +42,11 @@ Each module is a bounded context under `internal/<module>/`. It has the layers `
 
 A run moves through phases. The transition table is deterministic: a row is `(from, event, guard) -> to`. The guards of one `(from, event)` pair exclude each other, so only one row applies.
 
-`Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver. A waiver means every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` takes the waiver only as a tree-only amend. The run must start in `working` and have no live round. The plan may change only in the 2 tree fences, or by a test path added or removed in an `Owned files` line.
+`Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver. A waiver means every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` skips the approval only as a kept-structure amend or as a docs-only amend, and only the docs-only amend is a waiver. The run must start in `working` and have no live round. A kept-structure amend needs a recorded approval, and a docs-only amend needs none.
 
-The approve step keeps a copy of the plan, `approved-plan.md`, in the run folder. The copy counts only when its sha256 is the hash of the latest `plan_approvals` row of the run. A waived amend does not replace the copy. The plan domain holds the closed test path list. A path that is not in clean form, or that has a `..` segment, is never a test path. A path is a test path when it has one of these forms:
+A kept-structure amend keeps the structure of `approved-plan.md`. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names of `Test first` and the `DoD` numbers. A sketch link anywhere counts as structure. A docs-only amend needs the plan to keep only `docs` commits and no open question.
+
+The approve step keeps a copy of the plan, `approved-plan.md`, in the run folder. The copy counts only when its sha256 is the hash of the latest `plan_approvals` row of the run. An amend that skips the approval does not replace the copy. The plan domain holds the closed test path list. A path that is not in clean form, or that has a `..` segment, is never a test path. A path is a test path when it has one of these forms:
 
 - A Go file that ends in `_test.go`.
 - A Python file that starts with `test_` or ends in `_test.py`.
@@ -147,31 +149,34 @@ The Go types are in `internal/run/domain`:
 | `rework_round.go` | `ReworkEvent(findings, policy)` picks `request-rework` or `rework-minor`, and the `FindingsReader` port |
 | `run.go` | `Run`, `Run.Apply(cmd, policy) (Run, error)` |
 | `stop.go` | `StopVerdict{Block, Handoff, Reason}`, `DecideStop(run, policy, agentRunning, handoff error)` |
-| `handoff.go` | `HandoffLimit`, the `HandoffReader` port, `CheckHandoff(run, raw)` |
+| `handoff.go` | `HandoffLimit`, the `HandoffReader` port, `CheckHandoff(run, raw)`, `HandoffSections()` |
 | `errors.go` | `ErrIllegalTransition`, wrapped with the phase and the event |
 
 The caller gives `Run.ID`. A new run is `Run{ID: id}` in the phase none, and `start` moves it to `planning`.
 
 `Phase.HoldsTheTurn` is true for `planning`, `working`, `reviewing` and `shipping`. The phases `releasing` and `observing` wait for production, so they do not hold the turn.
 
-`DecideStop` blocks the end of an agent turn only when all three facts hold:
+`DecideStop` blocks the end of an agent turn only when all four facts hold:
 
 1. The phase holds the turn.
 2. No agent runs.
 3. `StopBlocks` is below `MaxStopBlocks`.
+4. The run does not wait on a merge. In `shipping`, `harness run wait --pr URL` records the open pull request on the run.
+
+With a recorded URL and a valid `handoff.md`, the stop in `shipping` passes with no block. The first stop of a step still asks for the handoff. A transition out of `shipping` other than `complete` clears the URL.
 
 When it blocks, it returns the run with `StopBlocks` plus 1. The reason names the phase.
 
-The lead writes `handoff.md` in the run folder after a phase change. The file has the lines `Phase: <phase>` and `Step: <n>`. It has these 4 sections, and each section has at least one `- ` line:
+The lead writes `handoff.md` in the run folder after a phase change. The file has the lines `Phase: <phase>` and `Step: <n>`. It has these 4 sections:
 
 1. `## Next`
 2. `## Open findings`
 3. `## Unreviewed commits`
 4. `## Decisions`
 
-`CheckHandoff` refuses a file over 4096 bytes. It also refuses a wrong phase, a wrong step, a missing header and a missing or empty section. `Step` is the count of the run transitions.
+`CheckHandoff` refuses a file over 4096 bytes. One refusal lists every problem. It names the Phase line, the Step line, and each missing or empty section. Each section has at least one `- ` line. `Step` is the count of the run transitions.
 
-`DecideStop` runs the three facts first. Then it allows one stop when `CheckHandoff` passes and `HandoffStep` differs from `Step`. It sets `HandoffStep` to `Step`, and the handler saves the run. A second stop at the same step blocks. A missing or refused file keeps the block, and the reason names the refusal.
+`DecideStop` checks facts 1 to 3 first. Then it allows one stop when `CheckHandoff` passes and `HandoffStep` differs from `Step`. It sets `HandoffStep` to `Step`, and the handler saves the run. A second stop at the same step blocks. A missing or refused file keeps the block, and the reason names the refusal.
 
 The run stores the step in the column `handoff_step` (migration 0007). A resumed session at the same step meets the normal stop rule.
 
@@ -235,7 +240,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 |---|---|---|
 | `pr-no-merge` | `tool.before` | `gh pr merge`. `harness pr policy` prints `merge: user` while this rule is on |
 | `pr-draft-only` | `tool.before` | `gh pr create` without `--draft`, and `gh pr ready`. `harness pr policy` prints `draft: required` while this rule is on |
-| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. `harness pr body [--base <ref>]` prints a body skeleton. It has placeholders for the bottom line and Why. What lists the commit subjects over the base. How holds the mermaid fences of the active run plan. The base defaults to the default branch. A `--base` that starts with `-` is a usage error. |
+| `pr-body-shape` | `tool.before` | A PR body with a problem. The sections `## Why`, `## What` and `## How` are missing or out of order. The guard also denies a body with no bottom line above `## Why`. It denies a body with a line above 40 words. It denies a body with a diagram that has no marks. It denies a body with an em dash, on any line. The deny lists each problem. For a long line, it names the line number, the word count and the first 6 words. `harness pr check --body-file <path>` prints the same problems. `harness pr body [--base <ref>]` prints a body skeleton. It has placeholders for the bottom line and Why. What lists the commit subjects over the base. How holds the mermaid fences of the active run plan. The base defaults to the default branch. A `--base` that starts with `-` is a usage error. |
 | `git-no-force` | `tool.before` | A forced `git push` |
 | `git-no-push-default` | `tool.before` | A `git push` to the default branch |
 | `git-no-verify-skip` | `tool.before` | `--no-verify` on `git commit` or `git push` |
@@ -248,7 +253,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `review-findings` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when `findings.md` of the run has an open real finding of severity blocker or major. With `run.strict_minor` on, an open real minor finding also denies. It also denies when a real blocker or major finding, open or closed, has an ID that no `request-rework` reason names. An ID matches as a whole word. A missing file allows. A file that does not parse denies. A lead that edits `findings.md` can still pass the rule |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD`. A push that only deletes remote refs is allowed |
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
-| `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
+| `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says. In `shipping`, a stop passes once `harness run wait --pr` records the pull request |
 
 When a `reviewer` agent stops in `reviewing`, a hook writes a review record on `subagent.stopped`, in the gate state beside the commit checks. The record holds the repo, `HEAD`, the model, the patch id, the files read and the run id. The hook reads `HEAD` at that moment, so the lead does not commit while a reviewer runs. The files read come from the transcript: a `Read` call, a diff header in a tool result or a shell command that names the file.
 
@@ -660,6 +665,8 @@ The `plan`, `amend` and `approve` events go through the `PlanGate` port of the r
 
 `cmd/harness` gives `run.NewModule` an adapter of the plan module as the `PlanGate`. The run context and the plan context never import each other. `PlanGate.Hash` returns the SHA-256 of `plan.md` in hex, so the run domain reads no file.
 
+`PlanGate.StructureKept` tells the run whether an `amend` is a kept-structure amend against `approved-plan.md`. The run asks it only when a recorded approval exists. Without one, the docs-only waiver decides.
+
 The plan approval is a record of the user answer, not a chat reply:
 
 1. The lead asks the question with the header `Plan` and the options `Approve` and `Change the plan`, through the question tool of the host.
@@ -857,7 +864,8 @@ Baseline ratchet:
 Commands:
 
 - `harness verify` runs the setup steps first, then the gates by their `needs`, at most `verify.parallel` at the same time. It prints a line only for a gate that fails, is vetoed or is skipped, in file order. The line is `FAIL` or `VETOED` with the id and the duration, or `SKIPPED <id> needs <need>`. It then prints the output tail of each failed or vetoed gate. The last line is the summary: `PASS gates=<n> cached=<c>` or `FAIL gates=<n> failed=<f>`. It exits 1 when one gate fails, is vetoed or is skipped.
-- `harness verify --commits BASE` checks each commit of `BASE..HEAD` in a temporary detached worktree, with the same setup steps, `needs` and `verify.parallel`. A `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass.
+- `harness verify --commits BASE` checks each commit from the merge base of `BASE` and `HEAD` to `HEAD`. It runs in a temporary detached worktree, with the same setup steps, `needs` and `verify.parallel`. For a plain branch name, it also looks at `origin/<base>`. It starts from `origin/<base>` when its merge base with `HEAD` is newer, so a stale local branch lists no other pull request commits. A sha, a revision such as `HEAD~1` or a base that starts with `origin/` keeps its ref. The first line is `base <ref> <short sha>`: the ref that was used and its merge base.
+- The commit rule: a `test:` commit must fail one gate or more, and a later commit must pass. Every other commit must pass. When the rule breaks, each failed commit line is followed by a line `  <status> <gate> <duration>` for each failed gate. After the commit lines, it prints the output tail of each failed gate, labelled `<short sha> <gate>`.
 - `harness gates init` detects every toolchain of the repo (Go, Node, Biome) and writes the `gates` key with unique ids. A `package.json` gives the `node-typecheck`, `node-lint` and `node-test` gates of its scripts, run with `pnpm run` when `pnpm-lock.yaml` exists, else with `npm run`. It refuses to change a `gates` or `setup` key that holds an item, and the error names that key. An empty list or a null value counts as absent, and the write replaces it. With no gate to write, it writes no `gates` key. It also adds the `lint` gate when `lint.packs` is set. Then it dispatches `gates.detect` and appends the gates that the deploy plugins propose, such as `helm-render` and `promtool-test`. A proposed gate keeps its `needs`. A line with `"setup":true` goes to the `setup` key, with its `creates`, before the `gates` key. The built-in detection writes no `needs` and no setup step. A plugin failure, a deny, a bad line, a duplicate id, a bad `needs`, a setup line with `needs` or a gate line with `creates` stops it before it writes.
 - Before each gate that is not cached, the handler dispatches `gate.before` (veto). After each gate, it dispatches `gate.after` (observe).
 - With no gate and no criterion gate, `harness verify` prints that no gate is set and exits 0.

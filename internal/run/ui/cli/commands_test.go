@@ -12,6 +12,7 @@ import (
 
 	"github.com/90p-labs/harness/internal/run/application/command/start"
 	"github.com/90p-labs/harness/internal/run/application/command/transition"
+	"github.com/90p-labs/harness/internal/run/application/command/waitpr"
 	"github.com/90p-labs/harness/internal/run/application/query/report"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
@@ -64,7 +65,7 @@ func (passingGate) Hash(domain.Run) (string, error) { return "", nil }
 
 func (passingGate) Keep(domain.Run) error { return nil }
 
-func (passingGate) TreeOnly(domain.Run, string) (bool, error) { return false, nil }
+func (passingGate) StructureKept(domain.Run, string) (bool, error) { return false, nil }
 
 type noApprovals struct{ domain.ApprovalRepository }
 
@@ -219,6 +220,70 @@ func TestDoneChecksThePRFlag(t *testing.T) {
 	}
 }
 
+func TestWaitCommand(t *testing.T) {
+	const url = "https://github.com/90p-labs/harness/pull/107"
+	refused := []struct {
+		name    string
+		args    []string
+		wantErr error
+		wantMsg string
+	}{
+		{"missing flag", []string{"wait"}, nil, `required flag "pr" not set`},
+		{"not a pull request url", []string{"wait", "--pr", "https://example.com/1"}, shareddomain.ErrInvalidPRURL, "invalid pull request url"},
+	}
+	for _, tc := range refused {
+		t.Run(tc.name, func(t *testing.T) {
+			connect := func(context.Context) (cli.Handlers, func() error, error) {
+				t.Fatal("the command connected before the check of the flag")
+				return cli.Handlers{}, nil, nil
+			}
+			cmd := cli.NewCommand(connect)
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SetArgs(tc.args)
+
+			err := cmd.ExecuteContext(t.Context())
+
+			if err == nil || (tc.wantErr != nil && !errors.Is(err, tc.wantErr)) || !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Fatalf("err = %v, want %v and %q", err, tc.wantErr, tc.wantMsg)
+			}
+		})
+	}
+
+	t.Run("a valid url is recorded and the status prints", func(t *testing.T) {
+		repo := &memoryRepository{stored: domain.Run{ID: submitRunID, Phase: domain.PhaseShipping}}
+		connect := func(context.Context) (cli.Handlers, func() error, error) {
+			return cli.Handlers{
+				WaitPR: waitpr.NewHandler(repo, noop.NewTracerProvider().Tracer("test")),
+				Status: status.NewHandler(repo),
+			}, func() error { return nil }, nil
+		}
+		cmd := cli.NewCommand(connect)
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"wait", "--pr", url})
+
+		if err := cmd.ExecuteContext(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(repo.saved) != 1 || repo.saved[0].PRURL != url {
+			t.Fatalf("saved = %+v, want one run with PRURL %q", repo.saved, url)
+		}
+		if !strings.Contains(out.String(), "phase=shipping") || !strings.Contains(out.String(), "next: ") {
+			t.Errorf("output = %q, want the status lines", out.String())
+		}
+	})
+}
+
+func TestShippingHintNamesWait(t *testing.T) {
+	lines := cli.Lines(status.Status{ID: submitRunID, Phase: domain.PhaseShipping})
+
+	if got := lines[len(lines)-1]; !strings.Contains(got, "harness run wait --pr") {
+		t.Errorf("hint = %q, want it to name harness run wait --pr", got)
+	}
+}
+
 func TestPlanningHintNamesThePlanFile(t *testing.T) {
 	lines := cli.Lines(status.Status{ID: submitRunID, Phase: domain.PhasePlanning})
 
@@ -302,7 +367,7 @@ func TestHandoffLines(t *testing.T) {
 	}
 
 	t.Run("write line", func(t *testing.T) {
-		want := "handoff: write .harness/runs/r1/handoff.md with Phase: working and Step: 3, then continue"
+		want := `handoff: write .harness/runs/r1/handoff.md with Phase: working, Step: 3 and the sections ## Next, ## Open findings, ## Unreviewed commits, ## Decisions, each with a "- " line, then continue`
 		got := cli.HandoffWriteLine(ready)
 		if got != want {
 			t.Errorf("line = %q, want %q", got, want)
@@ -314,6 +379,14 @@ func TestHandoffLines(t *testing.T) {
 			t.Errorf("line = %q, want none for a phase that releases the turn", none)
 		}
 	})
+}
+
+func TestHandoffWriteLineNamesSections(t *testing.T) {
+	s := status.Status{ID: "r1", Phase: domain.PhaseWorking, Step: 3}
+	want := `handoff: write .harness/runs/r1/handoff.md with Phase: working, Step: 3 and the sections ## Next, ## Open findings, ## Unreviewed commits, ## Decisions, each with a "- " line, then continue`
+	if got := cli.HandoffWriteLine(s); got != want {
+		t.Errorf("line = %q, want %q", got, want)
+	}
 }
 
 func TestAmendHelp(t *testing.T) {

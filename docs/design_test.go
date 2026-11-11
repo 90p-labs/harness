@@ -222,6 +222,21 @@ func TestMultiRunPlanExample(t *testing.T) {
 	}
 }
 
+func TestHandoffDocsListEveryProblem(t *testing.T) {
+	wants := []string{
+		"One refusal lists every problem.",
+		"Each section has at least one `- ` line.",
+	}
+	for _, file := range []string{designFile, configDocFile} {
+		doc := repository.Read(t, file)
+		for _, want := range wants {
+			if !strings.Contains(doc, want) {
+				t.Errorf("%s does not say %q", file, want)
+			}
+		}
+	}
+}
+
 func TestHandoffDocs(t *testing.T) {
 	wants := []string{
 		"handoff.md",

@@ -45,6 +45,9 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 	next := r
 	next.Phase = row.To
 	next.StopBlocks = 0
+	if r.Phase == PhaseShipping && cmd.Event != EventComplete {
+		next.PRURL = ""
+	}
 	transitioned := Transitioned{RunID: r.ID, From: r.Phase, Event: cmd.Event, To: row.To, Reason: cmd.Reason, At: cmd.At}
 	if cmd.Event.IsRework() {
 		transitioned.Class = cmd.Class
@@ -80,6 +83,18 @@ func (r Run) Apply(cmd Command, policy Policy) (Run, error) {
 		next.PRURL = ""
 	}
 	return next, nil
+}
+
+// WaitOnPR records the open pull request while the run waits on its merge.
+func (r Run) WaitOnPR(url string) (Run, error) {
+	if r.Phase != PhaseShipping {
+		return r, fmt.Errorf("%w: phase is %q", ErrNotShipping, r.Phase)
+	}
+	if _, err := shareddomain.ParsePRURL(url); err != nil {
+		return r, err
+	}
+	r.PRURL = url
+	return r, nil
 }
 
 func (r Run) find(event Event, policy Policy) (Transition, bool) {

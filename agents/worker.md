@@ -24,4 +24,6 @@ For a self-check, the lead gives the self-check brief of the harness skill.
 
 Do not commit, push or stash. The lead commits.
 
+Read a long output through `tail` with `set -o pipefail` in the same command, so that the exit code stays: `set -o pipefail; go test ./... 2>&1 | tail -n 40`.
+
 Keep the report under 300 words. Give the files that you changed, the red line, the green line and anything that you could not do. End with one verdict: `PASS`, `ISSUES` or `BLOCKED`.

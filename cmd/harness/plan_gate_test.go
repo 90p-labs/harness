@@ -18,7 +18,9 @@ const (
 	gateCriteria = "It works."
 	gateBroken   = "It does not."
 	gateDirMode  = 0o755
-	gatePlan     = "# Plan: x\n\n## Acceptance criteria\n\n| # | Criterion | Proof |\n|---|---|---|\n| 1 | It works. | `go test ./...` |\n\n" +
+	gateGoalOld  = "Fix the thing."
+	gateGoalNew  = "Fix another thing."
+	gatePlan     = "# Plan: x\n\n## Goal\n\nTrack: full\n\nFix the thing.\n\n## Acceptance criteria\n\n| # | Criterion | Proof |\n|---|---|---|\n| 1 | It works. | `go test ./...` |\n\n" +
 		"## Tasks\n\n### 1. Build\n\n- Owned files: `a.go`, `a_test.go`, `b.go`\n- Test first: `a_test.go` holds `TestA`\n\n" +
 		"## Decisions\n\n- 2026-11-10: Use a map.\n\n### Final code tree\n\n```tree\nharness/\n├── a.go   new\n└── b.go   new\n```\n\n" +
 		"### Final test tree\n\n```tree\nharness/\n└── a_test.go   new\n```\n"
@@ -61,9 +63,10 @@ func TestPlanGateKeepCopiesThePlan(t *testing.T) {
 	}
 }
 
-func TestPlanGateTreeOnly(t *testing.T) {
+func TestPlanGateStructureKept(t *testing.T) {
 	treeEdit := strings.Replace(gatePlan, gateTreeOld, gateTreeNew, 1)
 	criterionEdit := strings.Replace(gatePlan, gateCriteria, gateBroken, 1)
+	goalEdit := strings.Replace(gatePlan, gateGoalOld, gateGoalNew, 1)
 	tests := []struct {
 		name    string
 		keep    bool
@@ -73,6 +76,7 @@ func TestPlanGateTreeOnly(t *testing.T) {
 		want    bool
 	}{
 		{name: "tree edit after keep", keep: true, current: treeEdit, hash: gateHash(gatePlan), want: true},
+		{name: "goal prose edit after keep", keep: true, current: goalEdit, hash: gateHash(gatePlan), want: true},
 		{name: "criterion edit after keep", keep: true, current: criterionEdit, hash: gateHash(gatePlan), want: false},
 		{name: "kept copy edited after keep", keep: true, kept: treeEdit, current: gatePlan, hash: gateHash(gatePlan), want: false},
 		{name: "wrong approved hash", keep: true, current: treeEdit, hash: gateHash(treeEdit), want: false},
@@ -90,12 +94,12 @@ func TestPlanGateTreeOnly(t *testing.T) {
 				writeGateFile(t, keptPlanPath(gate.worktree, run.ID), tt.kept)
 			}
 			writeGateFile(t, planPath(gate.worktree, run.ID), tt.current)
-			got, err := gate.TreeOnly(run, tt.hash)
+			got, err := gate.StructureKept(run, tt.hash)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if got != tt.want {
-				t.Fatalf("TreeOnly = %v, want %v", got, tt.want)
+				t.Fatalf("StructureKept = %v, want %v", got, tt.want)
 			}
 		})
 	}

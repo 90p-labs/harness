@@ -309,6 +309,7 @@ Commit the fix and the baseline. `harness verify --commits` checks the commit in
 
 ```console
 $ harness verify --commits HEAD~1
+base HEAD~1 0a83514a6119
 PASS commits=1
 ```
 

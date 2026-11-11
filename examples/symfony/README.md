@@ -277,6 +277,7 @@ A change of `composer.lock` also runs the step, because `composer.lock` is in th
 
 ```console
 $ harness verify --commits HEAD~1
+base HEAD~1 0a83514a6119
 PASS commits=1
 ```
 

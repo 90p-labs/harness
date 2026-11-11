@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -58,36 +59,46 @@ func CheckHandoff(run Run, raw []byte) error {
 			}
 		}
 	}
-	phase, ok := headers[handoffPhaseKey]
-	if !ok {
-		return fmt.Errorf("handoff.md has no %s line", handoffPhaseKey)
+	var problems []string
+	if phase, ok := headers[handoffPhaseKey]; !ok {
+		problems = append(problems, "no "+handoffPhaseKey+" line")
+	} else if phase != string(run.Phase) {
+		problems = append(problems, fmt.Sprintf("phase %s, want %s", clip(phase), run.Phase))
 	}
-	if phase != string(run.Phase) {
-		return fmt.Errorf("handoff.md has phase %s, want %s", clip(phase), run.Phase)
+	if stepText, ok := headers[handoffStepKey]; !ok {
+		problems = append(problems, "no "+handoffStepKey+" line")
+	} else if step, err := strconv.Atoi(stepText); err != nil || step != run.Step {
+		problems = append(problems, fmt.Sprintf("step %s, want %d", clip(stepText), run.Step))
 	}
-	stepText, ok := headers[handoffStepKey]
-	if !ok {
-		return fmt.Errorf("handoff.md has no %s line", handoffStepKey)
-	}
-	if step, err := strconv.Atoi(stepText); err != nil || step != run.Step {
-		return fmt.Errorf("handoff.md has step %s, want %d", clip(stepText), run.Step)
-	}
+	var bad []string
 	for _, name := range handoffSections {
-		count, found := items[name]
-		if !found {
-			return fmt.Errorf("handoff.md has no %s section", name)
-		}
-		if count == 0 {
-			return fmt.Errorf("handoff.md section %s has no %q line", name, strings.TrimSpace(handoffItemTag))
+		if items[name] == 0 {
+			bad = append(bad, name)
 		}
 	}
-	return nil
+	if len(bad) > 0 {
+		problems = append(problems, fmt.Sprintf("needs %s, each with a %q line", strings.Join(bad, ", "), handoffItemTag))
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return errors.New("handoff.md: " + strings.Join(problems, "; "))
 }
 
-// clip bounds a value read from the file so a refusal stays short.
+// HandoffSections returns a copy of the section names a handoff needs, in order.
+func HandoffSections() []string {
+	return append([]string(nil), handoffSections...)
+}
+
+// clip bounds a value read from the file to handoffClip bytes, cut on a rune
+// boundary, so a refusal stays short in bytes.
 func clip(value string) string {
-	if runes := []rune(value); len(runes) > handoffClip {
-		return string(runes[:handoffClip]) + "..."
+	if len(value) <= handoffClip {
+		return value
 	}
-	return value
+	end := handoffClip
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
+	return value[:end] + "..."
 }

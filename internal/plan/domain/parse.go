@@ -205,7 +205,8 @@ func (p *parser) row(t *Table, line string, n int, rule RuleID, width int, add f
 		t.Header, t.Line = c, n
 	case shared.IsTableSeparator(c):
 	case len(c) != width:
-		p.problem(n, rule, "row has %d cells, want %d", len(c), width)
+		p.problem(n, rule, "row has %d cells, want %d. Give one cell for each column of the header | %s |",
+			len(c), width, strings.Join(t.Header, " | "))
 	default:
 		add(c, n)
 	}
@@ -223,7 +224,7 @@ func (p *parser) addCriterion(c []string, n int) {
 func (p *parser) addSignal(c []string, n int) {
 	criterion, err := strconv.Atoi(c[0])
 	if err != nil {
-		p.problem(n, RuleSignalsTable, "signal criterion %q is not a number", c[0])
+		p.problem(n, RuleSignalsTable, "signal criterion %q is not a number. Example: \"1\"", c[0])
 		return
 	}
 	p.doc.Signals = append(p.doc.Signals, SignalRow{
@@ -454,7 +455,7 @@ func (p *parser) tree(f *fence) Tree {
 		}
 		depth, rest, ok := splitTreeLine(line)
 		if !ok {
-			p.problem(n, RuleTreeFormat, "indent must be %d characters for each level", TreeLevelWidth)
+			p.problem(n, RuleTreeFormat, "indent must be %d characters for each level. Example: %q under %q", TreeLevelWidth, strings.Repeat(" ", TreeLevelWidth)+"└── thing/", "└── internal/")
 			continue
 		}
 		fields := strings.Fields(rest)
@@ -486,7 +487,7 @@ func (p *parser) tree(f *fence) Tree {
 			mark = fields[1]
 		}
 		if depth-1 > len(dirs) {
-			p.problem(n, RuleTreeFormat, "%q skips a level", name)
+			p.problem(n, RuleTreeFormat, "%q skips a level. A child is indented %d more characters than its parent. A bad line above also causes this.", name, TreeLevelWidth)
 			continue
 		}
 		dirs = dirs[:depth-1]

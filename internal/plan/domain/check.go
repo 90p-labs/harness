@@ -312,26 +312,30 @@ func checkPRs(doc Document, add report) {
 	}
 }
 
+func signalsHeaderRow() string {
+	return "| " + strings.Join(SignalsHeader, " | ") + " |"
+}
+
 func checkSignals(doc Document, add report) {
 	heading := headingLine(doc, 2, HeadingSignals)
 	if heading == 0 {
 		if doc.CodeTree.Touches(SignalFolders...) {
-			add(lineOr(headingLine(doc, 3, HeadingCodeTree), 1), RuleSignalsMissing, "the code tree adds a command, query, endpoint or consumer, so the plan needs ## Signals")
+			add(lineOr(headingLine(doc, 3, HeadingCodeTree), 1), RuleSignalsMissing, "the code tree adds a command, query, endpoint or consumer, so the plan needs ## Signals. Add ## Signals with the header %s", signalsHeaderRow())
 		}
 		return
 	}
 	if len(doc.Signals) == 0 {
-		add(heading, RuleSignalsTable, "## Signals needs a table with one row or more")
+		add(heading, RuleSignalsTable, "## Signals needs a table with one row or more. Header: %s", signalsHeaderRow())
 	}
 	if doc.SignalsTable.Header != nil && !slices.Equal(doc.SignalsTable.Header, SignalsHeader) {
 		add(doc.SignalsTable.Line, RuleSignalsTable, "header must be | %s |", strings.Join(SignalsHeader, " | "))
 	}
 	for _, row := range doc.Signals {
 		if _, err := shareddomain.ParseBreach(row.Breach); err != nil {
-			add(row.Line, RuleSignalsTable, "breach %q must be an operator (>, >=, <, <=) and a number", row.Breach)
+			add(row.Line, RuleSignalsTable, "breach %q must be an operator (>, >=, <, <=) and a number. Example: \"> 0.01\"", row.Breach)
 		}
 		if _, err := time.ParseDuration(row.Window); err != nil {
-			add(row.Line, RuleSignalsTable, "window %q is not a Go duration", row.Window)
+			add(row.Line, RuleSignalsTable, "window %q is not a Go duration. Example: \"30m\" or \"24h\"", row.Window)
 		}
 	}
 }
