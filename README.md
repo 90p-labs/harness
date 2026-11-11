@@ -2,7 +2,7 @@
 
 The harness is an open source Go tool and a plugin for Claude Code and Codex. It drives an AI coding agent through a fixed loop: plan, approve, work, review, ship and watch production.
 
-Status: pre-alpha. The plugin downloads its binary with `gh`, so run `gh auth login` first, or install Go to build it.
+Status: pre-alpha.
 
 ## Install
 
@@ -12,7 +12,7 @@ The harness is a plugin for Claude Code and for Codex. The plugin installs these
 - The agents are `explorer` (the facts for a plan), `advisor` (the check of a plan) and `worker` (one task of a plan, or a fix). The others are `reviewer` (one lens of a run review), `verifier` (the findings of a round) and `linter` (the lint setup).
 - The hooks of the host. They act only in a git repository with `.harness.yaml` at its top level.
 
-The plugin puts no `harness` command on the `PATH`, so also build it from source. See [the plugin binary](docs/setup.md#the-plugin-binary) for the download and build rules.
+The plugin downloads its own binary with `curl` or `wget`, but puts no `harness` command on the `PATH`. Install one as in [the harness command](#the-harness-command). See [the plugin binary](docs/setup.md#the-plugin-binary) for the download and build rules.
 
 ### Claude Code
 
@@ -32,15 +32,15 @@ codex plugin add 90p@harness
 
 Open `/hooks` in Codex once and trust the harness hooks. Codex does not run a plugin hook that you did not trust.
 
-### Build from source
+### The harness command
 
-The harness needs Go 1.27. Put `$(go env GOPATH)/bin` on the `PATH`. [docs/setup.md](docs/setup.md#build-from-source) has the full block.
+Download the binary of the latest release into a folder on the `PATH`. Pick `darwin-arm64`, `darwin-amd64`, `linux-amd64` or `linux-arm64` at the end of the URL.
 
 ```sh
-git clone https://github.com/90p-labs/harness.git
-cd harness
-go install ./cmd/harness
+curl -fsSL -o ~/.local/bin/harness https://github.com/90p-labs/harness/releases/latest/download/harness-darwin-arm64 && chmod +x ~/.local/bin/harness
 ```
+
+For a given release, write `download/v0.5.0` in place of `latest/download`. With `wget`, write `wget -qO` in place of `curl -fsSL -o`. To build from source with Go 1.27, see [docs/setup.md](docs/setup.md#build-from-source).
 
 ## Set up a repository
 
