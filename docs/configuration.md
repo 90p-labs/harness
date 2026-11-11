@@ -328,7 +328,7 @@ The rule ids:
 | `agent-model-routing` | `tool.before` | An agent call on a model that is not the model of its role (see `roles`) |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` before `harness verify --commits` passes for `HEAD` |
 | `approval-no-forge` | `tool.before` | A question tool call with answers in its input, or a shell call of `harness hook` |
-| `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`) |
+| `stop-holds-turn` | `turn.stopping` | The end of an agent turn in a phase that holds the turn (see `run.max_stop_blocks`). In `shipping`, the turn may end once `harness run wait --pr` records the pull request |
 | `review-models` | `run.transition.before` | `harness run ship` when a model of the final panel has no counted review, or fewer than 2 models have a record. The rule picks the host list with the most recorded models. A hook records the review when a `reviewer` agent stops in the reviewing phase, in the common list and in the final panel. A review counts only when its transcript shows a read of a changed file, and the deny names the model that did not. A verifier call and a re-review write no record. A Codex repository turns it off, because Codex sends no model in an agent call |
 | `review-findings` | `run.transition.before` | `harness run ship` while `findings.md` of the run has a real open blocker or major finding. With `run.strict_minor` on, a real open minor finding also denies. A missing file allows |
 

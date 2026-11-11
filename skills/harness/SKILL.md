@@ -37,7 +37,7 @@ Start: run harness version ("Binary")
 - `abandon`: run `harness run abandon` and report.
 - Any other text with no active run: run `harness run start "<text>"`.
 
-Each `run` command prints the phase and a `next:` line. Do the `next:` step. When a `handoff:` line asks for it, write `handoff.md` in the run folder as a checkpoint, then continue with the `next:` step. Do not end the turn, except for a question to the user, such as the `Plan` question, or when your context is near its limit. A new session resumes from `harness run status` and `handoff.md`.
+Each `run` command prints the phase and a `next:` line. Do the `next:` step. When a `handoff:` line asks for it, write `handoff.md` in the run folder as a checkpoint, then continue with the `next:` step. Do not end the turn, except for a question to the user, such as the `Plan` question, or when your context is near its limit. In `shipping`, the turn may also end while the run waits on the merge after `harness run wait`. A new session resumes from `harness run status` and `handoff.md`.
 
 ## Phases
 
@@ -90,7 +90,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`. The command refuses a run folder with no `self-check.md` or no `Head: <sha>` line.
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
 5. `reviewing`: on entering `reviewing`, and after `harness run rework`, read `references/reviewing.md` and follow it.
-6. `shipping`: start the `pr-open` skill. It pushes the branch and opens the pull request as a draft, with the body Why, What and How. The user merges it. Then run `harness run report`, then `harness run done --pr <url>`.
+6. `shipping`: start the `pr-open` skill. It pushes the branch and opens the pull request as a draft, with the body Why, What and How. Then run `harness run wait --pr <url>`: the turn may stop while the run waits on the merge. After a `resume` into `shipping`, run the wait again. The user merges the pull request. Then run `harness run report`, then `harness run done --pr <url>`.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.
 

@@ -154,11 +154,14 @@ The caller gives `Run.ID`. A new run is `Run{ID: id}` in the phase none, and `st
 
 `Phase.HoldsTheTurn` is true for `planning`, `working`, `reviewing` and `shipping`. The phases `releasing` and `observing` wait for production, so they do not hold the turn.
 
-`DecideStop` blocks the end of an agent turn only when all three facts hold:
+`DecideStop` blocks the end of an agent turn only when all four facts hold:
 
 1. The phase holds the turn.
 2. No agent runs.
 3. `StopBlocks` is below `MaxStopBlocks`.
+4. The run does not wait on a merge. In `shipping`, `harness run wait --pr URL` records the open pull request on the run.
+
+With a recorded URL and a valid `handoff.md`, the stop in `shipping` passes with no block. The first stop of a step still asks for the handoff. A transition out of `shipping` other than `complete` clears the URL.
 
 When it blocks, it returns the run with `StopBlocks` plus 1. The reason names the phase.
 
@@ -171,7 +174,7 @@ The lead writes `handoff.md` in the run folder after a phase change. The file ha
 
 `CheckHandoff` refuses a file over 4096 bytes. It also refuses a wrong phase, a wrong step, a missing header and a missing or empty section. `Step` is the count of the run transitions.
 
-`DecideStop` runs the three facts first. Then it allows one stop when `CheckHandoff` passes and `HandoffStep` differs from `Step`. It sets `HandoffStep` to `Step`, and the handler saves the run. A second stop at the same step blocks. A missing or refused file keeps the block, and the reason names the refusal.
+`DecideStop` checks facts 1 to 3 first. Then it allows one stop when `CheckHandoff` passes and `HandoffStep` differs from `Step`. It sets `HandoffStep` to `Step`, and the handler saves the run. A second stop at the same step blocks. A missing or refused file keeps the block, and the reason names the refusal.
 
 The run stores the step in the column `handoff_step` (migration 0007). A resumed session at the same step meets the normal stop rule.
 
@@ -248,7 +251,7 @@ The guard builds one plugin named `guard.<id>` for each rule that is not in `gua
 | `review-findings` | `run.transition.before` | `harness run ship` (the `approve-review` transition) when `findings.md` of the run has an open real finding of severity blocker or major. With `run.strict_minor` on, an open real minor finding also denies. It also denies when a real blocker or major finding, open or closed, has an ID that no `request-rework` reason names. An ID matches as a whole word. A missing file allows. A file that does not parse denies. A lead that edits `findings.md` can still pass the rule |
 | `commits-checked` | `tool.before` | `git push` or `gh pr create` without a passed commit check for `HEAD`, or with no `HEAD`. A push that only deletes remote refs is allowed |
 | `approval-no-forge` | `tool.before` | A question tool call with `answers` in its input, or a shell command that runs `harness hook` or `go run ./cmd/harness hook` |
-| `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says |
+| `stop-holds-turn` | `turn.stopping` | A stop in a phase that holds the turn, as the run stop decision says. In `shipping`, a stop passes once `harness run wait --pr` records the pull request |
 
 When a `reviewer` agent stops in `reviewing`, a hook writes a review record on `subagent.stopped`, in the gate state beside the commit checks. The record holds the repo, `HEAD`, the model, the patch id, the files read and the run id. The hook reads `HEAD` at that moment, so the lead does not commit while a reviewer runs. The files read come from the transcript: a `Read` call, a diff header in a tool result or a shell command that names the file.
 

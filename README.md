@@ -148,7 +148,7 @@ A run moves through fixed phases. Each move is one row of a transition table in 
 | `awaiting_approval` | The agent asks you the open questions, then the `Plan` question | `harness run approve` |
 | `working` | Workers write the tests first, then the code, and `harness verify` runs the gates | `harness run review` |
 | `reviewing` | The reviewers check the change and a verifier checks each finding | `harness run ship` or `harness run rework` |
-| `shipping` | The agent opens a draft pull request, and you merge it | `harness run done --pr URL` |
+| `shipping` | The agent opens a draft pull request, and you merge it | `harness run wait --pr URL`, then `harness run done --pr URL` |
 | `releasing`, `observing` | With go-live on, the run follows the deploy and the signals | `harness live check` |
 | `done` | The run is closed | `harness run start` |
 

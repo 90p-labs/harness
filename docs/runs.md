@@ -100,11 +100,16 @@ run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=reviewing rev
 next: review the change, then harness run ship, or harness run rework --findings
 $ harness run ship
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=shipping review_round=0 live_round=0
-next: merge the change, then harness run done --pr URL
+next: open the pull request and run harness run wait --pr URL, then after the merge harness run done --pr URL
+$ harness run wait --pr https://github.com/acme/shop/pull/42
+run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=shipping review_round=0 live_round=0
+next: open the pull request and run harness run wait --pr URL, then after the merge harness run done --pr URL
 $ harness run done --pr https://github.com/acme/shop/pull/42
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=done review_round=0 live_round=0
 next: the run is closed, start the next with harness run start
 ```
+
+In `shipping`, `harness run wait --pr URL` records the open pull request on the run. The turn may then stop while the run waits on the merge.
 
 The lead merges the findings of the reviewers and starts a verifier for each one. The lead writes them in `findings.md`. For the real open findings, the lead sends the run back once with `harness run rework --findings "..."`. A real open blocker or major finding gives `request-rework` and raises `review_round`. Only minor findings give `rework-minor` and keep it.
 
