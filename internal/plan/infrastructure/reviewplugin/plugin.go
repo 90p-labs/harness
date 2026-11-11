@@ -19,6 +19,9 @@ const (
 	Name     = "plan.review"
 	nextStep = "next: fix the problems, commit, then run harness run review again"
 
+	proofOnlyNextStep  = "next: run harness verify, then run harness run review again"
+	proofMixedNextStep = "next: fix the problems, commit, run harness verify, then run harness run review again"
+
 	selfCheckNextStep = "next: run the self-check worker, write the file with a Head: <sha> line, then run harness run review again"
 )
 
@@ -85,7 +88,24 @@ func deny(problems []domain.Problem) shareddomain.Verdict {
 	for _, problem := range problems {
 		lines = append(lines, problem.String())
 	}
-	return shareddomain.Verdict{Kind: shareddomain.VerdictDeny, Reason: strings.Join(append(lines, nextStep), "\n")}
+	return shareddomain.Verdict{Kind: shareddomain.VerdictDeny, Reason: strings.Join(append(lines, nextStepFor(problems)), "\n")}
+}
+
+func nextStepFor(problems []domain.Problem) string {
+	proof := 0
+	for _, problem := range problems {
+		if problem.Rule == domain.RuleProofMissing {
+			proof++
+		}
+	}
+	switch {
+	case proof == 0:
+		return nextStep
+	case proof == len(problems):
+		return proofOnlyNextStep
+	default:
+		return proofMixedNextStep
+	}
 }
 
 func (p Plugin) base(ctx context.Context, doc domain.Document) (string, error) {

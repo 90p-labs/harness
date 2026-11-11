@@ -131,6 +131,43 @@ func TestReviewPlugin(t *testing.T) {
 		if b.base != baseBranch || !slices.Equal(b.tests, []string{"pkg/a_test.go"}) {
 			t.Errorf("read base %q tests %v", b.base, b.tests)
 		}
+		if got, want := lastLine(verdict.Reason), "next: fix the problems, commit, run harness verify, then run harness run review again"; got != want {
+			t.Errorf("next step = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("points a proof-only deny at harness verify", func(t *testing.T) {
+		dir := worktreeWith(t, "")
+
+		verdict, err := newPlugin(dir, &branches{branch: cleanBranch()}, proofs{1: false}).Handle(ctx, envelope(t, dir, shareddomain.TransitionSubmitForReview))
+
+		if err != nil || verdict.Kind != shareddomain.VerdictDeny {
+			t.Fatalf("verdict = %+v, err = %v", verdict, err)
+		}
+		if got, want := lastLine(verdict.Reason), "next: run harness verify, then run harness run review again"; got != want {
+			t.Errorf("next step = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("keeps the old next step on a deny without a proof-missing problem", func(t *testing.T) {
+		dir := worktreeWith(t, "")
+		b := &branches{branch: cleanBranch()}
+		b.branch.Commits[0].Subject = "feat: other"
+
+		verdict, err := newPlugin(dir, b, proofs{1: true}).Handle(ctx, envelope(t, dir, shareddomain.TransitionSubmitForReview))
+
+		if err != nil || verdict.Kind != shareddomain.VerdictDeny {
+			t.Fatalf("verdict = %+v, err = %v", verdict, err)
+		}
+		if !strings.Contains(verdict.Reason, string(domain.RuleCommitMissing)) {
+			t.Errorf("reason %q does not name %s", verdict.Reason, domain.RuleCommitMissing)
+		}
+		if strings.Contains(verdict.Reason, string(domain.RuleProofMissing)) {
+			t.Errorf("reason %q names %s", verdict.Reason, domain.RuleProofMissing)
+		}
+		if got, want := lastLine(verdict.Reason), "next: fix the problems, commit, then run harness run review again"; got != want {
+			t.Errorf("next step = %q, want %q", got, want)
+		}
 	})
 
 	t.Run("allows a clean branch from the default base", func(t *testing.T) {
@@ -159,6 +196,9 @@ func TestReviewPlugin(t *testing.T) {
 
 		if err != nil || verdict.Kind != shareddomain.VerdictDeny || !strings.Contains(verdict.Reason, `"one"`) {
 			t.Fatalf("verdict = %+v, err = %v, want a deny that names the bad row", verdict, err)
+		}
+		if got, want := lastLine(verdict.Reason), "next: fix the problems, commit, then run harness run review again"; got != want {
+			t.Errorf("next step = %q, want %q", got, want)
 		}
 	})
 
@@ -227,3 +267,8 @@ func TestSelfCheckRequired(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+func lastLine(reason string) string {
+	lines := strings.Split(reason, "\n")
+	return lines[len(lines)-1]
+}
