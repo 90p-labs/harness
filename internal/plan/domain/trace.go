@@ -32,7 +32,13 @@ type TaskLinks struct {
 type unlinkedItem struct {
 	text string
 	line int
+	fix  string
 }
+
+const (
+	criterionFix = "Name it in the " + CriteriaKey + " line of a section under ## " + HeadingSpecs + `, such as "` + CriteriaKey + ` 1 and 3"`
+	taskFix      = "List a final tree file in its " + FieldOwned + ", or add its owned file to a final tree"
+)
 
 func Trace(doc Document) Links {
 	links, _ := trace(doc)
@@ -73,7 +79,7 @@ func trace(doc Document) (Links, []unlinkedItem) {
 		}
 		links.Criteria[c.Number] = cl
 		if len(cl.Specs) == 0 {
-			unlinked = append(unlinked, unlinkedItem{fmt.Sprintf("criterion %d", c.Number), c.Line})
+			unlinked = append(unlinked, unlinkedItem{fmt.Sprintf("criterion %d", c.Number), c.Line, criterionFix})
 		}
 	}
 	for _, t := range doc.Tasks {
@@ -83,7 +89,7 @@ func trace(doc Document) (Links, []unlinkedItem) {
 		}
 		links.Tasks[t.Number] = tl
 		if len(tl.Files) == 0 {
-			unlinked = append(unlinked, unlinkedItem{fmt.Sprintf("task %d", t.Number), t.Line})
+			unlinked = append(unlinked, unlinkedItem{fmt.Sprintf("task %d", t.Number), t.Line, taskFix})
 		}
 	}
 	for _, item := range unlinked {
@@ -127,6 +133,6 @@ func checkTrace(doc Document, add report) {
 	}
 	_, unlinked := trace(doc)
 	for _, item := range unlinked {
-		add(item.line, RuleTraceUnlinked, "%s has no link", item.text)
+		add(item.line, RuleTraceUnlinked, "%s has no link. %s", item.text, item.fix)
 	}
 }
