@@ -59,42 +59,58 @@ Without the plugin, `harness init --host claude` (or `--host codex`) writes the 
 
 ## Usage
 
-Start a run in Claude Code with `/90p:harness <prompt>`, or in Codex with `$90p:harness <prompt>`. The agent then drives the loop, and you answer its questions.
-
 ### Your first run
+
+This walkthrough follows one real request in a small Go shop. An order there moves from `pending` to `paid` to `shipped`. You type one line, answer the questions, read one page and merge one pull request.
+
+**1. Ask for the change.** In Claude Code, type the line below. In Codex, start it with `$90p:harness` instead.
 
 ```text
 /90p:harness Let a customer cancel an order before it ships
 ```
 
-The agent writes the plan, and `harness plan view` shows it as one page. The page shows the phase, the state of each task, the proof of each criterion, the diagrams and the tasks. It updates on every phase change:
-
-![The plan summary: the goal, the acceptance criteria with their proof state, and the properties pane](docs/images/plan-view-summary.png)
-
-![The tech specs with their criteria, the change colors and a layout sketch](docs/images/plan-view-specs.png)
-
-![The task board: one column for each wave, with the test first, the files, the DoD and the commit](docs/images/plan-view-tasks.png)
-
-The agent asks the `Plan` question with the options `Approve` and `Change the plan`. A model that you name approves with `harness run approve --by <model> --reason "<one line>"`. Under the hood, the agent runs these commands, and the hooks enforce the order:
+**2. The agent plans.** It reads the code and writes `plan.md` with the criteria, the diagrams and the tasks. You wait. The agent runs these commands, and this is their real output:
 
 ```console
 $ harness run start "Let a customer cancel an order before it ships"
-run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=planning review_round=0 live_round=0
+run 20261111-100957-let-a-customer-cancel-an-order-before-it phase=planning review_round=0 live_round=0
+models: lead=opus explorer=haiku worker=sonnet,haiku reviewer=sonnet,haiku,opus advisor=fable,opus
+$ harness plan check
+plan.md:99: note: diagram kind sequenceDiagram is not checked
+advisor: on, model fable
+wave 1: task 1 (haiku)
+wave 2: task 2 (sonnet)
+wave 3: task 3 (sonnet)
 $ harness run plan
-run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=awaiting_approval review_round=0 live_round=0
-$ harness run approve
-run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=working review_round=0 live_round=0
-$ harness verify
-PASS gates=1 cached=0
-$ harness run review
-run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=reviewing review_round=0 live_round=0
-$ harness run ship
-run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=shipping review_round=0 live_round=0
-$ harness run done --pr https://github.com/acme/shop/pull/42
-run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=done review_round=0 live_round=0
+run 20261111-100957-let-a-customer-cancel-an-order-before-it phase=awaiting_approval review_round=0 live_round=0
 ```
 
-[docs/runs.md](docs/runs.md) shows the full run with its plan and its output.
+**3. Read the plan.** `harness plan view` writes the plan as one page, and the page updates on every phase change. First, check that each criterion says what you want. Criterion 2 says that a shipped order refuses the cancel:
+
+![The plan summary: the goal, the 4 acceptance criteria with their proof state, and the properties pane](docs/images/plan-view-summary.png)
+
+Then check that the diagrams match your model. The new cancel path is in green:
+
+![The tech specs: the order state diagram, with the new cancel path in green](docs/images/plan-view-specs.png)
+
+Last, look at the order of the work. Each task starts with a failing test and names its model:
+
+![The task board: one wave for each task, with the test first, the model, the DoD and the commit](docs/images/plan-view-tasks.png)
+
+**4. Answer and approve.** The agent asks about each open decision. In this plan, the decision was that a cancel does not refund a paid order. Then it asks the `Plan` question with `Approve` and `Change the plan`. Your code does not change before you pick `Approve`. To let a model approve instead, run `harness run approve --by <model> --reason "<one line>"`.
+
+**5. Let it work.** You do nothing in this step. A worker takes each task in wave order, commits the failing test, then the code. `harness verify` runs the gates and the 4 criteria. Then two or more models review the change, a verifier checks each finding, and a worker fixes the real ones.
+
+**6. Merge the pull request.** The agent opens a draft pull request and stops. Only you can merge it, because the guard denies a merge by the agent. After your merge, the agent closes the run with `harness run done --pr <url>`.
+
+**7. Watch production (optional).** With `run.go_live: true`, the run follows the deploy of your merge. `harness live check` then watches the `## Signals` rows of the plan:
+
+| Signal | Breach | Window |
+|---|---|---|
+| cancel error rate | `> 0.01` | 30m |
+| cancel after ship | `> 0` | 1h |
+
+A healthy hour closes the run. A breach sends the run back to `planning` with the findings, and the harness never rolls back for you. [docs/go-live.md](docs/go-live.md) covers the setup, and [docs/runs.md](docs/runs.md) shows a full run.
 
 ### Everyday commands
 
@@ -110,14 +126,6 @@ run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=done review_r
 | `harness lint`, `harness config` | Run the lint packs, or print the effective config |
 | `/90p:report` | File a bug about the harness |
 
-### Example projects
-
-- [`examples/go/`](examples/go/README.md): the `setup` and `gates` keys, with the gate ids of the built-in detection of `go.mod`.
-- [`examples/nextjs/`](examples/nextjs/README.md): the `setup` and `gates` keys and the lint packs `nextjs` and `shadcn`.
-- [`examples/python/`](examples/python/README.md): custom lint packs with ruff and import-linter plugins.
-- [`examples/symfony/`](examples/symfony/README.md): a Makefile with `## setup` and `## gate` targets and a `gates.detect` plugin.
-- [`examples/README.md`](examples/README.md): the four projects side by side, with the gates in containers.
-
 ## Goals
 
 An agent should not merge what you did not approve, or claim what it did not prove. Each goal maps to one part of the harness:
@@ -132,7 +140,7 @@ An agent should not merge what you did not approve, or claim what it did not pro
 
 ## Phases
 
-A run moves through fixed phases. Each move is one row of a transition table in `internal/run/domain`, and a plugin can veto it.
+A run moves through fixed phases. Each move is one row of a transition table in `internal/run/domain`, and a plugin can veto it. A run can also go to `blocked` (for example after the last review round) or `abandoned`. [docs/runs.md](docs/runs.md#run-phases) has the full state diagram and a full run with its output.
 
 | Phase | What happens | Next |
 |---|---|---|
@@ -144,8 +152,6 @@ A run moves through fixed phases. Each move is one row of a transition table in 
 | `releasing`, `observing` | With go-live on, the run follows the deploy and the signals | `harness live check` |
 | `done` | The run is closed | `harness run start` |
 
-A run can also go to `blocked` (for example after the last review round) or `abandoned`. [docs/runs.md](docs/runs.md#run-phases) has the full state diagram, and [docs/go-live.md](docs/go-live.md) covers the release phases.
-
 ## Documents
 
 - [`docs/setup.md`](docs/setup.md): the plugin binary, the lint tools, `harness init` and the step by step setup.
@@ -153,6 +159,7 @@ A run can also go to `blocked` (for example after the last review round) or `aba
 - [`docs/runs.md`](docs/runs.md): a full run, the plan view, the multi-run plan and the run phases.
 - [`docs/plugins.md`](docs/plugins.md): the plugin contract and the five plugin kinds.
 - [`docs/go-live.md`](docs/go-live.md): follow a run from the merge to production.
+- [`examples/README.md`](examples/README.md): four example projects in Go, Next.js, Python and Symfony, with their gates and lint packs.
 - [`docs/contributing.md`](docs/contributing.md): the repository layout, the tests and the bug report.
 - [`DESIGN.md`](DESIGN.md), [`CONTEXT.md`](CONTEXT.md), [`ROADMAP.md`](ROADMAP.md) and [`docs/adr/`](docs/adr/): the design, the terms, the build order and the decisions.
 

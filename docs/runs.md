@@ -122,11 +122,11 @@ The guard acts on each tool call of the agent. For example, a merge goes to `har
 
 The page has three panes: a sidebar with each section and its count, the main list, and a properties pane. The properties pane holds the track, the branch and the progress bars. `j` and `k` move through the list, and `⌘K` opens a palette to jump to any section.
 
-![The plan summary: the goal, the acceptance criteria with their proof state, and the properties pane](images/plan-view-summary.png)
+![The plan summary: the goal, the 4 acceptance criteria with their proof state, and the properties pane](images/plan-view-summary.png)
 
-![The tech specs with their criteria, the change colors and a layout sketch](images/plan-view-specs.png)
+![The tech specs: the order state diagram, with the new cancel path in green](images/plan-view-specs.png)
 
-![The task board: one column for each wave, with the test first, the files, the DoD and the commit](images/plan-view-tasks.png)
+![The task board: one wave for each task, with the test first, the model, the DoD and the commit](images/plan-view-tasks.png)
 
 ## Multi-run plan
 
