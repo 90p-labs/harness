@@ -152,6 +152,28 @@ A run moves through fixed phases. Each move is one row of a transition table in 
 | `releasing`, `observing` | With go-live on, the run follows the deploy and the signals | `harness live check` |
 | `done` | The run is closed | `harness run start` |
 
+## Extend it per project
+
+The binary is the same in every repository. Each project plugs in its own tools through the `plugins` key of `.harness.yaml`, with no change to the harness. A plugin is any command, often a short shell script. It reads a JSON event on stdin and prints a verdict on stdout. The events that it lists decide what it extends:
+
+| Event | What the plugin adds | Example |
+|---|---|---|
+| `gates.detect` | Gates read from the build files of the project | [`examples/symfony/`](examples/symfony/) turns the `## gate` targets of a Makefile into gates |
+| `lint.check` | A native lint tool, run as a lint engine | [`examples/go/`](examples/go/) runs go-arch-lint, [`examples/python/`](examples/python/) runs ruff and import-linter, and [`examples/symfony/`](examples/symfony/) runs deptrac |
+| `plan.submitted`, `run.transition.before` | A team rule that can veto a plan or a phase move | [`docs/plugins.md`](docs/plugins.md#hook-plugin) refuses a plan with no risks section |
+| `signals.check` | Production signals after the deploy | [`docs/plugins.md`](docs/plugins.md#signals-plugin) sends the run back to planning on a breach |
+
+The Python example declares its ruff plugin in five lines:
+```yaml
+plugins:
+  - name: ruff
+    command: [sh, .harness/plugins/ruff-lint.sh]
+    events: [lint.check]
+    timeout: 60s
+```
+
+[`examples/nextjs/`](examples/nextjs/) needs no plugin, because the built-in lint packs cover Next.js and shadcn. [`examples/README.md`](examples/README.md) compares the four projects, and [`docs/plugins.md`](docs/plugins.md) gives the contract and each plugin kind.
+
 ## Documents
 
 - [`docs/setup.md`](docs/setup.md): the plugin binary, the lint tools, `harness init` and the step by step setup.

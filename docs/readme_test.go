@@ -3,10 +3,12 @@ package docs_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
@@ -47,7 +49,7 @@ func TestReadmeInstallOrder(t *testing.T) {
 }
 
 const (
-	readmeMaxLines  = 170
+	readmeMaxLines  = 190
 	headingLine     = "## "
 	firstRunHeading = "\n### Your first run\n"
 	readmeImagesDir = "docs/images/"
@@ -147,6 +149,97 @@ func TestReadmeListsSkillsAndAgents(t *testing.T) {
 			if !strings.Contains(line, "`"+name+"`") {
 				t.Errorf("the line %q of %s does not name `%s`", prefix, readmeFile, name)
 			}
+		}
+	}
+}
+
+const (
+	extendHeading   = "\n## Extend it per project\n"
+	tableRowPrefix  = "| "
+	tableHeaderRows = 1
+	exampleConfig   = ".harness.yaml"
+	examplesDir     = "examples/"
+	exampleLinkEnd  = "/)"
+	pluginsPageLink = "(" + pluginsPage
+	ruffEntryLines  = 5
+)
+
+var (
+	pluginExamples = []string{"go", "python", "symfony", "nextjs"}
+	backticked     = regexp.MustCompile("`([^`]+)`")
+)
+
+type exampleEvent struct {
+	example string
+	event   string
+}
+
+var exampleEvents = []exampleEvent{
+	{"symfony", "gates.detect"},
+	{"symfony", "lint.check"},
+	{"go", "lint.check"},
+	{"python", "lint.check"},
+}
+
+func exampleLink(name string) string {
+	return "(" + examplesDir + name + exampleLinkEnd
+}
+
+func tableRows(section string) []string {
+	var rows []string
+	for _, line := range strings.Split(section, "\n") {
+		if strings.HasPrefix(line, tableRowPrefix) {
+			rows = append(rows, line)
+		}
+	}
+	if len(rows) < tableHeaderRows {
+		return nil
+	}
+	return rows[tableHeaderRows:]
+}
+
+func TestReadmeExplainsPlugins(t *testing.T) {
+	section := repository.Section(t, repository.Read(t, readmeFile), extendHeading)
+	links := []string{pluginsPageLink}
+	for _, name := range pluginExamples {
+		links = append(links, exampleLink(name))
+	}
+	for _, link := range links {
+		if !strings.Contains(section, link) {
+			t.Errorf("the Extend it per project section of %s does not hold %q", readmeFile, link)
+		}
+	}
+	rows := tableRows(section)
+	if len(rows) == 0 {
+		t.Errorf("the Extend it per project section of %s has no table rows", readmeFile)
+	}
+	rowOf := map[string]string{}
+	for _, row := range rows {
+		cells := strings.Split(row, "|")
+		for _, match := range backticked.FindAllStringSubmatch(cells[1], -1) {
+			if _, ok := domain.KindOf(domain.EventName(match[1])); !ok {
+				t.Errorf("the table row %q names %q, which is not a known event", row, match[1])
+			}
+			rowOf[match[1]] = row
+		}
+	}
+	pythonConfig := repository.Read(t, examplesDir+"python/"+exampleConfig)
+	for _, line := range strings.Split(pythonConfig, "\n")[:ruffEntryLines] {
+		if !strings.Contains(section, line+"\n") {
+			t.Errorf("the Extend it per project section of %s does not hold the python line %q", readmeFile, line)
+		}
+	}
+	for _, pair := range exampleEvents {
+		link := exampleLink(pair.example)
+		if !strings.Contains(section, link) {
+			t.Errorf("the Extend it per project section of %s does not hold %q", readmeFile, link)
+		}
+		config := repository.Read(t, examplesDir+pair.example+"/"+exampleConfig)
+		if want := "events: [" + pair.event + "]"; !strings.Contains(config, want) {
+			t.Errorf("%s%s/%s does not hold %q", examplesDir, pair.example, exampleConfig, want)
+		}
+		if !strings.Contains(rowOf[pair.event], link) {
+			t.Errorf("the table row of %s in %s does not hold %q", pair.event, readmeFile, link)
 		}
 	}
 }
