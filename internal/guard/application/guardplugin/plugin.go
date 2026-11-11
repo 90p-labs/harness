@@ -39,14 +39,8 @@ type Deps struct {
 
 func Plugins(disabled []string, deps Deps) ([]shareddomain.Plugin, error) {
 	rules := domain.Rules()
-	known := []string{domain.RuleStopHoldsTurn, domain.RuleReviewModels, domain.RuleReviewFindings}
-	for _, rule := range rules {
-		known = append(known, rule.ID)
-	}
-	for _, id := range disabled {
-		if !slices.Contains(known, id) {
-			return nil, fmt.Errorf("guard.disabled names unknown rule %q", id)
-		}
+	if err := domain.CheckRuleIDs(disabled); err != nil {
+		return nil, err
 	}
 	denies, err := deps.Meter.Int64Counter(metricDenies)
 	if err != nil {

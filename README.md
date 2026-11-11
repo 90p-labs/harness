@@ -101,7 +101,7 @@ Last, look at the order of the work. Each task starts with a failing test and na
 
 **5. Let it work.** You do nothing in this step. A worker takes each task in wave order, commits the failing test, then the code. `harness verify` runs the gates and the 4 criteria. Then two or more models review the change, a verifier checks each finding, and a worker fixes the real ones.
 
-**6. Merge the pull request.** The agent opens a draft pull request and stops. Only you can merge it, because the guard denies a merge by the agent. After your merge, the agent closes the run with `harness run done --pr <url>`.
+**6. Merge the pull request.** By default the agent opens a draft and stops. Only you can merge it, because the guard denies a merge. `guard.disabled` can let the agent mark it ready and merge. Run `harness pr policy` to see which. After the merge, the agent closes the run with `harness run done --pr <url>`.
 
 **7. Watch production (optional).** With `run.go_live: true`, the run follows the deploy of your merge. `harness live check` then watches the `## Signals` rows of the plan:
 
@@ -122,7 +122,7 @@ A healthy hour closes the run. A breach sends the run back to `planning` with th
 | `harness plan view` | Write the plan as an HTML page |
 | `harness verify` | Run the gates and the acceptance criteria |
 | `harness verify --commits main` | Check each commit of the branch |
-| `harness pr body`, `harness pr check --body-file <path>` | Print a PR body skeleton, or every problem of a PR body |
+| `harness pr body`, `harness pr check --body-file <path>`, `harness pr policy` | Print a PR body skeleton, every problem of a PR body, or the draft and merge policy |
 | `harness lint`, `harness config` | Run the lint packs, or print the effective config |
 | `/90p:report` | File a bug about the harness |
 
@@ -134,7 +134,7 @@ An agent should not merge what you did not approve, or claim what it did not pro
 - **Proof, not claims.** A gate is one shell command that proves one property, such as the tests. `harness verify` runs the gates and each criterion, and keeps the evidence.
 - **Tests before code.** A `test:` commit must fail a gate, and every other commit must pass.
 - **More than one reviewer.** Two or more models review the change, and a verifier checks each finding.
-- **Hard limits.** The guard rules run on the host hooks. They deny a PR merge, a PR that is not a draft, a forced push, a read of a secret and an early stop.
+- **Hard limits.** The guard rules run on the host hooks. They deny a PR merge, a PR that is not a draft, a forced push, a read of a secret and an early stop. `guard.disabled` can turn off the two PR rules, see `harness pr policy`.
 - **Clean architecture.** Lint packs for DDD, event sourcing, observability, Next.js and shadcn, with a baseline ratchet.
 - **Open to your tools.** An exec plugin reads a JSON event on stdin and prints a verdict. It can veto a transition, a plan or a gate.
 
@@ -148,7 +148,7 @@ A run moves through fixed phases. Each move is one row of a transition table in 
 | `awaiting_approval` | The agent asks you the open questions, then the `Plan` question | `harness run approve` |
 | `working` | Workers write the tests first, then the code, and `harness verify` runs the gates | `harness run review` |
 | `reviewing` | The reviewers check the change and a verifier checks each finding | `harness run ship` or `harness run rework` |
-| `shipping` | The agent opens a draft pull request, and you merge it | `harness run wait --pr URL`, then `harness run done --pr URL` |
+| `shipping` | The agent reads `harness pr policy` and opens the pull request: a draft you merge by default | `harness run wait --pr URL`, then `harness run done --pr URL` |
 | `releasing`, `observing` | With go-live on, the run follows the deploy and the signals | `harness live check` |
 | `done` | The run is closed | `harness run start` |
 

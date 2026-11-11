@@ -44,6 +44,63 @@ var (
 	prBodyCommands  = []string{subCreate, subEdit}
 )
 
+// Values of the pull request policy that `harness pr policy` prints.
+const (
+	DraftRequired DraftPolicy = "required"
+	DraftOptional DraftPolicy = "optional"
+	MergeUser     MergePolicy = "user"
+	MergeAgent    MergePolicy = "agent"
+)
+
+// DraftPolicy says whether the pull request must open as a draft.
+type DraftPolicy string
+
+// MergePolicy says who merges the pull request.
+type MergePolicy string
+
+// PRPolicy is what the guard leaves to the agent for a pull request: whether it must open a draft, and who merges.
+type PRPolicy struct {
+	// Draft is DraftRequired while pr-draft-only is on, else DraftOptional.
+	Draft DraftPolicy
+	// Merge is MergeUser while pr-no-merge is on, else MergeAgent.
+	Merge MergePolicy
+}
+
+// KnownRuleIDs returns every id that guard.disabled may name.
+func KnownRuleIDs() []string {
+	known := []string{RuleStopHoldsTurn, RuleReviewModels, RuleReviewFindings}
+	for _, rule := range Rules() {
+		known = append(known, rule.ID)
+	}
+	return known
+}
+
+// CheckRuleIDs rejects the first id of guard.disabled that is not a rule.
+func CheckRuleIDs(disabled []string) error {
+	known := KnownRuleIDs()
+	for _, id := range disabled {
+		if !slices.Contains(known, id) {
+			return fmt.Errorf("guard.disabled names unknown rule %q", id)
+		}
+	}
+	return nil
+}
+
+// PRPolicyOf maps the disabled rule ids to the pull request policy. It rejects an id that is not a rule.
+func PRPolicyOf(disabled []string) (PRPolicy, error) {
+	if err := CheckRuleIDs(disabled); err != nil {
+		return PRPolicy{}, err
+	}
+	policy := PRPolicy{Draft: DraftRequired, Merge: MergeUser}
+	if slices.Contains(disabled, RulePRDraftOnly) {
+		policy.Draft = DraftOptional
+	}
+	if slices.Contains(disabled, RulePRNoMerge) {
+		policy.Merge = MergeAgent
+	}
+	return policy, nil
+}
+
 func denyPRMerge(call ToolCall, _ RuleContext) (string, bool) {
 	for _, c := range invocations(call.Command) {
 		if isCommand(c, cmdGh, subPR, subMerge) {
