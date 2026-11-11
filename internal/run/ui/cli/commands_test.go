@@ -302,7 +302,7 @@ func TestHandoffLines(t *testing.T) {
 	}
 
 	t.Run("write line", func(t *testing.T) {
-		want := "handoff: write .harness/runs/r1/handoff.md with Phase: working and Step: 3, then continue"
+		want := `handoff: write .harness/runs/r1/handoff.md with Phase: working, Step: 3 and the sections ## Next, ## Open findings, ## Unreviewed commits, ## Decisions, each with a "- " line, then continue`
 		got := cli.HandoffWriteLine(ready)
 		if got != want {
 			t.Errorf("line = %q, want %q", got, want)
@@ -314,6 +314,14 @@ func TestHandoffLines(t *testing.T) {
 			t.Errorf("line = %q, want none for a phase that releases the turn", none)
 		}
 	})
+}
+
+func TestHandoffWriteLineNamesSections(t *testing.T) {
+	s := status.Status{ID: "r1", Phase: domain.PhaseWorking, Step: 3}
+	want := `handoff: write .harness/runs/r1/handoff.md with Phase: working, Step: 3 and the sections ## Next, ## Open findings, ## Unreviewed commits, ## Decisions, each with a "- " line, then continue`
+	if got := cli.HandoffWriteLine(s); got != want {
+		t.Errorf("line = %q, want %q", got, want)
+	}
 }
 
 func TestAmendHelp(t *testing.T) {

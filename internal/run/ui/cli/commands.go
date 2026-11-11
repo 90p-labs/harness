@@ -33,7 +33,7 @@ const (
 	reasonPrefix       = "reason: "
 	nextPrefix         = "next: "
 	handoffReadyFormat = "handoff: ready (step %d)"
-	handoffWriteFormat = "handoff: write %s with Phase: %s and Step: %d, then continue"
+	handoffWriteFormat = `handoff: write %s with Phase: %s, Step: %d and the sections %s, each with a "- " line, then continue`
 	noActiveRun        = "active: no"
 	missingFlagMsg     = "required flag %q not set"
 	pairedFlagsMsg     = "flags %q and %q go together"
@@ -160,7 +160,7 @@ func HandoffWriteLine(s status.Status) string {
 	if !s.Phase.HoldsTheTurn() {
 		return ""
 	}
-	return fmt.Sprintf(handoffWriteFormat, shareddomain.RunHandoffFile(s.ID), s.Phase, s.Step)
+	return fmt.Sprintf(handoffWriteFormat, shareddomain.RunHandoffFile(s.ID), s.Phase, s.Step, strings.Join(domain.HandoffSections(), ", "))
 }
 
 func hint(s status.Status) string {
