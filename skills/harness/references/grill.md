@@ -61,7 +61,7 @@ Grill the plan from these 3 points of view, in this order. Go to the next view o
 1. Move each answered question from `## Open questions` to `## Decisions`, as `- <date>: <question>: <answer>`.
 2. Write a new question that an answer opens into `## Open questions`.
 3. When `## Open questions` is empty, write `- none`.
-4. Run `harness plan check` after each change of `plan.md`.
+4. Run `harness plan check` and `harness plan view` after each change of `plan.md`, and ask the user to reload the page.
 
 ## Done
 
@@ -70,4 +70,4 @@ The grill is done only when both conditions are true:
 1. `## Open questions` holds only `- none`.
 2. The user confirms that no decision is left.
 
-Then run `harness plan view --open`, so the user reviews the page in the browser. Then ask the approval: the question with the header `Plan` and the options `Approve` and `Change the plan`.
+Then run `harness plan view`, so the page shows the current plan, and ask the user to reload it. Then ask the approval: the question with the header `Plan` and the options `Approve` and `Change the plan`.
