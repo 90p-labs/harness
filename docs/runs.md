@@ -47,7 +47,7 @@ run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=awaiting_appr
 next: ask the Plan question; when the user picks Approve, run harness run approve
 ```
 
-Before the plan, the `explorer` agent reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the touched code. Each decision that the code cannot make goes under `## Open questions` in `plan.md`. After `harness run plan`, the agent grills the user in rounds through the question tool of the host (`AskUserQuestion` on Claude Code, `request_user_input` on Codex). Each answer moves to `## Decisions`.
+Before the plan, the `explorer` agent reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the touched code. When the change alters behaviour that is not fully pinned, it also returns an evidence baseline. The lead asks the user about its ambiguous items in one round before `plan.md`. Each decision that the code cannot make goes under `## Open questions` in `plan.md`. After `harness run plan`, the agent grills the user in rounds through the question tool of the host (`AskUserQuestion` on Claude Code, `request_user_input` on Codex). Each answer moves to `## Decisions`.
 
 The plan also needs `## Review risks`. Write `- none`, or one risk on each line with `Test:` and a backticked test name, or `Decision:` and text. The rule `risk-unanchored` checks it. A tree path with a `guard` or `security` folder needs `## Threat model` with the bullets `Attacker`, `Input forms` and `Fail closed`. The rule `threat-model` checks it.
 

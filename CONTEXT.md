@@ -28,6 +28,7 @@ These terms have one meaning in the code, the docs and the plans.
 - **Docs-only waiver**: a plan with only `docs` commits and no open question skips the approval on `submit-plan`. A docs-only amend in `working` skips it too, when the run has no recorded approval.
 - **Kept-structure amend**: an `amend` that skips the approval. It starts in `working` with no live round, and the plan keeps its structure against the approved plan. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names of `Test first` and the `DoD` numbers. A sketch link anywhere counts as structure.
 - **Review risk**: a line of `## Review risks` that names a risk. It points to a test name or to a decision.
+- **Evidence baseline**: the table of existing behaviour that the explorer builds when a change modifies, replaces or removes behaviour that is not fully pinned. Each item has one class: `intended`, `bug`, `accidental` or `ambiguous`. Otherwise the explorer writes the line `baseline: not needed`. It differs from the lint baseline of `harness lint baseline`.
 - **Threat model**: the section that names the attacker, the input forms and the fail-closed rule. A tree path with a `guard` or `security` folder needs it.
 
 ## Plugin terms

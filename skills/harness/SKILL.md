@@ -42,7 +42,13 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
 
 ## Phases
 
-1. `planning`: start the `explorer` agent. Set the `model` field of the agent call to the model of the `explorer` role, from the `models:` line of `harness run start` or `harness run status`. Give it the prompt and the full path of the harness binary. It reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the code that the change touches. It returns the facts and the open decisions.
+1. `planning`: start the `explorer` agent. Set the `model` field of the agent call to the model of the `explorer` role, from the `models:` line of `harness run start` or `harness run status`. Give it the prompt and the full path of the harness binary. It reads `docs/adr/index.md` first, then `CONTEXT.md`, the ADRs that the index names and the code that the change touches. It returns the facts, the evidence baseline or its `baseline: not needed` line, and the open decisions. The explorer builds the baseline only when the change modifies, replaces or removes existing behaviour that is not fully pinned.
+   - On `baseline: not needed`, record `- <date>: evidence baseline: not needed: <reason>` under `## Decisions` and plan as today.
+   - Record each `bug`, `accidental` and `ambiguous` item under `## Decisions` as `- <date>: evidence baseline: <class>: <behaviour>: <outcome>`.
+   - `intended`: keep it as a criterion, with its test in the proof. It needs no record.
+   - `bug`: the criterion states the intent, not the broken case. Report each bug to the user. The outcome is that the intent is kept and the bug is reported.
+   - `accidental`: write no criterion. The outcome is that the behaviour is not kept.
+   - `ambiguous`: ask all of them in one round of the question tool of the host, before you write `plan.md`. Follow `references/grill.md`. The outcome is the answer of the user, and this record replaces the grill form `<question>: <answer>`.
 2. `planning`: on Claude, compare the session model with the model of the `lead` role in the `models:` line. When they differ, tell the user to run `/model` to switch, and continue: it is guidance, not a deny. Then write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`.
    - Run `harness plan check`. It prints an advisor line from the plan complexity, then one line for each wave of tasks. The wave lines print only for a clean single-run plan.
    - On `advisor: on, model <m>`, with or without the text `(light track, risky path)`, start the `advisor` agent, with the `model` field set to `<m>`, the model that the line names. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept.

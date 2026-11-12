@@ -1,6 +1,6 @@
 # Grill the plan
 
-The grill turns each open question of `plan.md` into a decision of the user. It runs after `harness run plan` and before the approval.
+The grill turns each open question of `plan.md` into a decision of the user. It runs after `harness run plan` and before the approval, except the one early round for the evidence baseline.
 
 This step adapts the grilling skill of Matt Pocock (MIT license): <https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md>. The model of the design tree, the rounds and the recommended answers comes from that skill. The text here is new.
 
@@ -15,6 +15,7 @@ This step adapts the grilling skill of Matt Pocock (MIT license): <https://githu
 - A fact is in the code, the docs or the history. The explorer agent finds the facts. Never ask the user for a fact.
 - A decision is a choice between options that the code cannot make. Each decision goes to the user. Never take a decision for the user.
 - When the explorer cannot find a fact, write it as a risk, not as a question.
+- The ambiguous items of the evidence baseline get one round before `plan.md` is written, with the same question tool, and their answers go to `## Decisions`. Record each one as `- <date>: evidence baseline: <class>: <behaviour>: <outcome>`, not as `- <date>: <question>: <answer>`.
 
 ## Questions
 
