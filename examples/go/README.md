@@ -92,7 +92,7 @@ gitignore: kept
 
 The setup keeps the `gates` key and the lint pack of the example. `harness lint init` writes `.harness-lint/VERSION`. `harness lint baseline` writes `.harness-lint/baseline.json` with no findings.
 The `next:` line is gone, because the pack `architecture` now gives the rules with the `.go` scope to go-arch-lint.
-`harness init` always installs the hooks. With the harness plugin, each hook then runs twice. See the root README for the setup with the plugin.
+`harness init` installs the hooks. With the `90p` plugin on Claude Code, it skips them, because the plugin runs them.
 
 Add these lines to `.gitignore`. The first line ignores the run state of the harness. The second line keeps the plugin in git:
 

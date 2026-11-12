@@ -75,7 +75,7 @@ type movedPage struct {
 }
 
 var movedPages = []movedPage{
-	{setupPage, []string{"The plugin binary", "Build from source", "Lint tools", "With harness init (no plugin)", "Step by step", "Example config"}, setupPinned},
+	{setupPage, []string{"The plugin binary", "Build from source", "Lint tools", "With harness init", "Step by step", "Example config"}, setupPinned},
 	{pluginsPage, []string{"Deploy tool plugin", "Custom lint pack and lint engine plugin", "Architecture rules in any language", "Signals plugin", "Hook plugin"}, pluginsPinned},
 	{runsPage, []string{"A full run", "Plan view", "Run phases"}, runsPinned},
 	{contributingPage, []string{"Repository layout and tests", "Report a harness bug"}, contributingPinned},

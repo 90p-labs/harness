@@ -118,6 +118,17 @@ func recorderDeps(store *reviewStore, transcript string) guardplugin.Deps {
 	return d
 }
 
+func recorderOf(t *testing.T, d guardplugin.Deps) shareddomain.Plugin {
+	t.Helper()
+	for _, p := range build(t, nil, d) {
+		if p.Name() == pluginReviewRecorder {
+			return p
+		}
+	}
+	t.Fatalf("no %s plugin", pluginReviewRecorder)
+	return nil
+}
+
 func TestReviewRecorder(t *testing.T) {
 	haikuRead := transcriptReading(haikuModelID, changedFile)
 	cases := []struct {
@@ -153,6 +164,51 @@ func TestReviewRecorder(t *testing.T) {
 		})
 	}
 
+	// A reviewer that stops without a saved review says why, so the ship veto is not the first sign.
+	reasons := []struct {
+		name       string
+		run        shareddomain.RunRef
+		path       string
+		transcript string
+		want       string
+	}{
+		{"no transcript path", shareddomain.RunRef{ID: "r1", Phase: shareddomain.PhaseReviewing}, "", haikuRead, "no transcript path"},
+		{"model not listed", shareddomain.RunRef{ID: "r1", Phase: shareddomain.PhaseReviewing}, transcriptFile, transcriptReading("claude-fable-5", changedFile), `"claude-fable-5" is not listed`},
+		{"transcript without a model", shareddomain.RunRef{ID: "r1", Phase: shareddomain.PhaseReviewing}, transcriptFile, "not json\n", "no model"},
+		{"reviewer outside reviewing", shareddomain.RunRef{ID: "r1", Phase: shareddomain.PhaseWorking}, transcriptFile, haikuRead, shareddomain.PhaseWorking},
+		{"reviewer outside a run", shareddomain.RunRef{}, transcriptFile, haikuRead, "no active run"},
+	}
+	for _, c := range reasons {
+		t.Run("reason "+c.name, func(t *testing.T) {
+			env := subagentStopped(t, shareddomain.HostClaude, "", agentReviewer, c.path)
+			env.Run = c.run
+			_, err := recorderOf(t, recorderDeps(&reviewStore{}, c.transcript)).Handle(context.Background(), env)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error = %v, want one that names %q", err, c.want)
+			}
+		})
+	}
+	for _, agent := range []string{agentAdvisor, agentWorker} {
+		t.Run("quiet "+agent, func(t *testing.T) {
+			env := subagentStopped(t, shareddomain.HostClaude, shareddomain.PhaseReviewing, agent, "")
+			if _, err := recorderOf(t, recorderDeps(&reviewStore{}, haikuRead)).Handle(context.Background(), env); err != nil {
+				t.Errorf("error = %v, want none for a %s", err, agent)
+			}
+		})
+	}
+
+	t.Run("plugin agent type", func(t *testing.T) {
+		store := &reviewStore{}
+		env := subagentStopped(t, shareddomain.HostClaude, shareddomain.PhaseReviewing, "90p:reviewer", transcriptFile)
+		if _, err := recorderOf(t, recorderDeps(store, transcriptReading("claude-sonnet-5-5", changedFile))).Handle(context.Background(), env); err != nil {
+			t.Fatal(err)
+		}
+		want := []domain.Review{{Model: modelSonnet, PatchID: reviewPatchID, RunID: "r1", FilesRead: []string{changedFile}}}
+		if !reflect.DeepEqual(store.saved, want) {
+			t.Errorf("saved = %+v, want %+v", store.saved, want)
+		}
+	})
+
 	failures := map[string]func(d *guardplugin.Deps){
 		"save": func(d *guardplugin.Deps) { d.SaveReview = (&reviewStore{saveErr: errors.New(writeFailure)}).save },
 		"transcript": func(d *guardplugin.Deps) {
@@ -166,13 +222,7 @@ func TestReviewRecorder(t *testing.T) {
 		t.Run("failed "+name, func(t *testing.T) {
 			d := recorderDeps(&reviewStore{}, haikuRead)
 			fail(&d)
-			var recorder shareddomain.Plugin
-			for _, p := range build(t, nil, d) {
-				if p.Name() == pluginReviewRecorder {
-					recorder = p
-				}
-			}
-			_, err := recorder.Handle(context.Background(), subagentStopped(t, shareddomain.HostClaude, shareddomain.PhaseReviewing, agentReviewer, transcriptFile))
+			_, err := recorderOf(t, d).Handle(context.Background(), subagentStopped(t, shareddomain.HostClaude, shareddomain.PhaseReviewing, agentReviewer, transcriptFile))
 			if err == nil || !strings.Contains(err.Error(), writeFailure) {
 				t.Errorf("error = %v, want one that names %q", err, writeFailure)
 			}

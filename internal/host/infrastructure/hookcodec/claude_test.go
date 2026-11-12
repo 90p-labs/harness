@@ -25,6 +25,10 @@ const (
 	sessionEndInput   = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","hook_event_name":"SessionEnd","reason":"other"}`
 	errorText         = "non-zero status"
 	subagentStop      = `{"session_id":"abc123","transcript_path":"/t.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_id":"agent-7","agent_type":"Explore","agent_transcript_path":"/a.jsonl","last_assistant_message":"found it"}`
+	// Claude Code 2.1 can leave out agent_transcript_path; it writes the transcript next to the session one.
+	subagentStopNoPath   = `{"session_id":"abc123","transcript_path":"/p/abc123.jsonl","cwd":"/work","hook_event_name":"SubagentStop","agent_id":"a4d60604b4e067837","agent_type":"90p:reviewer"}`
+	subagentStopPrefixed = `{"session_id":"abc123","transcript_path":"/p/abc123.jsonl","cwd":"/work","hook_event_name":"SubagentStop","agent_id":"agent-7","agent_type":"90p:reviewer"}`
+	subagentStopNoPaths  = `{"session_id":"abc123","cwd":"/work","hook_event_name":"SubagentStop","agent_id":"a1","agent_type":"90p:reviewer"}`
 )
 
 func TestClaudeDecode(t *testing.T) {
@@ -46,6 +50,9 @@ func TestClaudeDecode(t *testing.T) {
 		{"stop without tasks", domain.HookStop, stopNoTasksInput, shareddomain.EventTurnStopping, `{"stop_hook_active":false,"background_agents":0}`},
 		{"subagent start", domain.HookSubagentStart, subagentStart, shareddomain.EventSubagentStarted, `{"agent_id":"agent-7","agent_type":"Explore"}`},
 		{"subagent stop", domain.HookSubagentStop, subagentStop, shareddomain.EventSubagentStopped, `{"agent_id":"agent-7","agent_type":"Explore","agent_transcript_path":"/a.jsonl"}`},
+		{"subagent stop without its transcript path", domain.HookSubagentStop, subagentStopNoPath, shareddomain.EventSubagentStopped, `{"agent_id":"a4d60604b4e067837","agent_type":"90p:reviewer","agent_transcript_path":"/p/abc123/subagents/agent-a4d60604b4e067837.jsonl"}`},
+		{"subagent stop with a prefixed agent id", domain.HookSubagentStop, subagentStopPrefixed, shareddomain.EventSubagentStopped, `{"agent_id":"agent-7","agent_type":"90p:reviewer","agent_transcript_path":"/p/abc123/subagents/agent-7.jsonl"}`},
+		{"subagent stop without any transcript path", domain.HookSubagentStop, subagentStopNoPaths, shareddomain.EventSubagentStopped, `{"agent_id":"a1","agent_type":"90p:reviewer"}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

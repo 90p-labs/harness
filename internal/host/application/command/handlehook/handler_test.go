@@ -201,6 +201,43 @@ func TestRetriedStopWithBusVerdict(t *testing.T) {
 	}
 }
 
+// A context or observe plugin cannot block the agent, so its error goes to stderr, where the user sees it.
+func TestNonBlockingFailuresReachStderr(t *testing.T) {
+	const pluginName = "guard-review-recorder"
+	cases := []struct {
+		name  string
+		hook  hostdomain.HookName
+		input string
+	}{
+		{name: "observe", hook: hostdomain.HookSubagentStop, input: `{"cwd":"/work","agent_id":"a1","agent_type":"90p:reviewer"}`},
+		{name: "context", hook: hostdomain.HookPostToolUse, input: preToolInput},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clean := newHandler(t, connectTo(allowAll()), hookcodec.NewClaude()).Handle(context.Background(), handlehook.Command{
+				Host: shareddomain.HostClaude, Hook: tc.hook, Input: strings.NewReader(tc.input),
+			})
+			bus := dispatcherFunc(func(context.Context, shareddomain.Envelope) (shareddomain.DispatchResult, error) {
+				return shareddomain.DispatchResult{
+					Verdict:  shareddomain.Verdict{Kind: shareddomain.VerdictAllow},
+					Failures: []shareddomain.DispatchFailure{{Plugin: pluginName, Err: errors.New("no transcript path\nfor a1")}},
+				}, nil
+			})
+
+			out := newHandler(t, connectTo(bus), hookcodec.NewClaude()).Handle(context.Background(), handlehook.Command{
+				Host: shareddomain.HostClaude, Hook: tc.hook, Input: strings.NewReader(tc.input),
+			})
+
+			if want := harnessErrorText + ": " + pluginName + ": no transcript path; for a1\n"; out.Stderr != want {
+				t.Fatalf("stderr = %q, want %q", out.Stderr, want)
+			}
+			if string(out.Stdout) != string(clean.Stdout) {
+				t.Fatalf("stdout = %q, want the allow %q", out.Stdout, clean.Stdout)
+			}
+		})
+	}
+}
+
 func TestMissingEventFallback(t *testing.T) {
 	var seen shareddomain.Envelope
 	spy := dispatcherFunc(func(_ context.Context, e shareddomain.Envelope) (shareddomain.DispatchResult, error) {

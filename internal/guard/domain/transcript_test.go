@@ -33,6 +33,25 @@ func TestTranscriptFilesRead(t *testing.T) {
 	}
 }
 
+// The fixture has the shape of a Claude Code 2.1 subagent transcript: attachment, api-request-blob and system
+// lines, a Bash diff with a relative path, a Read with an absolute path, and a last <synthetic> API error message.
+func TestTranscriptFilesReadClaudeCodeShape(t *testing.T) {
+	body, err := os.ReadFile("testdata/claude-code-subagent-transcript.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := []string{"src/app/globals.css", "src/app/page.tsx", "src/lib/db.ts", "src/other.ts"}
+
+	model, read := FilesRead(body, transcriptRoot, changed)
+
+	if want := "claude-sonnet-5-5"; model != want {
+		t.Errorf("model = %q, want %q (a synthetic API error message has no model)", model, want)
+	}
+	if want := changed[:3]; !slices.Equal(read, want) {
+		t.Errorf("read = %v, want %v (a Bash diff, an absolute Read, a diff header; an api-request-blob is no read)", read, want)
+	}
+}
+
 func TestTranscriptFilesReadNumberedDiff(t *testing.T) {
 	body, err := os.ReadFile("testdata/numbered-diff-transcript.jsonl")
 	if err != nil {

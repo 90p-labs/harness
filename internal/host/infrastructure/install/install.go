@@ -65,6 +65,56 @@ func Install(worktree string, host shareddomain.Host, matched bool) (string, err
 	return path, nil
 }
 
+// Uninstall removes the harness hook entries from the host config of the worktree and keeps every other hook. It
+// drops the events and the hooks key that it leaves empty, and writes the file only when it removed an entry.
+func Uninstall(worktree string, host shareddomain.Host) (string, int, error) {
+	path, _, err := targetOf(worktree, host, false)
+	if err != nil {
+		return "", 0, err
+	}
+	document, err := readDocument(path)
+	if err != nil {
+		return "", 0, err
+	}
+	raw, ok := document[keyHooks]
+	if !ok {
+		return path, 0, nil
+	}
+	current, err := hooksOf(raw)
+	if err != nil {
+		return "", 0, fmt.Errorf("%s: %w", path, err)
+	}
+	total := 0
+	for event, groups := range current {
+		kept, removed, err := withoutHarness(groups)
+		if err != nil {
+			return "", 0, fmt.Errorf("%s: %w", path, err)
+		}
+		total += removed
+		if len(kept) == 0 {
+			delete(current, event)
+			continue
+		}
+		current[event] = kept
+	}
+	if total == 0 {
+		return path, 0, nil
+	}
+	if len(current) == 0 {
+		delete(document, keyHooks)
+	} else if document[keyHooks], err = encode(current, ""); err != nil {
+		return "", 0, err
+	}
+	out, err := encode(document, jsonIndent)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := writeAtomic(path, out); err != nil {
+		return "", 0, err
+	}
+	return path, total, nil
+}
+
 func encode(v any, indent string) ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
@@ -143,7 +193,7 @@ func mergeHooks(document map[string]json.RawMessage, template []byte) (map[strin
 		return nil, err
 	}
 	for event, groups := range wanted {
-		kept, err := withoutHarness(current[event])
+		kept, _, err := withoutHarness(current[event])
 		if err != nil {
 			return nil, err
 		}
@@ -175,8 +225,10 @@ func hooksOf(raw []byte) (map[string][]group, error) {
 	return hooks, nil
 }
 
-func withoutHarness(groups []group) ([]group, error) {
+// withoutHarness returns the groups without the harness hook entries, and the count of entries it removed.
+func withoutHarness(groups []group) ([]group, int, error) {
 	kept := []group{}
+	removed := 0
 	for _, g := range groups {
 		raw, ok := g[keyHooks]
 		if !ok {
@@ -185,7 +237,7 @@ func withoutHarness(groups []group) ([]group, error) {
 		}
 		var entries []json.RawMessage
 		if err := json.Unmarshal(raw, &entries); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		remaining := []json.RawMessage{}
 		for _, entry := range entries {
@@ -193,21 +245,22 @@ func withoutHarness(groups []group) ([]group, error) {
 				Command string `json:"command"`
 			}
 			if err := json.Unmarshal(entry, &parsed); err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 			if parsed.Command != harnessCommand && !strings.HasPrefix(parsed.Command, harnessCommand+" ") {
 				remaining = append(remaining, entry)
 			}
 		}
+		removed += len(entries) - len(remaining)
 		if len(remaining) == 0 {
 			continue
 		}
 		encoded, err := encode(remaining, "")
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		g[keyHooks] = encoded
 		kept = append(kept, g)
 	}
-	return kept, nil
+	return kept, removed, nil
 }

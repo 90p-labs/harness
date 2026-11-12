@@ -371,7 +371,7 @@ deploy:
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
-| `default_branch` | string | empty | `HARNESS_GIT_DEFAULT_BRANCH` | The default branch. Empty reads `origin/HEAD`, else `main`. The rule `git-no-push-default` and the review trace use it |
+| `default_branch` | string | empty | `HARNESS_GIT_DEFAULT_BRANCH` | The default branch. Empty reads `origin/HEAD`, else the first of `main` and `master` that exists, else `main`. The rule `git-no-push-default` and the review trace use it |
 
 ```yaml
 git:

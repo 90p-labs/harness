@@ -79,9 +79,11 @@ npm i -g @biomejs/biome@2.6.6 oxlint@1.92.0
 
 The config is `.harness.yaml` at the git top level. Run the commands below from the repository root.
 
-## With harness init (no plugin)
+## With harness init
 
-`harness init` always installs the hooks of the host. With the plugin, each hook then runs twice: use the step by step setup below.
+`harness init` installs the hooks of the host. With the `90p` plugin on Claude Code, the plugin runs the hooks, so init writes no hook into `.claude/settings.json`. It removes the harness hooks that an earlier init wrote there. It keeps every other hook and key. It prints `host: skipped, the 90p plugin runs the hooks`.
+
+The plugin counts as present when the `enabledPlugins` of the Claude Code settings turns it on. It must also be listed in `plugins/installed_plugins.json` of the config folder, `CLAUDE_CONFIG_DIR` or else `~/.claude`.
 
 `harness init --host claude` (or `--host codex`) sets up the repository in one step. It keeps `lint.packs`, or it chooses the packs from the repository files: `next` or `@nestjs/core` in `package.json` give `nextjs` or `ddd`, and `components.json` gives `shadcn`. Then it writes the gates, the lint files and the lint baseline, installs the hooks, and adds `.harness/runs/` to `.gitignore`. On a NestJS repository with the scripts `typecheck` and `test`:
 
@@ -104,7 +106,7 @@ A second run keeps `lint.packs` and the `gates` key, and the other steps are saf
 1. Set the lint packs first, if you use them, for example `lint: {packs: [ddd]}`. `gates init` adds the lint gate only when `lint.packs` is set.
 2. Run `harness lint init` to write the engine files of the packs into `.harness-lint/`. Lint init keeps `baseline.json`. Run `harness lint` to see the findings, and `harness lint baseline` to record them as the baseline. The lint gate fails only on a new `error` finding. A later `harness lint baseline` only removes the keys that no longer match, so the baseline only shrinks.
 3. Run `harness gates init` to detect the gates. It reads the toolchain (Go, pnpm, npm, Biome) and the deploy plugins, and writes the `gates` key. It refuses to change an existing key.
-4. Skip this step when you use the plugin: the plugin installs the hooks. Else run `harness host install --host claude` (or `--host codex`). It merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key. `harness host capabilities --host codex` prints each host event and whether the host supports it.
+4. Skip this step when you use the plugin: the plugin installs the hooks. Else run `harness host install --host claude` (or `--host codex`). It merges the hooks into `.claude/settings.json` or `.codex/hooks.json` and keeps every other key. With the `90p` plugin present, it still writes the file but warns on stderr that each hook runs twice. `harness host uninstall --host claude` removes the harness hooks from the file and keeps the others. `harness host capabilities --host codex` prints each host event and whether the host supports it.
 5. Commit `.harness.yaml`, `.harness-lint/`, `.gitignore` and the host config, if you wrote one. `harness init` adds `.harness/runs/` to `.gitignore`, so the run folders stay out of git. `harness run start` adds `.harness/runs/` to `.gitignore` when the line is missing.
 
 ## Example config
