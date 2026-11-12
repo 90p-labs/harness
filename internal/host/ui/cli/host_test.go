@@ -31,13 +31,90 @@ func (f fakeCodec) Encode(hostdomain.HookName, shareddomain.Verdict) ([]byte, er
 
 func run(t *testing.T, handlers cli.HostHandlers, args ...string) (string, error) {
 	t.Helper()
+	out, _, err := runBoth(t, handlers, args...)
+	return out, err
+}
+
+func runBoth(t *testing.T, handlers cli.HostHandlers, args ...string) (string, string, error) {
+	t.Helper()
 	cmd := cli.NewHostCommand(func(context.Context) (cli.HostHandlers, error) { return handlers, nil })
-	var out bytes.Buffer
+	var out, errOut bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetErr(&errOut)
 	cmd.SetArgs(args)
 	err := cmd.Execute()
-	return out.String(), err
+	return out.String(), errOut.String(), err
+}
+
+func noPlugin(context.Context, shareddomain.Host) (bool, error) { return false, nil }
+
+func TestHostPlugin(t *testing.T) {
+	const settingsPath = "/work/.claude/settings.json"
+	var uninstalled []shareddomain.Host
+	handlers := cli.HostHandlers{
+		Install: func(context.Context, shareddomain.Host) (string, error) { return settingsPath, nil },
+		Plugin:  func(context.Context, shareddomain.Host) (bool, error) { return true, nil },
+		Uninstall: func(_ context.Context, host shareddomain.Host) (string, int, error) {
+			uninstalled = append(uninstalled, host)
+			return settingsPath, 9, nil
+		},
+	}
+
+	t.Run("install warns that the plugin runs the hooks too", func(t *testing.T) {
+		out, errOut, err := runBoth(t, handlers, "install", "--host", "claude")
+		if err != nil || strings.TrimSpace(out) != settingsPath {
+			t.Fatalf("out = %q, err = %v", out, err)
+		}
+		want := "warning: the 90p plugin also runs the harness hooks, so each hook runs twice; " +
+			"remove them from this file with harness host uninstall --host claude\n"
+		if errOut != want {
+			t.Fatalf("stderr = %q, want %q", errOut, want)
+		}
+	})
+
+	t.Run("install without the plugin prints no warning", func(t *testing.T) {
+		quiet := handlers
+		quiet.Plugin = noPlugin
+		if _, errOut, err := runBoth(t, quiet, "install", "--host", "claude"); err != nil || errOut != "" {
+			t.Fatalf("stderr = %q, err = %v", errOut, err)
+		}
+	})
+
+	t.Run("install returns the plugin check error", func(t *testing.T) {
+		boom := errors.New("boom")
+		failing := handlers
+		failing.Plugin = func(context.Context, shareddomain.Host) (bool, error) { return false, boom }
+		if _, err := run(t, failing, "install", "--host", "claude"); !errors.Is(err, boom) {
+			t.Fatalf("err = %v, want boom", err)
+		}
+	})
+
+	t.Run("uninstall prints the count and the path", func(t *testing.T) {
+		out, err := run(t, handlers, "uninstall")
+		if err != nil || out != "removed 9 harness hooks from "+settingsPath+"\n" {
+			t.Fatalf("out = %q, err = %v", out, err)
+		}
+		if len(uninstalled) != 1 || uninstalled[0] != "" {
+			t.Fatalf("uninstalled = %q, want one empty host", uninstalled)
+		}
+	})
+
+	t.Run("uninstall passes the host and returns its error", func(t *testing.T) {
+		boom := errors.New("boom")
+		failing := handlers
+		failing.Uninstall = func(_ context.Context, host shareddomain.Host) (string, int, error) {
+			if host != shareddomain.HostCodex {
+				t.Errorf("host = %q, want codex", host)
+			}
+			return "", 0, boom
+		}
+		if _, err := run(t, failing, "uninstall", "--host", "codex"); !errors.Is(err, boom) {
+			t.Fatalf("err = %v, want boom", err)
+		}
+		if _, err := run(t, failing, "uninstall", "--host", "vim"); !errors.Is(err, cli.ErrUnknownHost) {
+			t.Fatalf("err = %v, want ErrUnknownHost", err)
+		}
+	})
 }
 
 func TestHostCommand(t *testing.T) {
@@ -47,6 +124,7 @@ func TestHostCommand(t *testing.T) {
 			installed = append(installed, host)
 			return "/work/.codex/hooks.json", nil
 		},
+		Plugin: noPlugin,
 		Codecs: []hostdomain.Codec{
 			fakeCodec{host: shareddomain.HostClaude, events: hostdomain.AllEvents},
 			fakeCodec{host: shareddomain.HostCodex, events: []shareddomain.EventName{

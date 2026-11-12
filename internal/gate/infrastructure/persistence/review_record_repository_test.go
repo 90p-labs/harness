@@ -71,6 +71,21 @@ func TestReviewRecord(t *testing.T) {
 		}
 	})
 
+	t.Run("the same review saved twice keeps one row", func(t *testing.T) {
+		// Two SubagentStop events for one reviewer save the same head, model and patch id.
+		const twiceHead = "beef"
+		review := domain.ReviewRecord{HeadSHA: twiceHead, Model: "sonnet", FilesRead: files, PatchID: "p-twice", RunID: runID, At: clock}
+		save(review)
+		review.At = clock.Add(time.Second)
+		save(review)
+		if got := models(domain.ReviewScope{HeadSHA: twiceHead}); !reflect.DeepEqual(got, []string{"sonnet"}) {
+			t.Errorf("models = %v, want one sonnet row", got)
+		}
+		if got := models(domain.ReviewScope{HeadSHA: "new", PatchID: "p-twice"}); !reflect.DeepEqual(got, []string{"sonnet"}) {
+			t.Errorf("by patch id: models = %v, want one sonnet row", got)
+		}
+	})
+
 	t.Run("files read round trip and keep", func(t *testing.T) {
 		scope := domain.ReviewScope{Repo: repoName, HeadSHA: headSHA}
 		save(domain.ReviewRecord{HeadSHA: headSHA, Model: "sonnet", RunID: runID, At: clock.Add(time.Hour)})

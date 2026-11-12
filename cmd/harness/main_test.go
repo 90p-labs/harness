@@ -2125,7 +2125,15 @@ func TestGuardMCPBash(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	os.Setenv(envNoBrowser, "1")
-	os.Exit(m.Run())
+	// Keep the Claude plugins of the machine out of the tests: an empty config folder has no plugin.
+	configDir, err := os.MkdirTemp("", "claude-config-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	code := m.Run()
+	os.RemoveAll(configDir)
+	os.Exit(code)
 }
 
 func TestReviewPanelCommand(t *testing.T) {

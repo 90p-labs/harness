@@ -40,19 +40,41 @@ func NewMarksPlugin(db func(ctx context.Context) (*dbal.DB, error)) shareddomain
 
 // NewHostConnect wires the host commands. The target gives the worktree and whether the Claude tool hooks match only the rule tools.
 func NewHostConnect(target func(ctx context.Context) (worktree string, matched bool, err error)) cli.HostConnect {
+	// resolve gives the worktree, the matched flag and the host, detected when it is empty.
+	resolve := func(ctx context.Context, host shareddomain.Host) (string, bool, shareddomain.Host, error) {
+		root, matched, err := target(ctx)
+		if err != nil {
+			return "", false, "", err
+		}
+		if host == "" {
+			if host, err = hostdomain.OneHost(install.DetectHosts(root, os.Getenv)); err != nil {
+				return "", false, "", err
+			}
+		}
+		return root, matched, host, nil
+	}
 	return func(context.Context) (cli.HostHandlers, error) {
 		return cli.HostHandlers{
 			Install: func(ctx context.Context, host shareddomain.Host) (string, error) {
-				root, matched, err := target(ctx)
+				root, matched, host, err := resolve(ctx, host)
 				if err != nil {
 					return "", err
 				}
-				if host == "" {
-					if host, err = hostdomain.OneHost(install.DetectHosts(root, os.Getenv)); err != nil {
-						return "", err
-					}
-				}
 				return install.Install(root, host, matched)
+			},
+			Plugin: func(ctx context.Context, host shareddomain.Host) (bool, error) {
+				root, _, host, err := resolve(ctx, host)
+				if err != nil || host != shareddomain.HostClaude {
+					return false, err
+				}
+				return install.ClaudePlugin(root, os.Getenv)
+			},
+			Uninstall: func(ctx context.Context, host shareddomain.Host) (string, int, error) {
+				root, _, host, err := resolve(ctx, host)
+				if err != nil {
+					return "", 0, err
+				}
+				return install.Uninstall(root, host)
 			},
 			Codecs: codecs(),
 		}, nil

@@ -66,6 +66,8 @@ const (
 	baselineFormat       = "lint baseline: wrote %s (%d findings, run harness lint to see them)\n"
 	baselineSkippedLine  = "lint baseline: skipped, no lint pack\n"
 	hostFormat           = "host: wrote %s\n"
+	hostSkippedLine      = "host: skipped, the 90p plugin runs the hooks\n"
+	hostRemovedFormat    = "host: skipped, the 90p plugin runs the hooks; removed %d harness hooks from %s\n"
 	gitignoreAddedFormat = "gitignore: added %s\n"
 	gitignoreKeptLine    = "gitignore: kept\n"
 
@@ -104,6 +106,33 @@ func newInitCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 	cmd.Flags().String(flagHost, "", "the host: claude or codex")
 	_ = cmd.MarkFlagRequired(flagHost)
 	return cmd
+}
+
+// installHooks writes the hooks of the host. When the harness plugin already runs them, it writes none and removes the
+// harness entries an earlier init left in the host config, so no hook runs twice.
+func installHooks(ctx context.Context, handlers hostcli.HostHandlers, agentHost shareddomain.Host, out io.Writer) error {
+	plugin, err := handlers.Plugin(ctx, agentHost)
+	if err != nil {
+		return err
+	}
+	if !plugin {
+		hostConfig, err := handlers.Install(ctx, agentHost)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(out, hostFormat, hostConfig)
+		return err
+	}
+	hostConfig, removed, err := handlers.Uninstall(ctx, agentHost)
+	if err != nil {
+		return err
+	}
+	if removed == 0 {
+		_, err = fmt.Fprint(out, hostSkippedLine)
+		return err
+	}
+	_, err = fmt.Fprintf(out, hostRemovedFormat, removed, hostConfig)
+	return err
 }
 
 func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost shareddomain.Host, version string, out io.Writer) error {
@@ -195,11 +224,7 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		}
 		fmt.Fprintf(out, baselineFormat, lintdomain.BaselinePath, kept)
 	}
-	hostConfig, err := hostHandlers.Install(ctx, agentHost)
-	if err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(out, hostFormat, hostConfig); err != nil {
+	if err := installHooks(ctx, hostHandlers, agentHost, out); err != nil {
 		return err
 	}
 	added, err := addRunsRule(worktree)
