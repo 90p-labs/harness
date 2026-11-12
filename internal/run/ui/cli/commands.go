@@ -37,6 +37,7 @@ const (
 	handoffReadyFormat = "handoff: ready (step %d)"
 	handoffWriteFormat = `handoff: write %s with Phase: %s, Step: %d and the sections %s, each with a "- " line, then continue`
 	noActiveRun        = "active: no"
+	gitignoreAddedLine = "gitignore: added " + shareddomain.RunsFolder + "/"
 	missingFlagMsg     = "required flag %q not set"
 	pairedFlagsMsg     = "flags %q and %q go together"
 	unknownClass       = "unknown rework class %q"
@@ -109,6 +110,7 @@ func modelLines(all []HostModels) []string {
 
 type Handlers struct {
 	Models     []HostModels
+	IgnoreRuns func() (bool, error)
 	Key        domain.RunKey
 	Start      start.Handler
 	Transition transition.Handler
@@ -180,10 +182,33 @@ func startCommand(connect Connect) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
-				if err := h.Start.Handle(ctx, start.Command{Key: h.Key, Prompt: args[0]}); err != nil {
-					return err
+				lines := modelLines(h.Models)
+				added := false
+				if h.IgnoreRuns != nil {
+					var err error
+					if added, err = h.IgnoreRuns(); err != nil {
+						return err
+					}
 				}
-				if _, err := printStatus(ctx, cmd.OutOrStdout(), h, status.Query{Key: h.Key}, modelLines(h.Models)); err != nil {
+				if added {
+					lines = append(lines, gitignoreAddedLine)
+				}
+				// reportAdded prints the gitignore line when the start fails, so no change to the file goes unreported.
+				reportAdded := func(err error) error {
+					if !added {
+						return err
+					}
+					_, writeErr := fmt.Fprintln(cmd.OutOrStdout(), gitignoreAddedLine)
+					return errors.Join(err, writeErr)
+				}
+				if err := h.Start.Handle(ctx, start.Command{Key: h.Key, Prompt: args[0]}); err != nil {
+					return reportAdded(err)
+				}
+				current, err := h.Status.Handle(ctx, status.Query{Key: h.Key})
+				if err != nil {
+					return reportAdded(err)
+				}
+				if err := writeStatus(cmd.OutOrStdout(), current, lines); err != nil {
 					return err
 				}
 				return printRepeatClasses(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), h)
@@ -328,14 +353,19 @@ func printStatus(ctx context.Context, out io.Writer, h Handlers, query status.Qu
 	if err != nil {
 		return current, err
 	}
+	return current, writeStatus(out, current, extra)
+}
+
+// writeStatus writes the status lines of current; extra lines go after the first line.
+func writeStatus(out io.Writer, current status.Status, extra []string) error {
 	lines := Lines(current)
 	if len(extra) > 0 {
 		lines = slices.Concat(lines[:1], extra, lines[1:])
 	}
 	for _, line := range lines {
 		if _, err := fmt.Fprintln(out, line); err != nil {
-			return current, err
+			return err
 		}
 	}
-	return current, nil
+	return nil
 }

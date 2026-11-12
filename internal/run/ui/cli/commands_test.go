@@ -523,3 +523,88 @@ func TestStartPrintsModels(t *testing.T) {
 		t.Fatalf("output:\n%s\nwant the second line %q", out.String(), line)
 	}
 }
+
+const gitignoreLine = "gitignore: added .harness/runs/\n"
+
+func startWithIgnore(store *reportStore, ignore func() (bool, error), args ...string) (string, error) {
+	return startWithStatus(store, store, ignore, args...)
+}
+
+// startWithStatus runs start with the status query on statusStore, so a test can make the query fail after the start.
+func startWithStatus(store, statusStore *reportStore, ignore func() (bool, error), args ...string) (string, error) {
+	now := time.Date(2026, 11, 10, 8, 20, 0, 0, time.UTC)
+	connect := func(context.Context) (cli.Handlers, func() error, error) {
+		flow := transition.NewFlow(store, silentHooks{}, passingGate{}, nil, domain.Policy{}, func() time.Time { return now }, noop.NewTracerProvider().Tracer("test"), noTrace{})
+		return cli.Handlers{
+			Key:    reportKey,
+			Start:  start.NewHandler(store, flow, func() time.Time { return now }),
+			Status: status.NewHandler(statusStore),
+			Report: report.NewHandler(store, store, func() time.Time { return now },
+				func(id string) string { return "trace-of-" + id }, noop.NewTracerProvider().Tracer("test")),
+			Models:     []cli.HostModels{{Host: "claude", Roles: map[string][]string{"lead": {"L"}, "explorer": {"E"}, "worker": {"W"}, "reviewer": {"R"}, "advisor": {"A"}}}},
+			IgnoreRuns: ignore,
+		}, func() error { return nil }, nil
+	}
+	cmd := cli.NewCommand(connect)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs(append([]string{"start"}, args...))
+	err := cmd.ExecuteContext(context.Background())
+	return out.String(), err
+}
+
+func TestStartPrintsTheGitignoreLine(t *testing.T) {
+	out, err := startWithIgnore(&reportStore{}, func() (bool, error) { return true, nil }, "add login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitAfter(out, "\n")
+	if len(lines) < 3 || !strings.HasPrefix(lines[1], "models: ") || lines[2] != gitignoreLine {
+		t.Fatalf("output:\n%s\nwant the models line, then %q", out, gitignoreLine)
+	}
+
+	out, err = startWithIgnore(&reportStore{}, func() (bool, error) { return false, nil }, "add login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "gitignore:") {
+		t.Fatalf("a kept file printed a gitignore line:\n%s", out)
+	}
+}
+
+func TestStartStopsOnAGitignoreError(t *testing.T) {
+	store := &reportStore{}
+	boom := errors.New("write .gitignore: denied")
+	out, err := startWithIgnore(store, func() (bool, error) { return false, boom }, "add login")
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
+	}
+	if store.run != nil {
+		t.Fatalf("a run exists after the failed gitignore step: %+v", store.run)
+	}
+	if strings.Contains(out, "gitignore:") {
+		t.Fatalf("output:\n%s", out)
+	}
+}
+
+func TestStartReportsTheGitignoreOnAFailedStart(t *testing.T) {
+	store := &reportStore{}
+	if _, err := startWithIgnore(store, nil, "first"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := startWithIgnore(store, func() (bool, error) { return true, nil }, "second")
+	if err == nil {
+		t.Fatal("the second start with an active run succeeded")
+	}
+	if !strings.HasPrefix(out, gitignoreLine) {
+		t.Fatalf("output %q, want it to start with %q", out, gitignoreLine)
+	}
+
+	out, err = startWithStatus(&reportStore{}, &reportStore{}, func() (bool, error) { return true, nil }, "status fails")
+	if !errors.Is(err, domain.ErrRunNotFound) {
+		t.Fatalf("err = %v, want the failed status query", err)
+	}
+	if !strings.HasPrefix(out, gitignoreLine) || strings.Count(out, "gitignore:") != 1 {
+		t.Fatalf("output %q, want it to start with %q once after the failed status query", out, gitignoreLine)
+	}
+}
