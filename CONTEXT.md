@@ -38,6 +38,10 @@ These terms have one meaning in the code, the docs and the plans.
 - **Event kind**: how the bus treats the verdicts of one event. The kinds are `veto`, `collect`, `context` and `observe`.
 - **Flat line**: a shell line of simple commands joined by `;`, `&&`, `||`, `|`, `&` or a newline, with no construct that the guard cannot read. `shell-write-source` expands variables and follows `cd` only on a flat line.
 
+## Setup terms
+
+- **Recipe**: a folder of files that `harness recipe apply` writes into a repository. It has a `recipe.yaml`, which lists the files, the scaffold steps and the next steps. Apply writes only the missing files. The word is not `prepare`, which is the `lint.prepare` plugin event.
+
 ## Verification and live terms
 
 - **Gate**: one shell command that proves one property of the repo. Its result is `pass`, `fail` or `vetoed`.

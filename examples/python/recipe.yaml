@@ -1,0 +1,26 @@
+name: python
+summary: Python with uv, ruff, import-linter and the gates in Docker Compose
+files:
+  - .harness.yaml
+  - .harness/plugins/domain_purity.py
+  - .harness/plugins/import-linter.sh
+  - .harness/plugins/ruff-lint.sh
+  - .importlinter
+  - compose.yaml
+  - lint/architecture/pack.yaml
+  - lint/python/pack.yaml
+scaffold:
+  - uv init --lib --python 3.14
+  - uv add --dev pytest mypy ruff import-linter
+  - "mkdir -p tests && printf 'def test_smoke() -> None:\\n    assert True\\n' > tests/test_smoke.py"
+  - git init
+  - harness recipe apply python
+next:
+  - "in compose.yaml, set the top-level name: my-python-app to the name of your project"
+  - "in .importlinter, set root_package = shop to the root package under src/, and replace every shop in the file with that package"
+  - "in .importlinter, edit the contexts (order) : (billing) : (shared) to match the contexts under src/, in every contract that lists them"
+  - "in .gitignore, add the lines .harness/* and !.harness/plugins/"
+  - docker compose run --rm -T python uv sync --locked
+  - harness lint init
+  - harness lint baseline
+  - harness verify

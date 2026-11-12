@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/90p-labs/harness/examples"
+	"github.com/90p-labs/harness/internal/recipe/infrastructure/catalogue"
 	"github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
@@ -19,6 +21,7 @@ const (
 	readmeSkillsLine = "- The skills "
 	readmeAgentsLine = "- The agents "
 	installHeading   = "\n## Install\n"
+	setupHeading     = "\n## Set up a repository\n"
 	subHeading       = "### "
 )
 
@@ -240,6 +243,26 @@ func TestReadmeExplainsPlugins(t *testing.T) {
 		}
 		if !strings.Contains(rowOf[pair.event], link) {
 			t.Errorf("the table row of %s in %s does not hold %q", pair.event, readmeFile, link)
+		}
+	}
+}
+
+func TestReadmeNamesRecipes(t *testing.T) {
+	setup := repository.Section(t, repository.Read(t, readmeFile), setupHeading)
+	if !strings.Contains(setup, "harness recipe") {
+		t.Errorf("the Set up a repository section of %s does not name harness recipe", readmeFile)
+	}
+	cat, err := catalogue.New(examples.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipes := cat.List()
+	if len(recipes) == 0 {
+		t.Fatal("the catalogue holds no recipe")
+	}
+	for _, recipe := range recipes {
+		if !strings.Contains(setup, "`"+recipe.Name.String()+"`") {
+			t.Errorf("the Set up a repository section of %s does not name the recipe `%s`", readmeFile, recipe.Name)
 		}
 	}
 }
