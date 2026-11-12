@@ -31,8 +31,17 @@ func (p reviewRecorder) Handle(ctx context.Context, envelope shareddomain.Envelo
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
 		return allow, fmt.Errorf("decode subagent payload: %w", err)
 	}
-	if envelope.Run.Phase != shareddomain.PhaseReviewing || !domain.IsReviewerAgent(payload.AgentType) || payload.TranscriptPath == "" {
+	if !domain.IsReviewerAgent(payload.AgentType) {
 		return allow, nil
+	}
+	// From here on, every return without a saved review says why, so a ship veto for a missing review has a cause.
+	switch {
+	case envelope.Run.ID == "":
+		return allow, fmt.Errorf("reviewer %s stopped with no active run, no review recorded", payload.AgentID)
+	case envelope.Run.Phase != shareddomain.PhaseReviewing:
+		return allow, fmt.Errorf("reviewer %s stopped in phase %s, not %s, no review recorded", payload.AgentID, envelope.Run.Phase, shareddomain.PhaseReviewing)
+	case payload.TranscriptPath == "":
+		return allow, fmt.Errorf("reviewer %s stopped with no transcript path, no review recorded", payload.AgentID)
 	}
 	transcript, err := p.deps.ReadFile(payload.TranscriptPath)
 	if err != nil {
@@ -40,23 +49,29 @@ func (p reviewRecorder) Handle(ctx context.Context, envelope shareddomain.Envelo
 	}
 	base, err := p.deps.DefaultBranch(ctx, p.deps.Worktree)
 	if err != nil {
-		return allow, err
+		return allow, fmt.Errorf("find the default branch: %w", err)
 	}
 	changed, err := p.deps.ChangedFiles(ctx, p.deps.Worktree, base)
 	if err != nil {
-		return allow, err
+		return allow, fmt.Errorf("list the files changed since %s: %w", base, err)
 	}
 	modelID, read := domain.FilesRead(transcript, p.deps.Worktree, changed)
 	model, ok := p.recordedModel(envelope.Host, modelID)
-	if !ok {
-		return allow, nil
+	switch {
+	case modelID == "":
+		return allow, fmt.Errorf("no model in transcript %s, no review recorded", payload.TranscriptPath)
+	case !ok:
+		return allow, fmt.Errorf("model %q is not listed under roles reviewer for host %s, no review recorded", modelID, envelope.Host)
 	}
 	patchID, err := p.deps.PatchID(ctx, p.deps.Worktree, base)
 	if err != nil {
-		return allow, err
+		return allow, fmt.Errorf("compute the patch id against %s: %w", base, err)
 	}
 	review := domain.Review{Model: model, PatchID: patchID, RunID: envelope.Run.ID, FilesRead: read}
-	return allow, p.deps.SaveReview(ctx, p.deps.Worktree, review)
+	if err := p.deps.SaveReview(ctx, p.deps.Worktree, review); err != nil {
+		return allow, fmt.Errorf("save the review of %s: %w", model, err)
+	}
+	return allow, nil
 }
 
 func (p reviewRecorder) recordedModel(host shareddomain.Host, modelID string) (string, bool) {

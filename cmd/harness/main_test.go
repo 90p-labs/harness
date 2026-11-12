@@ -21,15 +21,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/pflag"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/protobuf/proto"
 
+	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/run/ui/approvalplugin"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/telemetry"
 )
 
@@ -2131,6 +2134,47 @@ func TestReviewPanelCommand(t *testing.T) {
 	code, stdout, stderr := execute(t, "review", "panel")
 	if code != exitOK || !strings.HasPrefix(stdout, "panel: ") || !strings.Contains(stdout, "(full panel: ") {
 		t.Fatalf("code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+}
+
+func TestReviewListCommand(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := initRepo(t)
+	// Only master and no origin/HEAD, the shape of the repository in issue #122.
+	gitIn(t, dir, "symbolic-ref", "HEAD", "refs/heads/master")
+	commitFiles(t, dir, "chore: seed", map[string]string{"a.txt": "a\n"})
+	gitIn(t, dir, "checkout", "--quiet", "-b", "feat/x")
+
+	commitFiles(t, dir, "feat: change", map[string]string{"a.txt": "b\n"})
+	code, stdout, stderr := execute(t, "review", "list")
+	if code != exitOK || !strings.HasSuffix(stdout, "no reviews recorded\n") {
+		t.Fatalf("empty: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+
+	ctx := context.Background()
+	patchID, err := git.PatchID(ctx, dir, "master")
+	if err != nil || patchID == "" {
+		t.Fatalf("patch id = %q, err = %v", patchID, err)
+	}
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.String(config.FlagConfig, "", "")
+	flags.String(config.FlagStateDSN, "", "")
+	cfg, err := config.Load(flags, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	review := guarddomain.Review{Model: "opus", PatchID: patchID, RunID: "r1", FilesRead: []string{"a.txt"}}
+	if err := (reviewRecordAdapter{cfg: cfg}).Save(ctx, dir, review); err != nil {
+		t.Fatal(err)
+	}
+	head, err := git.Head(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = execute(t, "review", "list")
+	want := "head " + head + ", patch id " + patchID + "\nopus\trun r1\tpatch " + patchID + "\tread a.txt\n"
+	if code != exitOK || stdout != want {
+		t.Fatalf("code = %d, stdout = %q, want %q, stderr = %q", code, stdout, want, stderr)
 	}
 }
 

@@ -148,8 +148,11 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.E
 		trace.SpanFromContext(ctx).SetAttributes(attrRule.String(strings.Join(result.DeniedBy, ruleSeparator)))
 	}
 	var stderr strings.Builder
-	if len(result.Failures) > 0 && isRetriedStop(c.Hook, raw) {
+	retriedStop := len(result.Failures) > 0 && isRetriedStop(c.Hook, raw)
+	if retriedStop {
 		verdict = shareddomain.Verdict{Kind: shareddomain.VerdictAllow}
+	}
+	if retriedStop || !blocks(envelope.Event) {
 		for _, failure := range result.Failures {
 			stderr.WriteString(harnessErrorPrefix + failure.Plugin + ": " + singleLine(failure.Err) + "\n")
 		}
@@ -162,6 +165,13 @@ func (h Handler) process(ctx context.Context, c Command) (Output, shareddomain.E
 		return Output{}, envelope, shareddomain.Verdict{}, raw, err
 	}
 	return Output{Stdout: stdout, Stderr: stderr.String()}, envelope, verdict, raw, nil
+}
+
+// blocks reports whether a plugin failure on the event already shows in a deny verdict. A context or observe event
+// cannot deny, so its failures go to stderr instead.
+func blocks(event shareddomain.EventName) bool {
+	kind, _ := shareddomain.KindOf(event)
+	return kind == shareddomain.KindVeto || kind == shareddomain.KindCollect
 }
 
 func isToolHook(hook hostdomain.HookName) bool {

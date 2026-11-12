@@ -18,6 +18,8 @@ const (
 	diffHeaderStart = "diff --git a/"
 	diffHeaderSplit = " b/"
 	modelIDSplit    = "-"
+	// syntheticModel marks a message that Claude Code writes itself, such as an API error. No model wrote it.
+	syntheticModel = "<synthetic>"
 )
 
 var lineNumberPrefix = regexp.MustCompile(`^ *\d+\t`)
@@ -52,7 +54,7 @@ func FilesRead(transcript []byte, root string, changed []string) (model string, 
 		if json.Unmarshal(raw, &line) != nil || json.Unmarshal(line.Message.Content, &blocks) != nil {
 			continue
 		}
-		if line.Type == lineAssistant && line.Message.Model != "" {
+		if line.Type == lineAssistant && line.Message.Model != "" && line.Message.Model != syntheticModel {
 			model = line.Message.Model
 		}
 		for _, block := range blocks {

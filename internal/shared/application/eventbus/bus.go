@@ -78,9 +78,8 @@ func (b Bus) Dispatch(ctx context.Context, envelope domain.Envelope) (domain.Dis
 		}
 		verdict, err := b.call(ctx, plugin, envelope)
 		if err != nil {
-			if kind == domain.KindVeto || kind == domain.KindCollect {
-				failures = append(failures, domain.DispatchFailure{Plugin: plugin.Name(), Err: err})
-			}
+			// Every kind reports its failures: a context or observe plugin cannot block, but the caller can still show the error.
+			failures = append(failures, domain.DispatchFailure{Plugin: plugin.Name(), Err: err})
 			if kind == domain.KindVeto {
 				denies = []string{pluginFailedPrefix + err.Error()}
 				break

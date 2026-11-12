@@ -18,6 +18,8 @@ var (
 	ErrNoHead        = errors.New("repository has no commit")
 	// ErrNotBranch means a name is neither a local branch nor an origin branch.
 	ErrNotBranch = errors.New("not a branch")
+
+	defaultBranchGuesses = []string{fallbackBranch, "master"}
 )
 
 const (
@@ -40,12 +42,26 @@ func DefaultBranch(ctx context.Context, dir string) (string, error) {
 	out, err := Run(ctx, dir, nil, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) && exitErr.ExitCode() == quietMissingRefExit {
-		return fallbackBranch, nil
+		return guessedDefaultBranch(ctx, dir)
 	}
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimPrefix(out, originRemotePrefix), nil
+}
+
+// guessedDefaultBranch is the first of main and master that exists, for a repository with no origin/HEAD.
+func guessedDefaultBranch(ctx context.Context, dir string) (string, error) {
+	for _, name := range defaultBranchGuesses {
+		_, err := BranchRef(ctx, dir, name)
+		if err == nil {
+			return name, nil
+		}
+		if !errors.Is(err, ErrNotBranch) {
+			return "", err
+		}
+	}
+	return fallbackBranch, nil
 }
 
 // BranchRef returns the full ref of a branch: refs/heads/<name>, else refs/remotes/origin/<name>.

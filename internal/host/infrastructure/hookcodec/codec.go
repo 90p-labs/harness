@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -75,6 +76,7 @@ type hookInput struct {
 	AgentID         string `json:"agent_id"`
 	AgentType       string `json:"agent_type"`
 	AgentTranscript string `json:"agent_transcript_path"`
+	Transcript      string `json:"transcript_path"`
 	ToolUseID       string `json:"tool_use_id"`
 	IsInterrupt     bool   `json:"is_interrupt"`
 	Reason          string `json:"reason"`
@@ -152,9 +154,25 @@ func (c Codec) payloadOf(hook domain.HookName, in hookInput) any {
 			}
 		}
 		return shareddomain.StopPayload{StopHookActive: in.StopHookActive, BackgroundAgents: agents}
+	case domain.HookSubagentStop:
+		payload := shareddomain.SubagentPayload{AgentID: in.AgentID, AgentType: in.AgentType, TranscriptPath: in.AgentTranscript}
+		if payload.TranscriptPath == "" && c.host == shareddomain.HostClaude {
+			payload.TranscriptPath = claudeSubagentTranscript(in.Transcript, in.AgentID)
+		}
+		return payload
 	default:
 		return shareddomain.SubagentPayload{AgentID: in.AgentID, AgentType: in.AgentType, TranscriptPath: in.AgentTranscript}
 	}
+}
+
+// claudeSubagentTranscript is where Claude Code writes the transcript of a subagent: next to the session transcript,
+// in <session>/subagents/agent-<id>.jsonl. A SubagentStop payload can leave out agent_transcript_path.
+func claudeSubagentTranscript(sessionTranscript, agentID string) string {
+	if sessionTranscript == "" || agentID == "" {
+		return ""
+	}
+	dir := strings.TrimSuffix(sessionTranscript, filepath.Ext(sessionTranscript))
+	return filepath.Join(dir, "subagents", "agent-"+strings.TrimPrefix(agentID, "agent-")+".jsonl")
 }
 
 func toolPayload(in hookInput) shareddomain.ToolPayload {

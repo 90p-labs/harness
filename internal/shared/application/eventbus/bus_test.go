@@ -234,7 +234,7 @@ func TestDispatchCollectFindings(t *testing.T) {
 func TestDispatchContextObserve(t *testing.T) {
 	boom := errors.New("boom")
 
-	t.Run("context keeps texts and drops denies and failures", func(t *testing.T) {
+	t.Run("context keeps texts, drops denies and reports failures", func(t *testing.T) {
 		f := newFixture()
 		session := events(domain.EventSessionStarted)
 		bus := f.newBus(
@@ -249,15 +249,19 @@ func TestDispatchContextObserve(t *testing.T) {
 			t.Fatalf("dispatch: %v", err)
 		}
 		want := domain.Verdict{Kind: domain.VerdictAllow, Context: "hello"}
-		if !reflect.DeepEqual(result.Verdict, want) || len(result.Failures) != 0 {
-			t.Fatalf("result = %+v", result)
+		if !reflect.DeepEqual(result.Verdict, want) {
+			t.Fatalf("verdict = %+v, want %+v", result.Verdict, want)
+		}
+		if wantFailures := []domain.DispatchFailure{{Plugin: "c", Err: boom}}; !reflect.DeepEqual(result.Failures, wantFailures) {
+			t.Fatalf("failures = %+v, want %+v", result.Failures, wantFailures)
 		}
 		if len(f.calls) != 3 {
 			t.Fatalf("calls = %v, want 3", f.calls)
 		}
 	})
 
-	t.Run("observe drops every verdict", func(t *testing.T) {
+	// An observe plugin cannot block, but its error must still reach the caller, or it fails without a trace.
+	t.Run("observe drops every verdict and reports failures", func(t *testing.T) {
 		f := newFixture()
 		stopped := events(domain.EventSubagentStopped)
 		bus := f.newBus(
@@ -268,8 +272,11 @@ func TestDispatchContextObserve(t *testing.T) {
 
 		result, _ := f.dispatch(bus, domain.EventSubagentStopped)
 
-		if !reflect.DeepEqual(result.Verdict, allow()) || len(result.Failures) != 0 {
-			t.Fatalf("result = %+v", result)
+		if !reflect.DeepEqual(result.Verdict, allow()) {
+			t.Fatalf("verdict = %+v, want allow", result.Verdict)
+		}
+		if want := []domain.DispatchFailure{{Plugin: "c", Err: boom}}; !reflect.DeepEqual(result.Failures, want) {
+			t.Fatalf("failures = %+v, want %+v", result.Failures, want)
 		}
 		if len(f.calls) != 3 {
 			t.Fatalf("calls = %v, want 3", f.calls)

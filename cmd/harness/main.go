@@ -120,16 +120,7 @@ func reviewPanelSource(flags *pflag.FlagSet) guardcli.PanelSource {
 		runID := runRefFrom(ctx).ID
 		adapter := reviewRecordAdapter{cfg: cfg}
 		// Mirror the guard: an empty patch id never matches, and the run id only scopes a run that has findings.
-		scope := guarddomain.ReviewScope{}
-		base := cfg.Git.DefaultBranch
-		if base == "" {
-			base, err = git.DefaultBranch(ctx, worktree)
-		}
-		if err == nil {
-			if patchID, perr := git.PatchID(ctx, worktree, base); perr == nil {
-				scope.PatchID = patchID
-			}
-		}
+		scope := guarddomain.ReviewScope{PatchID: headPatchID(ctx, cfg, worktree)}
 		if _, err := os.Stat(filepath.Join(worktree, shareddomain.RunFindingsFile(runID))); err == nil && !cfg.Run.StrictMinor {
 			scope.RunID = runID
 		}
@@ -149,6 +140,43 @@ func reviewPanelSource(flags *pflag.FlagSet) guardcli.PanelSource {
 			return nil, "", errors.New("no reviewer models are listed under roles")
 		}
 		return result.Panel, result.Reason, nil
+	}
+}
+
+// headPatchID is the patch id of HEAD against the default branch, or empty when git cannot compute it, as in the guard.
+func headPatchID(ctx context.Context, cfg config.Config, worktree string) string {
+	base := cfg.Git.DefaultBranch
+	if base == "" {
+		var err error
+		if base, err = git.DefaultBranch(ctx, worktree); err != nil {
+			return ""
+		}
+	}
+	patchID, err := git.PatchID(ctx, worktree, base)
+	if err != nil {
+		return ""
+	}
+	return patchID
+}
+
+// reviewListSource gives `harness review list` the records the guard matches by HEAD or by its patch id.
+func reviewListSource(flags *pflag.FlagSet) guardcli.ListSource {
+	return func(ctx context.Context) (guardcli.ReviewList, error) {
+		worktree, err := topLevel(ctx)
+		if err != nil {
+			return guardcli.ReviewList{}, err
+		}
+		cfg, err := config.Load(flags, worktree)
+		if err != nil {
+			return guardcli.ReviewList{}, err
+		}
+		head, err := git.Head(ctx, worktree)
+		if err != nil {
+			return guardcli.ReviewList{}, err
+		}
+		list := guardcli.ReviewList{Head: head, PatchID: headPatchID(ctx, cfg, worktree)}
+		list.Reviews, err = reviewRecordAdapter{cfg: cfg}.Reviews(ctx, worktree, guarddomain.ReviewScope{PatchID: list.PatchID})
+		return list, err
 	}
 }
 
@@ -237,7 +265,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newInitCommand(root.PersistentFlags(), version))
 	root.AddCommand(newReportCommand(root.PersistentFlags()))
 	root.AddCommand(newRecipeCommand())
-	root.AddCommand(guardcli.NewReviewCommand(reviewPanelSource(root.PersistentFlags())))
+	root.AddCommand(guardcli.NewReviewCommand(reviewPanelSource(root.PersistentFlags()), reviewListSource(root.PersistentFlags())))
 	prSource := prBodySource{flags: root.PersistentFlags()}
 	root.AddCommand(guardcli.NewPRCommand(prSource, prSource))
 	root.AddCommand(&cobra.Command{

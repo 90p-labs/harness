@@ -173,6 +173,28 @@ func TestDefaultBranch(t *testing.T) {
 		}
 	})
 
+	// A repository cloned without origin/HEAD, or never pushed, still has its own default branch.
+	for _, branch := range []string{"master", "main"} {
+		t.Run("origin HEAD not set, only "+branch, func(t *testing.T) {
+			root := initRepo(t)
+			for _, args := range [][]string{
+				{"symbolic-ref", "HEAD", "refs/heads/" + branch},
+				{"commit", "-q", "--allow-empty", "-m", "init"},
+				{"checkout", "-q", "-b", "feature"},
+			} {
+				if out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...).CombinedOutput(); err != nil {
+					t.Fatalf("git %v: %v: %s", args, err, out)
+				}
+			}
+
+			got, err := git.DefaultBranch(context.Background(), root)
+
+			if err != nil || got != branch {
+				t.Fatalf("DefaultBranch = %q, %v, want %s", got, err, branch)
+			}
+		})
+	}
+
 	t.Run("outside a repository", func(t *testing.T) {
 		_, err := git.DefaultBranch(context.Background(), t.TempDir())
 
