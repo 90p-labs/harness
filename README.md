@@ -44,7 +44,7 @@ For a given release, write `download/v0.5.0` in place of `latest/download`. With
 
 ## Set up a repository
 
-In your repository, run `harness gates init`. It detects the gates and writes the `gates` key of `.harness.yaml`. `harness init` adds `.harness/runs/` to `.gitignore`. Then commit the files.
+In your repository, run `harness gates init`. It detects the gates and writes the `gates` key of `.harness.yaml`. `harness run start` adds `.harness/runs/` to `.gitignore` when the line is missing. Then commit the files.
 
 ```console
 $ harness gates init

@@ -176,6 +176,7 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 		return cli.Handlers{}, nil, err
 	}
 	handlers.Models = runModels(env.cfg.Roles, install.DetectHosts(env.key.Worktree, os.Getenv))
+	handlers.IgnoreRuns = func() (bool, error) { return addRunsRule(env.key.Worktree) }
 	return handlers, env.state.Close, nil
 }
 
