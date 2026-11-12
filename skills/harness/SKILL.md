@@ -29,6 +29,7 @@ Start: run harness version ("Binary")
 - Run `harness version` first. The first call downloads or builds the binary. If it fails, stop and report the error.
 - The repository needs `.harness.yaml` at its top level. Without it, the hooks do nothing: tell the user to set the repository up (README, section "Set up a repository").
 - After `harness init`, read its output. For each line `next: run the lint-setup skill to set up the architecture rules for <language>`, start the `lint-setup` skill with that language as its argument, one language at a time. The skill stops and tells the user when the repository already has a manifest for another language.
+- `harness run start` adds `.harness/runs/` to `.gitignore` when the line is missing. When its output prints `gitignore: added .harness/runs/`, add `.gitignore` to the owned files of the first task and to the final code tree. Then commit the file with that task.
 
 ## Route the arguments
 
