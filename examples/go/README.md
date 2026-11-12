@@ -59,6 +59,7 @@ gates: wrote go-fmt, go-vet, go-test
 lint init: wrote .harness-lint
 lint baseline: skipped, no lint pack
 host: wrote /path/to/app/.claude/settings.json
+gitignore: added .harness/runs/
 $ cat .harness.yaml
 gates:
   - id: go-fmt
@@ -86,6 +87,7 @@ gates: kept
 lint init: wrote .harness-lint
 lint baseline: wrote .harness-lint/baseline.json (0 findings, run harness lint to see them)
 host: wrote /path/to/app/.claude/settings.json
+gitignore: kept
 ```
 
 The setup keeps the `gates` key and the lint pack of the example. `harness lint init` writes `.harness-lint/VERSION`. `harness lint baseline` writes `.harness-lint/baseline.json` with no findings.
@@ -346,7 +348,7 @@ The setup step `go-mod` has the `paths` `go.mod`, `go.sum` and `compose.yaml`. I
 
 A file that a gate reads but that its `paths` do not match does not run the gate again. Then `harness verify` counts a stale result in `cached`.
 
-The harness leaves out the files that `.gitignore` lists. Do not ignore a file that a gate needs. Add `.harness/` to `.gitignore`: it holds the run folders.
+The harness leaves out the files that `.gitignore` lists. Do not ignore a file that a gate needs. `harness init` adds `.harness/runs/` to `.gitignore`, which holds the run folders. That rule keeps `.harness/plugins/` in git.
 
 ## Where each part runs
 

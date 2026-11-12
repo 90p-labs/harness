@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -52,19 +53,25 @@ const (
 	listSeparator = ", "
 	noItems       = "none"
 
-	packsWroteFormat    = "lint packs: wrote %s\n"
-	packsKeptFormat     = "lint packs: kept %s\n"
-	packsNoneLine       = "lint packs: none detected\n"
-	lintSetupPrefix     = "next: run the lint-setup skill"
-	lintSetupFormat     = lintSetupPrefix + " to set up the architecture rules for %s\n"
-	gatesWroteFormat    = "gates: wrote %s\n"
-	setupWroteFormat    = "setup: wrote %s\n"
-	gatesKeptLine       = "gates: kept\n"
-	gatesNoneLine       = "gates: none detected\n"
-	lintInitFormat      = "lint init: wrote %s\n"
-	baselineFormat      = "lint baseline: wrote %s (%d findings, run harness lint to see them)\n"
-	baselineSkippedLine = "lint baseline: skipped, no lint pack\n"
-	hostFormat          = "host: wrote %s\n"
+	packsWroteFormat     = "lint packs: wrote %s\n"
+	packsKeptFormat      = "lint packs: kept %s\n"
+	packsNoneLine        = "lint packs: none detected\n"
+	lintSetupPrefix      = "next: run the lint-setup skill"
+	lintSetupFormat      = lintSetupPrefix + " to set up the architecture rules for %s\n"
+	gatesWroteFormat     = "gates: wrote %s\n"
+	setupWroteFormat     = "setup: wrote %s\n"
+	gatesKeptLine        = "gates: kept\n"
+	gatesNoneLine        = "gates: none detected\n"
+	lintInitFormat       = "lint init: wrote %s\n"
+	baselineFormat       = "lint baseline: wrote %s (%d findings, run harness lint to see them)\n"
+	baselineSkippedLine  = "lint baseline: skipped, no lint pack\n"
+	hostFormat           = "host: wrote %s\n"
+	gitignoreAddedFormat = "gitignore: added %s\n"
+	gitignoreKeptLine    = "gitignore: kept\n"
+
+	gitignoreFile = ".gitignore"
+	lineFeed      = "\n"
+	carriageLine  = "\r\n"
 )
 
 var languagesWithNoPack = []struct {
@@ -85,7 +92,7 @@ const gatesBeforePacksFormat = "%w: the %s key is set without lint.packs, so set
 func newInitCommand(flags *pflag.FlagSet, version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandInit,
-		Short: "Set up the lint packs, the gates, the lint files, the lint baseline and the host hooks",
+		Short: "Set up the lint packs, the gates, the lint files, the lint baseline, the host hooks and the runs rule in .gitignore",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			value, err := cmd.Flags().GetString(flagHost)
 			if err != nil {
@@ -188,12 +195,81 @@ func initRepository(ctx context.Context, flags *pflag.FlagSet, agentHost sharedd
 		}
 		fmt.Fprintf(out, baselineFormat, lintdomain.BaselinePath, kept)
 	}
-	path, err := hostHandlers.Install(ctx, agentHost)
+	hostConfig, err := hostHandlers.Install(ctx, agentHost)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(out, hostFormat, path)
+	if _, err := fmt.Fprintf(out, hostFormat, hostConfig); err != nil {
+		return err
+	}
+	added, err := addRunsRule(worktree)
+	if err != nil {
+		return err
+	}
+	if !added {
+		_, err = fmt.Fprint(out, gitignoreKeptLine)
+		return err
+	}
+	_, err = fmt.Fprintf(out, gitignoreAddedFormat, ignoreRule)
 	return err
+}
+
+const ignoreRule = shareddomain.RunsFolder + "/"
+
+// ignoringLines holds each line of a .gitignore that already ignores the runs folder.
+var ignoringLines = func() map[string]bool {
+	lines := map[string]bool{}
+	for _, base := range []string{path.Dir(shareddomain.RunsFolder), shareddomain.RunsFolder} {
+		for _, suffix := range []string{"", "/", "/*", "/**"} {
+			form := base + suffix
+			lines[form] = true
+			lines["/"+form] = true
+			lines["**/"+form] = true
+		}
+	}
+	return lines
+}()
+
+// addRunsRule appends the runs rule to .gitignore and reports whether it wrote.
+func addRunsRule(worktree string) (added bool, err error) {
+	file := filepath.Join(worktree, gitignoreFile)
+	raw, err := os.ReadFile(file)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return false, fmt.Errorf("read %s: %w", gitignoreFile, err)
+	}
+	content := string(raw)
+	ignored := false
+	for line := range strings.SplitSeq(content, lineFeed) {
+		line = strings.TrimRight(strings.TrimSuffix(line, "\r"), " ")
+		if ignoringLines[line] {
+			ignored = true
+		} else if key, negated := strings.CutPrefix(line, "!"); negated && ignoringLines[key] {
+			ignored = false
+		}
+	}
+	if ignored {
+		return false, nil
+	}
+	newline := lineFeed
+	if strings.Contains(content, carriageLine) {
+		newline = carriageLine
+	}
+	addition := ignoreRule + newline
+	if content != "" && !strings.HasSuffix(content, lineFeed) {
+		addition = newline + addition
+	}
+	handle, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		return false, fmt.Errorf("write %s: %w", gitignoreFile, err)
+	}
+	if _, err := handle.WriteString(addition); err != nil {
+		_ = handle.Close()
+		return false, fmt.Errorf("write %s: %w", gitignoreFile, err)
+	}
+	if err := handle.Close(); err != nil {
+		return false, fmt.Errorf("write %s: %w", gitignoreFile, err)
+	}
+	return true, nil
 }
 
 func lintSetupLines(dir string, pluginRules []lintdomain.Rule) ([]string, error) {
