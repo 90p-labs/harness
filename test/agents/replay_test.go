@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	replayDir       = "agents/testdata/replay/"
+	replayDir       = "test/agents/testdata/replay/"
 	readmeFocus     = replayDir + "readme-focus.md"
 	dddDepth        = replayDir + "ddd-depth.md"
 	guardPrecision  = replayDir + "r2-guard-precision.md"

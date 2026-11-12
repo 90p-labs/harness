@@ -27,9 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # agents and cmd/harness are the two slowest packages; rest is every other package, so the shards cover ./... exactly.
+      # test/agents and cmd/harness are the two slowest packages; rest is every other package, so the shards cover ./... exactly.
       matrix:
-        shard: [agents, cmd/harness, rest]
+        shard: [test/agents, cmd/harness, rest]
     # The tests commit in temporary repositories, and the runner has no git identity.
     env:
       GIT_AUTHOR_NAME: ci
@@ -53,7 +53,7 @@ jobs:
         run: |
           module=$(go list -m)
           if [ "$SHARD" = rest ]; then
-            pkgs=$(go list ./... | grep -vxE "$module/(agents|cmd/harness)")
+            pkgs=$(go list ./... | grep -vxE "$module/(test/agents|cmd/harness)")
           else
             pkgs="$module/$SHARD"
           fi
