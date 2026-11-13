@@ -6,6 +6,17 @@ document.addEventListener("htmx:configRequest", function (evt) {
   }
 });
 
+// The event stream sets the live flag. A region polls only while it is clear,
+// and the body carries data-live for the live dot.
+document.addEventListener("htmx:sseOpen", function () {
+  window.harnessLive = true;
+  document.body.dataset.live = "on";
+});
+document.addEventListener("htmx:sseError", function () {
+  window.harnessLive = false;
+  document.body.dataset.live = "off";
+});
+
 // A run-only swap re-renders a region with empty diagram divs, and view.js
 // renders mermaid on load only. Keep a rendered diagram whose source is
 // unchanged. A plan change answers HX-Refresh, so the sources match here.

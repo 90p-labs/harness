@@ -44,3 +44,21 @@ func TestPanelMorphKeepsDiagrams(t *testing.T) {
 		}
 	}
 }
+
+// The stream sets the live flag, so the poll stops while it is open, and the
+// body carries data-live for the live dot.
+func TestPanelScriptLive(t *testing.T) {
+	src := string(panelJS)
+	for _, want := range []string{
+		`"htmx:sseOpen"`,
+		`"htmx:sseError"`,
+		"window.harnessLive = true;",
+		"window.harnessLive = false;",
+		`document.body.dataset.live = "on";`,
+		`document.body.dataset.live = "off";`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("panel.js does not contain %q", want)
+		}
+	}
+}

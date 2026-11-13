@@ -1,0 +1,12 @@
+/* Served pages only. The file mode inlines kit.css, so these rules stay out of it. */
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: background 0.2s var(--ease);
+}
+body[data-live="on"] .live-dot {
+  background: var(--green);
+}
