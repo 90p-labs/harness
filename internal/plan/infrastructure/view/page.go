@@ -20,9 +20,6 @@ import (
 //go:embed page.html.tmpl
 var pageSource string
 
-//go:embed view.css
-var pageCSS string
-
 //go:embed view.js
 var pageJS string
 
@@ -116,7 +113,7 @@ func pageAssets(served *domain.ViewServed) (assets, error) {
 		return assets{
 			Fonts:  links.Fonts,
 			Tokens: links.Tokens,
-			CSS:    template.CSS(pageCSS),
+			CSS:    webkit.Stylesheet(),
 			JS:     template.JS(pageJS),
 			Linked: &links,
 		}, nil
@@ -128,7 +125,7 @@ func pageAssets(served *domain.ViewServed) (assets, error) {
 	return assets{
 		Fonts:   kit.Fonts,
 		Tokens:  kit.Tokens,
-		CSS:     template.CSS(pageCSS),
+		CSS:     webkit.Stylesheet(),
 		JS:      template.JS(pageJS),
 		Mermaid: kit.Mermaid,
 	}, nil

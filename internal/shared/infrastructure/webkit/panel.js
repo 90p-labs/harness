@@ -19,8 +19,13 @@ function keepDiagram(oldNode, newNode) {
   );
 }
 
+// A node that the page script owns, such as the theme toggle whose label it
+// set, carries this attribute. The morph leaves the old node as it is.
+var KEEP_ATTR = "data-morph-keep";
+
 if (typeof Idiomorph !== "undefined") {
   Idiomorph.defaults.callbacks.beforeNodeMorphed = function (oldNode, newNode) {
+    if (oldNode.nodeType === 1 && oldNode.hasAttribute(KEEP_ATTR)) return false;
     if (keepDiagram(oldNode, newNode)) return false;
   };
   // Keep the open state of a details that the reader toggled.

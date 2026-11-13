@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/webkit"
 )
 
 var (
@@ -86,17 +87,14 @@ func TestPageApprovalReply(t *testing.T) {
 }
 
 func TestPageResponsive(t *testing.T) {
-	raw, err := os.ReadFile("view.css")
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := []byte(webkit.Stylesheet())
 	css := spaces.ReplaceAllString(string(raw), " ")
 	compact := strings.ReplaceAll(css, " ", "")
 
 	for _, width := range []string{"1180px", "860px"} {
 		media := regexp.MustCompile(`@media\(max-width:` + width + `\)\{`)
 		if !media.MatchString(compact) {
-			t.Errorf("view.css has no @media (max-width: %s) rule", width)
+			t.Errorf("kit.css has no @media (max-width: %s) rule", width)
 		}
 	}
 	for _, want := range []string{
@@ -105,7 +103,7 @@ func TestPageResponsive(t *testing.T) {
 		"min-width:0",
 	} {
 		if !strings.Contains(compact, want) {
-			t.Errorf("view.css has no %s", want)
+			t.Errorf("kit.css has no %s", want)
 		}
 	}
 	if !regexp.MustCompile(`\.task\{[^}]*min-width:0`).MatchString(compact) {
@@ -121,10 +119,7 @@ func TestPageResponsive(t *testing.T) {
 
 func TestPageQAFixes(t *testing.T) {
 	page := render(t, baseInput(t))
-	css, err := os.ReadFile("view.css")
-	if err != nil {
-		t.Fatal(err)
-	}
+	css := []byte(webkit.Stylesheet())
 
 	t.Run("task labels do not reuse the sidebar class", func(t *testing.T) {
 		if n := strings.Count(page, `class="side"`); n != 1 {
@@ -134,7 +129,7 @@ func TestPageQAFixes(t *testing.T) {
 	t.Run("the change legend has colors", func(t *testing.T) {
 		for _, want := range []string{".lg-added i", ".lg-modified i", ".lg-deleted i"} {
 			if !strings.Contains(string(css), want) {
-				t.Errorf("view.css has no %s rule", want)
+				t.Errorf("kit.css has no %s rule", want)
 			}
 		}
 	})
@@ -166,7 +161,7 @@ func TestPageQAFixes(t *testing.T) {
 			t.Error("a tree row renders an empty state badge")
 		}
 		if !strings.Contains(string(css), ".tr .mark") {
-			t.Error("view.css does not draw the change mark as a dot")
+			t.Error("kit.css does not draw the change mark as a dot")
 		}
 	})
 	t.Run("the task card folds its owned files", func(t *testing.T) {
@@ -188,7 +183,7 @@ func TestPageQAFixes(t *testing.T) {
 			t.Error("the problems box stays red when there are no problems")
 		}
 		if !strings.Contains(string(css), ".problems.ok") {
-			t.Error("view.css has no calm style for a clean plan")
+			t.Error("kit.css has no calm style for a clean plan")
 		}
 	})
 	t.Run("an empty signals table is not drawn", func(t *testing.T) {
@@ -204,7 +199,7 @@ func TestPageQAFixes(t *testing.T) {
 			t.Error("a truncated criterion has no title with the full text")
 		}
 		if !regexp.MustCompile(`\.matrix tbody th a \{[^}]*text-overflow: ellipsis`).Match(css) {
-			t.Error("view.css does not truncate the criterion text")
+			t.Error("kit.css does not truncate the criterion text")
 		}
 	})
 }
@@ -346,12 +341,9 @@ func TestPageTaskCardIdAndSideDot(t *testing.T) {
 	if !regexp.MustCompile(`<span class="lbl"><i class="sdot sdot-backend" aria-hidden="true"></i>backend</span>`).MatchString(page) {
 		t.Error("the task side has no dot")
 	}
-	css, err := os.ReadFile("view.css")
-	if err != nil {
-		t.Fatal(err)
-	}
+	css := []byte(webkit.Stylesheet())
 	if !strings.Contains(string(css), ".sdot-backend") {
-		t.Error("view.css colors no side dot")
+		t.Error("kit.css colors no side dot")
 	}
 }
 
@@ -415,10 +407,7 @@ func TestPagePropertiesHideBaseWithoutPRBase(t *testing.T) {
 }
 
 func TestPageSelectedRowHasAccentBar(t *testing.T) {
-	css, err := os.ReadFile("view.css")
-	if err != nil {
-		t.Fatal(err)
-	}
+	css := []byte(webkit.Stylesheet())
 	if !regexp.MustCompile(`\.row\.sel::before \{[^}]*width: 2px[^}]*background: var\(--accent\)`).Match(css) {
 		t.Error("a selected row has no 2px accent bar")
 	}
@@ -438,10 +427,7 @@ func TestPageCriterionRowHasProofChip(t *testing.T) {
 }
 
 func TestPageNoProblemsIsGreenBanner(t *testing.T) {
-	css, err := os.ReadFile("view.css")
-	if err != nil {
-		t.Fatal(err)
-	}
+	css := []byte(webkit.Stylesheet())
 	rule := regexp.MustCompile(`\.problems\.ok \{[^}]*\}`).FindString(string(css))
 	if !strings.Contains(rule, "var(--green)") || strings.Contains(rule, "background: none") {
 		t.Errorf("a plan with no problems has no green banner: %s", rule)

@@ -8,6 +8,8 @@ import (
 	"net"
 	nethttp "net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -62,7 +64,12 @@ var cards = []domain.Card{
 
 func newServer(t *testing.T, logs *bytes.Buffer) (*Server, *fakePages) {
 	t.Helper()
-	runs := fakeRuns{cards: cards}
+	return newServerWith(t, logs, cards)
+}
+
+func newServerWith(t *testing.T, logs *bytes.Buffer, list []domain.Card) (*Server, *fakePages) {
+	t.Helper()
+	runs := fakeRuns{cards: list}
 	pages := &fakePages{}
 	logger := slog.New(slog.NewTextHandler(logs, nil))
 	return New(Config{
@@ -111,6 +118,20 @@ func TestRoutes(t *testing.T) {
 			t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
 		}
 		version := domain.NewBoard(cards).Version
+		root := regexp.MustCompile(`^<div([^>]*)>`).FindStringSubmatch(rec.Body.String())
+		if root == nil {
+			t.Fatalf("region root is no div: %q", rec.Body.String())
+		}
+		attrs := map[string]string{}
+		for _, m := range regexp.MustCompile(`([\w-]+)="([^"]*)"`).FindAllStringSubmatch(root[1], -1) {
+			attrs[m[1]] = m[2]
+		}
+		for name, want := range map[string]string{"class": "app", "id": "board", "hx-get": "/regions/board",
+			"hx-trigger": "every 5s", "hx-swap": "morph:outerHTML", "data-v": version} {
+			if attrs[name] != want {
+				t.Errorf("region root %s = %q, want %q", name, attrs[name], want)
+			}
+		}
 		same := get(h, "localhost", "/regions/board?v="+version)
 		if same.Code != 204 || same.Body.Len() != 0 {
 			t.Fatalf("unchanged: status %d body %q", same.Code, same.Body.String())
@@ -276,5 +297,189 @@ func TestListenLoopback(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("serve did not stop on cancel")
+	}
+}
+
+var longToken = strings.Repeat("x", 300)
+
+var shellCards = []domain.Card{
+	{ID: "20261113-a", Title: "panel serve", Phase: "working", Branch: "feat/x", PRURL: "https://example.test/pr/1",
+		Version: domain.Version{Plan: "p1", Run: "r1"}},
+	{ID: "20261113-b", Title: "needs an approval", Phase: "awaiting_approval", Version: domain.Version{Plan: "p2", Run: "r2"}},
+	{ID: "20261113-c", Title: longToken, Phase: "blocked", BlockedFrom: "working", Branch: "feat/" + longToken,
+		PRURL: "javascript:alert(1)", Version: domain.Version{Plan: "p3", Run: "r3"}},
+}
+
+func boardBody(t *testing.T, list []domain.Card) string {
+	t.Helper()
+	var logs bytes.Buffer
+	srv, _ := newServerWith(t, &logs, list)
+	rec := get(srv.Handler(), "localhost", "/")
+	if rec.Code != 200 {
+		t.Fatalf("status %d", rec.Code)
+	}
+	return rec.Body.String()
+}
+
+func themeKey(t *testing.T, src string) string {
+	t.Helper()
+	m := regexp.MustCompile(`THEME_KEY\s*=\s*'([^']+)'`).FindStringSubmatch(src)
+	if m == nil {
+		t.Fatal("no THEME_KEY")
+	}
+	return m[1]
+}
+
+func TestBoardShell(t *testing.T) {
+	body := boardBody(t, shellCards)
+	for _, want := range []string{
+		`<div class="app" id="board"`, `<aside class="side" aria-label="Board"`, `<nav class="nav" aria-label="Columns"`, `class="ws"`,
+		`<span>Runs</span><span class="sep">/</span><b>Board</b>`,
+		`<main>`, `class="strip"`, `data-theme-toggle data-morph-keep`,
+		`<a href="#col-planning">Planning<span class="n">0</span></a>`,
+		`<a href="#col-approval">Approval<span class="n bad">1</span></a>`,
+		`<a href="#col-working">Working<span class="n">2</span></a>`,
+		string(webkit.Stylesheet()), boardCSS,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("board page lacks %q", want)
+		}
+	}
+	for _, key := range []string{"planning", "approval", "working", "reviewing", "shipping", "done"} {
+		if !strings.Contains(body, `<div class="col" id="col-`+key+`">`) {
+			t.Errorf("no column div for %s", key)
+		}
+	}
+	for _, bad := range []string{"<section", `class="page"`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("board page holds %q", bad)
+		}
+	}
+	_, afterBody, ok := strings.Cut(body, "<body")
+	if !ok {
+		t.Fatal("board page has no <body")
+	}
+	if strings.Contains(afterBody, `<h1`) {
+		t.Errorf("board page keeps the old header")
+	}
+	if strings.Contains(boardBody(t, nil), `n bad`) {
+		t.Errorf("an empty approval column needs no attention")
+	}
+	view, err := os.ReadFile("../../../plan/infrastructure/view/view.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := themeKey(t, boardJS), themeKey(t, string(view)); got != want {
+		t.Errorf("board.js theme key %q, view.js %q", got, want)
+	}
+	if !strings.Contains(boardJS, "data-theme-toggle") {
+		t.Errorf("board.js does not drive the toggle")
+	}
+}
+
+func TestBoardCard(t *testing.T) {
+	body := boardBody(t, shellCards)
+	for _, want := range []string{
+		`<article class="task">`,
+		`<span class="rid" title="20261113-a">20261113-a</span>`,
+		`<h3><a href="/runs/20261113-a" title="panel serve">panel serve</a></h3>`,
+		`<span class="chip" title="feat/x"><span class="chip-t">feat/x</span></span>`,
+		`<a class="chip pr" href="https://example.test/pr/1" title="https://example.test/pr/1" target="_blank" rel="noopener noreferrer"><span class="chip-t">PR #1</span></a>`,
+		`<h3><a href="/runs/20261113-c" title="` + longToken + `">` + longToken + `</a></h3>`,
+		`<span class="st st-fail">blocked</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("board page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `href="javascript`) || !strings.Contains(body, "#ZgotmplZ") {
+		t.Errorf("an unsafe PR url became a live link")
+	}
+	// The column names the phase, so only a blocked card carries a badge.
+	if strings.Contains(body, `<span class="st">`) {
+		t.Errorf("a card shows a plain phase badge")
+	}
+	// The kit styles .lbl as a bordered pill, so a chip must not use it.
+	if strings.Contains(body, `class="lbl"`) {
+		t.Errorf("a board chip uses the kit class lbl, which draws a pill inside the chip")
+	}
+	// A PR url with no trailing number keeps the plain label.
+	if !strings.Contains(body, `<span class="chip-t">PR</span>`) {
+		t.Errorf("the unsafe PR chip lacks its plain chip-t label")
+	}
+}
+
+type rules map[string]map[string]string
+
+// parseRules reads a flat stylesheet into selector and declaration pairs.
+// The file has no at-rules, so a brace pair is one rule.
+func parseRules(t *testing.T, css string) rules {
+	t.Helper()
+	css = regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(css, "")
+	out := rules{}
+	for _, block := range strings.Split(css, "}") {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+		head, decls, ok := strings.Cut(block, "{")
+		if !ok || strings.Contains(decls, "{") || strings.HasPrefix(strings.TrimSpace(head), "@") {
+			t.Fatalf("board.css holds a nested or at-rule block: %q", block)
+		}
+		for _, sel := range strings.Split(head, ",") {
+			sel = strings.Join(strings.Fields(sel), " ")
+			if out[sel] == nil {
+				out[sel] = map[string]string{}
+			}
+			for _, d := range strings.Split(decls, ";") {
+				name, value, ok := strings.Cut(d, ":")
+				if !ok {
+					continue
+				}
+				out[sel][strings.TrimSpace(name)] = strings.Join(strings.Fields(value), "")
+			}
+		}
+	}
+	return out
+}
+
+func TestBoardNoPageOverflow(t *testing.T) {
+	r := parseRules(t, boardCSS)
+	want := []struct{ sel, prop, value string }{
+		{"body", "overflow-x", "clip"},
+		{"#board > div", "min-width", "0"},
+		{"#board main", "max-width", "none"},
+		{"#board main", "padding", "24px"},
+		{".strip", "display", "grid"},
+		{".strip", "grid-auto-flow", "column"},
+		{".strip", "grid-auto-columns", "minmax(150px,1fr)"},
+		{".strip", "overflow-x", "auto"},
+		{".col", "min-width", "0"},
+		{".task", "min-width", "0"},
+		{".task", "overflow-wrap", "anywhere"},
+		{".task h3", "-webkit-line-clamp", "3"},
+		{".task h3", "overflow", "hidden"},
+		{".chip", "max-width", "100%"},
+		{".chip .chip-t", "text-overflow", "ellipsis"},
+		{".chip .chip-t", "overflow", "hidden"},
+		{".chip .chip-t", "white-space", "nowrap"},
+		{".task .tid .rid", "min-width", "0"},
+		{".task .tid .rid", "text-overflow", "ellipsis"},
+		{".task .tid .rid", "overflow", "hidden"},
+		{".task .tid .rid", "white-space", "nowrap"},
+		{".chip.pr", "color", "var(--accent)"},
+		{".chip.pr", "background", "var(--accent-bg)"},
+	}
+	for _, w := range want {
+		if got := r[w.sel][w.prop]; got != w.value {
+			t.Errorf("%s { %s } = %q, want %q", w.sel, w.prop, got, w.value)
+		}
+	}
+	if regexp.MustCompile(`:\s*#[0-9a-fA-F]{3,8}\b`).MatchString(boardCSS) {
+		t.Errorf("board.css holds a literal color")
+	}
+	for sel, decls := range r {
+		if decls["overflow-x"] == "auto" && sel != ".strip" {
+			t.Errorf("%s scrolls sideways: only the strip may", sel)
+		}
 	}
 }

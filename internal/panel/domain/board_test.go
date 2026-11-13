@@ -80,6 +80,56 @@ func TestBoardVersionTracksCards(t *testing.T) {
 	}
 }
 
+func TestColumnKeys(t *testing.T) {
+	cards := []domain.Card{
+		{ID: "r1", Phase: "awaiting_approval"},
+		{ID: "r2", Phase: "blocked", BlockedFrom: "working"},
+	}
+	b := domain.NewBoard(cards)
+	wantKeys := map[string]string{
+		"Planning":  "planning",
+		"Approval":  "approval",
+		"Working":   "working",
+		"Reviewing": "reviewing",
+		"Shipping":  "shipping",
+		"Done":      "done",
+	}
+	for name, key := range wantKeys {
+		if got := column(t, b, name).Key; got != key {
+			t.Errorf("%s key = %q, want %q", name, got, key)
+		}
+	}
+	if !column(t, b, "Approval").NeedsYou() {
+		t.Error("Approval with a card should need you")
+	}
+	if column(t, b, "Working").NeedsYou() || column(t, b, "Planning").NeedsYou() {
+		t.Error("only the Approval column needs you")
+	}
+	if column(t, domain.NewBoard(nil), "Approval").NeedsYou() {
+		t.Error("empty Approval column should not need you")
+	}
+	if !(domain.Card{Phase: "blocked"}).Blocked() {
+		t.Error("blocked phase should be Blocked")
+	}
+	if (domain.Card{Phase: "working"}).Blocked() {
+		t.Error("working phase should not be Blocked")
+	}
+}
+
+func TestCardPRNumber(t *testing.T) {
+	for url, want := range map[string]string{
+		"https://github.com/o/r/pull/129":  "129",
+		"https://github.com/o/r/pull/129/": "129",
+		"https://example.test/pr/1":        "1",
+		"https://example.test/pr/abc":      "",
+		"":                                 "",
+	} {
+		if got := (domain.Card{PRURL: url}).PRNumber(); got != want {
+			t.Errorf("PRNumber(%q) = %q, want %q", url, got, want)
+		}
+	}
+}
+
 func TestVersionParse(t *testing.T) {
 	v := domain.Version{Plan: "abc", Run: "def"}
 	if v.String() != "abc.def" || domain.ParseVersion(v.String()) != v {

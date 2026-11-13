@@ -251,7 +251,7 @@ func (p panelPages) render(ctx context.Context, card paneldomain.Card, region st
 		RunID: card.ID, Phase: card.Phase, LiveRound: current.LiveRound,
 		Proofs:   active && !gone, // the gone view has no proof reader, and a deleted worktree has no proofs
 		Worktree: card.Worktree,
-		Served:   &plandomain.ViewServed{Version: served.Version, Base: served.Base},
+		Served:   &plandomain.ViewServed{Version: served.Version, Base: served.Base, Home: "/"},
 		Region:   region,
 	})
 	if errors.Is(err, plandomain.ErrUnknownRegion) || errors.Is(err, plandomain.ErrNoRegions) {

@@ -1,0 +1,14 @@
+/* The board on the kit shell. Only the strip scrolls sideways. */
+body{overflow-x:clip}
+#board > div{min-width:0}
+#board main{max-width:none;margin:0;padding:24px;min-width:0}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:12px;overflow-x:auto;align-items:start}
+.col{min-width:0}
+.task{min-width:0;overflow-wrap:anywhere}
+.task h3{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+.task .tid .rid{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task .chips{min-width:0}
+.chip{max-width:100%;min-width:0}
+.chip.pr{color:var(--accent);background:var(--accent-bg);border-color:color-mix(in oklch,var(--accent) 40%,var(--border))}
+.chip.pr:hover,.chip.pr:focus-visible{color:var(--accent);border-color:var(--accent)}
+.chip .chip-t{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

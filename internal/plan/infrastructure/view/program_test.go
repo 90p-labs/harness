@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/90p-labs/harness/internal/plan/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/webkit"
 )
 
 const (
@@ -196,10 +197,7 @@ func TestProgramPage(t *testing.T) {
 }
 
 func TestPageCSSHasNoBareDone(t *testing.T) {
-	raw, err := os.ReadFile("view.css")
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := []byte(webkit.Stylesheet())
 	for _, m := range cssRule.FindAllStringSubmatch(string(raw), -1) {
 		for _, selector := range strings.Split(m[1], ",") {
 			selector = strings.TrimSpace(selector)

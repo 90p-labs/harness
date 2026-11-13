@@ -66,6 +66,28 @@ func TestServedPage(t *testing.T) {
 	}
 }
 
+func TestServedPageRunsCrumbLinksHome(t *testing.T) {
+	in := baseInput(t)
+	in.Served = &domain.ViewServed{Version: servedVersion, Base: servedBase, Home: "/"}
+	page := render(t, in)
+	if !strings.Contains(page, `<a href="/">Runs</a>`) {
+		t.Error("served page with Home does not link the Runs crumb to Home")
+	}
+	if strings.Contains(page, `<span>Runs</span>`) {
+		t.Error("served page with Home keeps the plain Runs label")
+	}
+}
+
+func TestServedPageEmptyHomeKeepsRunsLabel(t *testing.T) {
+	page := render(t, servedInput(t))
+	if !strings.Contains(page, `<span>Runs</span>`) {
+		t.Error("served page with an empty Home lacks the plain Runs label")
+	}
+	if strings.Contains(page, `<a href="">Runs</a>`) {
+		t.Error("served page with an empty Home links the Runs crumb to nowhere")
+	}
+}
+
 func TestFilePageHasNoPolling(t *testing.T) {
 	page := render(t, baseInput(t))
 	for _, s := range []string{"hx-get", "hx-ext", "data-v=", "<script src"} {
