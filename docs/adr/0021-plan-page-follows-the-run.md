@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-11. It changes the render rule of ADR 0010, and it makes the approval on the page a reply to the agent.
+Accepted, 2026-11-11. It changes the render rule of ADR 0010, and it makes the approval on the page a reply to the agent. Amended by [ADR 0023](0023-served-control-panel.md): the served mode.
 
 ## Context
 
