@@ -13,9 +13,11 @@ type Query struct {
 
 type Status struct {
 	ID          string
+	Repo        string
 	Phase       domain.Phase
 	ReviewRound int
 	LiveRound   int
+	BlockedFrom domain.Phase
 	Reason      string
 	Prompt      string
 	Worktree    string
@@ -61,9 +63,9 @@ func (h Handler) ByPhase(ctx context.Context, repo string, phases []domain.Phase
 
 func toStatus(run domain.Run) Status {
 	return Status{
-		ID: run.ID, Phase: run.Phase, ReviewRound: run.ReviewRound,
+		ID: run.ID, Repo: run.Key.Repo, Phase: run.Phase, ReviewRound: run.ReviewRound,
 		LiveRound: run.LiveRound, Reason: run.Reason, Prompt: run.Prompt,
 		Worktree: run.Key.Worktree, PRURL: run.PRURL, Version: run.Version,
-		Step: run.Step, HandoffStep: run.HandoffStep,
+		Step: run.Step, HandoffStep: run.HandoffStep, BlockedFrom: run.BlockedFrom,
 	}
 }
