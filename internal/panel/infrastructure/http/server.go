@@ -19,6 +19,12 @@ import (
 //go:embed board.html.tmpl
 var boardFiles embed.FS
 
+//go:embed board.css
+var boardCSS string
+
+//go:embed board.js
+var boardJS string
+
 var templates = template.Must(template.ParseFS(boardFiles, "board.html.tmpl"))
 
 const (
@@ -67,7 +73,9 @@ func (s *Server) Handler() nethttp.Handler {
 type boardView struct {
 	Board domain.Board
 	Links webkit.Links
-	Full  bool
+	Kit   template.CSS
+	CSS   template.CSS
+	JS    template.JS
 }
 
 func (s *Server) renderBoard(w nethttp.ResponseWriter, name string, board domain.Board) {
@@ -77,7 +85,10 @@ func (s *Server) renderBoard(w nethttp.ResponseWriter, name string, board domain
 		return
 	}
 	var buf bytes.Buffer
-	view := boardView{Board: board, Links: links, Full: name == "page"}
+	view := boardView{Board: board, Links: links}
+	if name == "page" {
+		view.Kit, view.CSS, view.JS = webkit.Stylesheet(), template.CSS(boardCSS), template.JS(boardJS)
+	}
 	if err := templates.ExecuteTemplate(&buf, name, view); err != nil {
 		s.fail(w, "render board", err)
 		return
