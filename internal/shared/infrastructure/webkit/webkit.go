@@ -1,5 +1,6 @@
 // Package webkit holds the web assets that pages share: the font faces,
-// the mark colour tokens and the mermaid bundle. Each one is ready to inline.
+// the mark colour tokens, the mermaid bundle and the shared stylesheet kit.css
+// that Stylesheet serves. Each one is ready to inline.
 package webkit
 
 import (
@@ -17,8 +18,16 @@ import (
 //go:embed third_party/mermaid.min.js
 var mermaidJS string
 
+//go:embed kit.css
+var kitCSS string
+
 //go:embed assets/*.woff2
 var fontFiles embed.FS
+
+// Stylesheet gives the shared page rules: the shell, the columns and the task cards.
+func Stylesheet() template.CSS {
+	return template.CSS(kitCSS)
+}
 
 const (
 	fontFaceFormat = "@font-face{font-family:'%s';src:url(data:font/woff2;base64,%s) format('woff2');font-weight:%s;font-display:swap}"

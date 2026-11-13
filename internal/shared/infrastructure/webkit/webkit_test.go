@@ -10,6 +10,18 @@ import (
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
+func TestKitStylesheet(t *testing.T) {
+	css := string(Stylesheet())
+	if strings.TrimSpace(css) == "" {
+		t.Fatal("the kit stylesheet is empty")
+	}
+	for _, rule := range []string{".app", ".col", ".task"} {
+		if !regexp.MustCompile(`(?m)(^|[\s,}])` + regexp.QuoteMeta(rule) + `[\s,{.:\[>]`).MatchString(css) {
+			t.Errorf("the kit stylesheet has no %s rule", rule)
+		}
+	}
+}
+
 func TestInlineKit(t *testing.T) {
 	kit, err := Inline()
 	if err != nil {
