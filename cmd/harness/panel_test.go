@@ -222,6 +222,35 @@ func TestPanelPagesDeletedWorktreeOfActiveRun(t *testing.T) {
 	}
 }
 
+func TestPanelServedHome(t *testing.T) {
+	clearHarnessEnv(t)
+	raw, err := os.ReadFile("../../internal/plan/domain/testdata/valid.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const id = "20260101-000000-home"
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(planPath(dir, id)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(planPath(dir, id), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := domain.Run{ID: id, Key: domain.RunKey{Repo: "repo", Worktree: dir}, Phase: domain.Phase("working")}
+	repo := &fakeRunRepo{runs: map[string]domain.Run{id: run}}
+	pages := newPanelPages(status.NewHandler(repo), domain.RunKey{Repo: "repo", Worktree: dir},
+		planmodule.NewPages(noProofs{}, func(context.Context) (string, error) { return "", nil }))
+	card := paneldomain.Card{ID: id, Phase: "working", Worktree: dir}
+	served := paneldomain.Served{Version: "p.r", Base: "/runs/" + id + "/regions/"}
+	out, err := pages.Page(context.Background(), card, served)
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+	if !strings.Contains(string(out), `<a href="/">Runs</a>`) {
+		t.Errorf("served run page lacks the Runs crumb link to the board at /")
+	}
+}
+
 func TestPlanPartStatErrorChangesVersion(t *testing.T) {
 	dir := t.TempDir()
 	missing := planPart(filepath.Join(dir, "plan.md"))

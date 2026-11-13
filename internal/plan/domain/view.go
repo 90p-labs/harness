@@ -10,7 +10,8 @@ var ErrNoRegions = errors.New("page has no regions")
 
 // ViewServed switches the page to the served mode. Version goes in each
 // region as data-v, and Base is the route prefix of the region fragments.
-type ViewServed struct{ Version, Base string }
+// Home is the link of the Runs crumb; an empty Home keeps the crumb a plain label.
+type ViewServed struct{ Version, Base, Home string }
 
 type ViewRun struct {
 	ID     string

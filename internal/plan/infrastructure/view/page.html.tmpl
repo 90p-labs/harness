@@ -26,7 +26,7 @@
 </aside>
 <div>
 <header class="top">
-<div class="crumbs"><span>Runs</span><span class="sep">/</span><b{{with .Run.ID}} title="{{.}}"{{end}}>{{with .Run.ID}}{{.}}{{else}}{{.Title}}{{end}}</b>{{with .Run.ID}}<button class="iconbtn" type="button" data-copy="{{.}}" aria-label="Copy the run ID"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5"/></svg></button>{{end}}</div>
+<div class="crumbs">{{if and .Served .Served.Home}}<a href="{{.Served.Home}}">Runs</a>{{else}}<span>Runs</span>{{end}}<span class="sep">/</span><b{{with .Run.ID}} title="{{.}}"{{end}}>{{with .Run.ID}}{{.}}{{else}}{{.Title}}{{end}}</b>{{with .Run.ID}}<button class="iconbtn" type="button" data-copy="{{.}}" aria-label="Copy the run ID"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5"/></svg></button>{{end}}</div>
 {{template "plan/status" .}}
 <span class="spacer"></span>
 <span id="top-actions">{{if eq .Run.Phase "awaiting_approval"}}<button class="btn" type="button" data-act="focus-reply"><span class="lbl-long">Request changes</span><span class="lbl-short" hidden>Changes</span></button><button class="btn primary" type="button" data-act="approve">Approve <kbd>⌘↵</kbd></button>{{end}}</span>
