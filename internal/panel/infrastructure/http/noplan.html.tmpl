@@ -1,0 +1,38 @@
+{{define "noplan"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Card.ID}} - harness panel</title>
+<link rel="icon" href="{{.Links.Icon}}" type="image/svg+xml">
+<link rel="stylesheet" href="{{.Links.Live}}">
+<style>{{.Links.Fonts}}</style>
+<style>{{.Links.Tokens}}</style>
+<style>{{.Kit}}</style>
+</head>
+<body hx-ext="morph,sse" sse-connect="{{.Events}}">
+<div class="app">
+<aside class="side" aria-label="Run"><div class="ws"><span class="ws-logo" aria-hidden="true"></span>harness</div></aside>
+<div>
+<header class="top">
+<div class="crumbs"><a href="/">Runs</a><span class="sep">/</span><b title="{{.Card.ID}}">{{.Card.ID}}</b><span class="live-dot" role="img" aria-label="Live updates" title="Live updates"></span></div>
+</header>
+<main>
+<div id="summary" hx-get="{{.Base}}summary" hx-trigger="sse:run-updated, every 5s [!window.harnessLive]" hx-swap="morph:outerHTML" data-v="{{.Version}}">
+<h1>{{.Card.Title}}</h1>
+<p>This run has no plan yet. The page loads the plan when it appears.</p>
+<dl>
+<dt>Run</dt><dd>{{.Card.ID}}</dd>
+<dt>Phase</dt><dd>{{.Card.Phase}}</dd>
+<dt>Version</dt><dd>{{.Version}}</dd>
+</dl>
+</div>
+</main>
+</div>
+</div>
+<script src="{{.Links.Htmx}}"></script>
+<script src="{{.Links.Morph}}"></script>
+<script src="{{.Links.Sse}}"></script>
+<script src="{{.Links.Panel}}"></script>
+</body>
+</html>{{end}}

@@ -11,7 +11,9 @@ var ErrNoRegions = errors.New("page has no regions")
 // ViewServed switches the page to the served mode. Version goes in each
 // region as data-v, and Base is the route prefix of the region fragments.
 // Home is the link of the Runs crumb; an empty Home keeps the crumb a plain label.
-type ViewServed struct{ Version, Base, Home string }
+// Events is the route of the event stream. When set, the body connects to it and
+// each region refetches on its signal; the poll stays as the fallback.
+type ViewServed struct{ Version, Base, Home, Events string }
 
 type ViewRun struct {
 	ID     string

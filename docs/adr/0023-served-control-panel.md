@@ -22,7 +22,7 @@ Accepted, 2026-11-13. It adds an optional served mode to the plan view. It does 
 7. The page splits into named regions, with `{{define "plan/<name>"}}` blocks. The full page and a fragment render from the same block.
 8. A registry lists the regions. The registry is the route whitelist. A name that is not listed gets no route.
 9. Server-sent events carry only signals. They do not carry the page content.
-10. Each region fetches its fragment with a version. The server answers 204 when nothing changed.
+10. Each region fetches its fragment with a version. The server answers 204 when nothing changed. The version has a plan part and a run part. The run part hashes the status version, the branch head and the proofs of the active run. It replaces `PRAGMA data_version`, which changes on any write to the state, also a guard call, and would refetch every region of every tab. The adapter caches the head and the proofs of each run for one second.
 11. Polling every 5 s is the fallback when the events stop.
 12. Approve and comments from the page are out of scope. They need their own ADR.
 

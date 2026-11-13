@@ -12,7 +12,9 @@ import (
 type Region struct{ Name, ID string }
 
 var regions = []Region{
+	{"nav", "nav"},
 	{"status", "top-status"},
+	{"top-actions", "top-actions"},
 	{"summary", anchorSummary},
 	{"criteria", anchorCriteria},
 	{"notes", anchorNotes},
@@ -25,6 +27,7 @@ var regions = []Region{
 	{"proofs", anchorProofs},
 	{"source", anchorSource},
 	{"signals", anchorSignals},
+	{"props", "props"},
 }
 
 // Regions lists the regions in page order.

@@ -5,7 +5,8 @@ body{overflow-x:clip}
 .strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:12px;overflow-x:auto;align-items:start}
 .col{min-width:0}
 .task{min-width:0;overflow-wrap:anywhere}
-.task h3{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+.task h3{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+.task .tid .age{color:var(--text-3);font-size:11px;white-space:nowrap}
 .task .tid .rid{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .task .chips{min-width:0}
 .chip{max-width:100%;min-width:0}

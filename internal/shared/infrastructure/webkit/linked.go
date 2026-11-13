@@ -16,6 +16,15 @@ var htmxJS []byte
 //go:embed third_party/idiomorph-ext.min.js
 var morphJS []byte
 
+//go:embed third_party/htmx-ext-sse.min.js
+var sseJS []byte
+
+//go:embed live.css
+var liveCSS []byte
+
+//go:embed icon.svg
+var iconSVG []byte
+
 //go:embed panel.js
 var panelJS []byte
 
@@ -24,6 +33,8 @@ const (
 	linkedFontFace = "@font-face{font-family:'%s';src:url(" + assetPrefix + "%s/%s) format('woff2');font-weight:%s;font-display:swap}"
 	jsType         = "text/javascript; charset=utf-8"
 	fontType       = "font/woff2"
+	cssType        = "text/css; charset=utf-8"
+	svgType        = "image/svg+xml"
 )
 
 // Links is the shared assets of a served page. Each field names an asset by
@@ -31,7 +42,10 @@ const (
 type Links struct {
 	Fonts, Tokens        template.CSS
 	Mermaid, Htmx, Morph string
-	Panel                string
+	Sse, Panel, Live     string
+	Icon                 string
+	// Hash is the kit hash that names every asset, for Asset.
+	Hash string
 }
 
 type asset struct {
@@ -65,7 +79,10 @@ var load = sync.OnceValue(func() served {
 	add("mermaid.min.js", []byte(mermaidJS), jsType)
 	add("htmx.min.js", htmxJS, jsType)
 	add("idiomorph-ext.min.js", morphJS, jsType)
+	add("htmx-ext-sse.min.js", sseJS, jsType)
 	add("panel.js", panelJS, jsType)
+	add("live.css", liveCSS, cssType)
+	add("icon.svg", iconSVG, svgType)
 
 	sum := sha256.New()
 	for _, name := range names { // fixed order: fonts first, then the scripts
@@ -85,7 +102,11 @@ var load = sync.OnceValue(func() served {
 		Mermaid: url("mermaid.min.js"),
 		Htmx:    url("htmx.min.js"),
 		Morph:   url("idiomorph-ext.min.js"),
+		Sse:     url("htmx-ext-sse.min.js"),
 		Panel:   url("panel.js"),
+		Live:    url("live.css"),
+		Icon:    url("icon.svg"),
+		Hash:    s.hash,
 	}
 	return s
 })

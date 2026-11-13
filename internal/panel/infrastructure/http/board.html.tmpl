@@ -1,4 +1,4 @@
-{{define "region"}}<div class="app" id="board" hx-get="/regions/board" hx-trigger="every 5s" hx-swap="morph:outerHTML" data-v="{{.Board.Version}}">
+{{define "region"}}<div class="app" id="board" hx-get="/regions/board" hx-trigger="sse:runs-changed, every 5s [!window.harnessLive]" hx-swap="morph:outerHTML" data-v="{{.Board.Version}}">
 <aside class="side" aria-label="Board">
 <div class="ws"><span class="ws-logo" aria-hidden="true"></span>harness</div>
 <nav class="nav" aria-label="Columns"><ol>
@@ -10,15 +10,15 @@
 </aside>
 <div>
 <header class="top">
-<div class="crumbs"><span>Runs</span><span class="sep">/</span><b>Board</b></div>
+<div class="crumbs"><span>Runs</span><span class="sep">/</span><b>Board</b><span class="live-dot" role="img" aria-label="Live updates" title="Live updates"></span></div>
 </header>
 <main>
 <div class="strip">
 {{range .Board.Columns}}<div class="col" id="col-{{.Key}}">
 <div class="col-h">{{.Name}}<span class="n">{{len .Cards}}</span></div>
 {{range .Cards}}<article class="task">
-<div class="tid"><span class="rid" title="{{.ID}}">{{.ID}}</span><span class="spacer"></span>{{if .Blocked}}<span class="st st-fail">blocked</span>{{end}}</div>
-<h3><a href="/runs/{{.ID}}" title="{{.Title}}">{{.Title}}</a></h3>
+<div class="tid"><span class="rid" title="{{.ID}}">{{if .ShortID}}{{.ShortID}}{{else}}{{.ID}}{{end}}</span><span class="spacer"></span>{{with $.Age .}}<span class="age">{{.}}</span>{{end}}{{if .Blocked}}<span class="st st-fail">blocked</span>{{end}}</div>
+<h3><a href="/runs/{{.ID}}" title="{{.Title}}">{{.ShortTitle}}</a></h3>
 {{if or .Branch .PRURL}}<div class="chips">{{with .Branch}}<span class="chip" title="{{.}}"><span class="chip-t">{{.}}</span></span>{{end}}{{if .PRURL}}<a class="chip pr" href="{{.PRURL}}" title="{{.PRURL}}" target="_blank" rel="noopener noreferrer"><span class="chip-t">PR{{with .PRNumber}} #{{.}}{{end}}</span></a>{{end}}</div>{{end}}
 </article>
 {{end}}</div>
@@ -32,15 +32,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>harness panel</title>
+<link rel="icon" href="{{.Links.Icon}}" type="image/svg+xml">
+<link rel="stylesheet" href="{{.Links.Live}}">
 <style>{{.Links.Fonts}}</style>
 <style>{{.Links.Tokens}}</style>
 <style>{{.Kit}}</style>
 <style>{{.CSS}}</style>
 </head>
-<body hx-ext="morph">
+<body hx-ext="morph,sse" sse-connect="/events">
 {{template "region" .}}
 <script src="{{.Links.Htmx}}"></script>
 <script src="{{.Links.Morph}}"></script>
+<script src="{{.Links.Sse}}"></script>
 <script src="{{.Links.Panel}}"></script>
 <script>{{.JS}}</script>
 </body>

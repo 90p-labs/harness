@@ -23,6 +23,11 @@ var pageSource string
 //go:embed view.js
 var pageJS string
 
+// servedJS runs in the served mode only, so the file mode keeps its bytes.
+//
+//go:embed served.js
+var servedJS string
+
 const (
 	GroupOverview = "Overview"
 	GroupBuild    = "Build"
@@ -95,6 +100,8 @@ type assets struct {
 	CSS     template.CSS
 	JS      template.JS
 	Mermaid template.JS
+	// ServedJS is set in the served mode only.
+	ServedJS template.JS
 	// Linked is set in the served mode, and then replaces the inline scripts.
 	Linked *webkit.Links
 }
@@ -111,11 +118,12 @@ func pageAssets(served *domain.ViewServed) (assets, error) {
 			return assets{}, err
 		}
 		return assets{
-			Fonts:  links.Fonts,
-			Tokens: links.Tokens,
-			CSS:    webkit.Stylesheet(),
-			JS:     template.JS(pageJS),
-			Linked: &links,
+			Fonts:    links.Fonts,
+			Tokens:   links.Tokens,
+			CSS:      webkit.Stylesheet(),
+			JS:       template.JS(pageJS),
+			ServedJS: template.JS(servedJS),
+			Linked:   &links,
 		}, nil
 	}
 	kit, err := webkit.Inline()
@@ -357,8 +365,12 @@ func (m model) Poll(name string) template.HTMLAttr {
 	if m.Served == nil {
 		return ""
 	}
-	return template.HTMLAttr(fmt.Sprintf(` hx-get="%s" hx-trigger="every 5s" hx-swap="morph:outerHTML" data-v="%s"`,
-		html.EscapeString(m.Served.Base+name), html.EscapeString(m.Served.Version)))
+	trigger := "every 5s"
+	if m.Served.Events != "" {
+		trigger = "sse:run-updated, every 5s [!window.harnessLive]"
+	}
+	return template.HTMLAttr(fmt.Sprintf(` hx-get="%s" hx-trigger="%s" hx-swap="morph:outerHTML" data-v="%s"`,
+		html.EscapeString(m.Served.Base+name), trigger, html.EscapeString(m.Served.Version)))
 }
 
 type builder struct {

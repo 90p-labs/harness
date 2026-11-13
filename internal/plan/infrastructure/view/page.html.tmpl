@@ -7,17 +7,15 @@
 <style>{{.Fonts}}</style>
 <style>{{.Tokens}}</style>
 <style>{{.CSS}}</style>
-</head>
-<body{{if .Served}} hx-ext="morph"{{end}}>
+{{if and .Served .Served.Events}}<link rel="stylesheet" href="{{.Linked.Live}}">
+{{end}}{{if .Served}}<link rel="icon" href="{{.Linked.Icon}}" type="image/svg+xml">
+{{end}}</head>
+<body{{if .Served}}{{if .Served.Events}} hx-ext="morph,sse" sse-connect="{{.Served.Events}}"{{else}} hx-ext="morph"{{end}}{{end}}>
 <div class="app">
 <aside class="side" aria-label="Sections">
 <div class="ws"><span class="ws-logo" aria-hidden="true"></span>harness</div>
 <button class="search" id="open-pal" type="button"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>Jump to<kbd>⌘K</kbd></button>
-<nav id="nav" class="nav" aria-label="Sections">
-{{range $g := .Nav}}<div data-nav-group="{{$g.Name}}"><div class="nav-h">{{$g.Name}}</div><ol>
-{{range $g.Items}}<li><a href="#{{.Anchor}}">{{.Label}}{{if .Count}}<span class="n{{if .Bad}} bad{{end}}">{{.Count}}</span>{{end}}</a></li>
-{{end}}</ol></div>
-{{end}}</nav>
+{{template "plan/nav" .}}
 <div class="side-foot">
 <div class="legend" aria-label="Change colors"><span class="lg lg-added"><i></i>new</span><span class="lg lg-modified"><i></i>changed</span><span class="lg lg-deleted"><i></i>deleted</span></div>
 <button class="theme" type="button" data-theme-toggle aria-label="Switch the color theme">Theme: <span>auto</span></button>
@@ -26,10 +24,10 @@
 </aside>
 <div>
 <header class="top">
-<div class="crumbs">{{if and .Served .Served.Home}}<a href="{{.Served.Home}}">Runs</a>{{else}}<span>Runs</span>{{end}}<span class="sep">/</span><b{{with .Run.ID}} title="{{.}}"{{end}}>{{with .Run.ID}}{{.}}{{else}}{{.Title}}{{end}}</b>{{with .Run.ID}}<button class="iconbtn" type="button" data-copy="{{.}}" aria-label="Copy the run ID"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5"/></svg></button>{{end}}</div>
+<div class="crumbs">{{if and .Served .Served.Home}}<a href="{{.Served.Home}}">Runs</a>{{else}}<span>Runs</span>{{end}}<span class="sep">/</span><b{{with .Run.ID}} title="{{.}}"{{end}}>{{with .Run.ID}}{{.}}{{else}}{{.Title}}{{end}}</b>{{with .Run.ID}}<button class="iconbtn" type="button" data-copy="{{.}}" aria-label="Copy the run ID"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5"/></svg></button>{{end}}{{if and .Served .Served.Events}}<span class="live-dot" role="img" aria-label="Live updates" title="Live updates"></span>{{end}}</div>
 {{template "plan/status" .}}
 <span class="spacer"></span>
-<span id="top-actions">{{if eq .Run.Phase "awaiting_approval"}}<button class="btn" type="button" data-act="focus-reply"><span class="lbl-long">Request changes</span><span class="lbl-short" hidden>Changes</span></button><button class="btn primary" type="button" data-act="approve">Approve <kbd>⌘↵</kbd></button>{{end}}</span>
+{{template "plan/top-actions" .}}
 </header>
 <div class="page">
 <main>
@@ -51,11 +49,35 @@
 {{template "plan/signals" .}}
 <footer class="foot">Rendered by <code>harness plan view</code> from <code>plan.md</code>. This page loads nothing from the network.</footer>
 </main>
-<aside class="props" id="props" aria-label="Properties">
+{{template "plan/props" .}}
+</div>
+</div>
+</div>
+<aside class="peek" id="peek" aria-live="polite"><header><span id="peek-k"></span><span class="spacer"></span><button class="iconbtn" type="button" data-act="close-peek" aria-label="Close"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></header><div class="body" id="peek-body"></div></aside>
+<div class="scrim" id="scrim"><div class="pal" role="dialog" aria-label="Jump to"><input id="pal-in" placeholder="Jump to a criterion, task, spec, file or commit" autocomplete="off"><ul id="pal-list"></ul><div class="ft"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></div></div></div>
+<div class="toast" id="toast" role="status"></div>
+<aside class="tracer" id="tracer" aria-live="polite" hidden><header><p class="tr-k">Trace</p><p class="tr-t" id="tracer-title"></p><button type="button" id="tracer-close" aria-label="Close the trace">Close</button></header><div id="tracer-body"></div><p class="tr-hint">Click an item to pin its trace.</p></aside>
+<script type="application/json" id="plan-data">{{.Data}}</script>
+{{if .Linked}}<script src="{{.Linked.Htmx}}"></script>
+<script src="{{.Linked.Morph}}"></script>
+{{if .Served.Events}}<script src="{{.Linked.Sse}}"></script>
+{{end}}<script src="{{.Linked.Panel}}"></script>
+<script src="{{.Linked.Mermaid}}"></script>
+{{else}}<script>{{.Mermaid}}</script>
+{{end}}<script>{{.JS}}</script>{{if .ServedJS}}
+<script>{{.ServedJS}}</script>{{end}}
+</body>
+</html>
+{{define "chips"}}{{if .Chips}}<span class="lk">{{if .Name}}<em>{{.Name}}</em>{{end}}{{range .Chips}}{{if .Href}}<a class="chip" href="#{{.Href}}" data-key="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}</a>{{else}}<span class="chip broken" title="No such item">{{.Label}}</span>{{end}}{{end}}</span>{{end}}{{end}}
+{{define "ico"}}<span class="ico {{cls .}}" aria-hidden="true"><svg class="i" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>{{if eq (cls .) "pass"}}<path d="m4.4 7.2 1.8 1.8 3.5-3.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>{{else if eq (cls .) "fail"}}<path d="m5 5 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>{{end}}</svg></span>{{end}}{{define "plan/nav"}}<nav id="nav" class="nav" aria-label="Sections"{{.Poll "nav"}}>
+{{range $g := .Nav}}<div data-nav-group="{{$g.Name}}"><div class="nav-h">{{$g.Name}}</div><ol>
+{{range $g.Items}}<li><a href="#{{.Anchor}}">{{.Label}}{{if .Count}}<span class="n{{if .Bad}} bad{{end}}">{{.Count}}</span>{{end}}</a></li>
+{{end}}</ol></div>
+{{end}}</nav>{{end}}{{define "plan/top-actions"}}<span id="top-actions"{{.Poll "top-actions"}}>{{if eq .Run.Phase "awaiting_approval"}}<button class="btn" type="button" data-act="focus-reply"><span class="lbl-long">Request changes</span><span class="lbl-short" hidden>Changes</span></button><button class="btn primary" type="button" data-act="approve">Approve <kbd>⌘↵</kbd></button>{{end}}</span>{{end}}{{define "plan/props"}}<aside class="props" id="props" aria-label="Properties"{{.Poll "props"}}>
 {{if eq .Run.Phase "awaiting_approval"}}<div class="next" id="next">
 <div class="hd"><span class="dot"></span>The agent is waiting for you</div>
 <p>Approve the plan, or tell the agent what to change. Your reply is copied, ready to paste into the chat.</p>
-<textarea class="reply" id="reply" rows="3" placeholder="Corrections, e.g. “C3: also cover the empty-diff case”"></textarea>
+<textarea class="reply" id="reply"{{if .Served}} data-morph-keep{{end}} rows="3" placeholder="Corrections, e.g. “C3: also cover the empty-diff case”"></textarea>
 <p class="tip">Tip: open an item and use Add correction to quote its ID. <kbd>⌘↵</kbd> sends.</p>
 <div class="acts"><button class="btn" type="button" data-act="send-corrections" disabled>Send corrections</button><button class="btn primary" type="button" data-act="approve">Approve <kbd>⌘↵</kbd></button></div>
 </div>
@@ -84,25 +106,7 @@
 <div class="prop"><span>Changed</span><span class="v end">{{.Done.ChangedFiles}}</span></div>
 <div class="prop"><span>All</span><span class="v end">{{.Counts.Files}} files</span></div>
 </div>
-</aside>
-</div>
-</div>
-</div>
-<aside class="peek" id="peek" aria-live="polite"><header><span id="peek-k"></span><span class="spacer"></span><button class="iconbtn" type="button" data-act="close-peek" aria-label="Close"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></header><div class="body" id="peek-body"></div></aside>
-<div class="scrim" id="scrim"><div class="pal" role="dialog" aria-label="Jump to"><input id="pal-in" placeholder="Jump to a criterion, task, spec, file or commit" autocomplete="off"><ul id="pal-list"></ul><div class="ft"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></div></div></div>
-<div class="toast" id="toast" role="status"></div>
-<aside class="tracer" id="tracer" aria-live="polite" hidden><header><p class="tr-k">Trace</p><p class="tr-t" id="tracer-title"></p><button type="button" id="tracer-close" aria-label="Close the trace">Close</button></header><div id="tracer-body"></div><p class="tr-hint">Click an item to pin its trace.</p></aside>
-<script type="application/json" id="plan-data">{{.Data}}</script>
-{{if .Linked}}<script src="{{.Linked.Htmx}}"></script>
-<script src="{{.Linked.Morph}}"></script>
-<script src="{{.Linked.Panel}}"></script>
-<script src="{{.Linked.Mermaid}}"></script>
-{{else}}<script>{{.Mermaid}}</script>
-{{end}}<script>{{.JS}}</script>
-</body>
-</html>
-{{define "chips"}}{{if .Chips}}<span class="lk">{{if .Name}}<em>{{.Name}}</em>{{end}}{{range .Chips}}{{if .Href}}<a class="chip" href="#{{.Href}}" data-key="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}</a>{{else}}<span class="chip broken" title="No such item">{{.Label}}</span>{{end}}{{end}}</span>{{end}}{{end}}
-{{define "ico"}}<span class="ico {{cls .}}" aria-hidden="true"><svg class="i" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>{{if eq (cls .) "pass"}}<path d="m4.4 7.2 1.8 1.8 3.5-3.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>{{else if eq (cls .) "fail"}}<path d="m5 5 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>{{end}}</svg></span>{{end}}{{define "plan/status"}}<span class="status-pill" id="top-status"{{.Poll "status"}}>{{with .Run.Phase}}{{if eq . "done"}}{{template "ico" "pass"}}{{else if eq . "working"}}{{template "ico" "work"}}{{else if eq . "blocked"}}{{template "ico" "fail"}}{{else}}{{template "ico" "open"}}{{end}}{{$.Status}}{{end}}</span>{{end}}{{define "plan/summary"}}<section id="summary"{{.Poll "summary"}} class="masthead" data-group="{{.G.Product}}">
+</aside>{{end}}{{define "plan/status"}}<span class="status-pill" id="top-status"{{.Poll "status"}}>{{with .Run.Phase}}{{if eq . "done"}}{{template "ico" "pass"}}{{else if eq . "working"}}{{template "ico" "work"}}{{else if eq . "blocked"}}{{template "ico" "fail"}}{{else}}{{template "ico" "open"}}{{end}}{{$.Status}}{{end}}</span>{{end}}{{define "plan/summary"}}<section id="summary"{{.Poll "summary"}} class="masthead" data-group="{{.G.Product}}">
 <p class="eyebrow">{{with .Track}}<span>{{.}}</span>{{end}}</p>
 <h1 class="title">{{.Title}}</h1>
 {{range .Goal}}<p class="goal">{{.}}</p>

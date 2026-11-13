@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -139,9 +140,12 @@ type fakeRunRepo struct {
 	listed    []domain.Run
 	activeErr error
 	active    string
+	// activeCalls counts the Active calls, which are the status reads of the active run.
+	activeCalls atomic.Int32
 }
 
 func (f *fakeRunRepo) Active(context.Context, domain.RunKey) (domain.Run, error) {
+	f.activeCalls.Add(1)
 	if f.activeErr != nil {
 		return domain.Run{}, f.activeErr
 	}
@@ -248,6 +252,37 @@ func TestPanelServedHome(t *testing.T) {
 	}
 	if !strings.Contains(string(out), `<a href="/">Runs</a>`) {
 		t.Errorf("served run page lacks the Runs crumb link to the board at /")
+	}
+}
+
+// TestPanelPagesServedRunPageCarriesEvents renders a run page through the composition root and wants the SSE wiring.
+func TestPanelPagesServedRunPageCarriesEvents(t *testing.T) {
+	clearHarnessEnv(t)
+	raw, err := os.ReadFile("../../internal/plan/domain/testdata/valid.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const id = "20260101-000000-events"
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(planPath(dir, id)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(planPath(dir, id), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := domain.Run{ID: id, Key: domain.RunKey{Repo: "repo", Worktree: dir}, Phase: domain.Phase("working")}
+	repo := &fakeRunRepo{runs: map[string]domain.Run{id: run}}
+	pages := newPanelPages(status.NewHandler(repo), domain.RunKey{Repo: "repo", Worktree: dir},
+		planmodule.NewPages(noProofs{}, func(context.Context) (string, error) { return "", nil }))
+	card := paneldomain.Card{ID: id, Phase: "working", Worktree: dir}
+	events := "/events?run=" + id
+	served := paneldomain.Served{Version: "p.r", Base: "/runs/" + id + "/regions/", Events: events}
+	out, err := pages.Page(context.Background(), card, served)
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+	if !strings.Contains(string(out), `sse-connect="`+events+`"`) {
+		t.Errorf("served run page lacks sse-connect to %s", events)
 	}
 }
 
@@ -433,6 +468,268 @@ func TestPanelRunsReadsPlanOnlyWhenItChanges(t *testing.T) {
 	if cards[0].Version.Plan == first.Version.Plan {
 		t.Errorf("plan part did not change")
 	}
+}
+
+type stubProofs struct {
+	passed map[int]bool
+	calls  int
+}
+
+func (s *stubProofs) Passed(context.Context) (map[int]bool, error) {
+	s.calls++
+	return s.passed, nil
+}
+
+func emptyCommit(t *testing.T, dir, message string) {
+	t.Helper()
+	gitIn(t, dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false",
+		"commit", "-q", "--allow-empty", "-m", message)
+}
+
+func TestPanelRunVersion(t *testing.T) {
+	clearHarnessEnv(t)
+	dir := t.TempDir()
+	gitIn(t, dir, "init", "-q")
+	emptyCommit(t, dir, "one")
+	const active, other = "20260101-000000-active", "20260101-000001-other"
+	key := domain.RunKey{Repo: "repo", Worktree: dir}
+	repo := &fakeRunRepo{
+		runs: map[string]domain.Run{
+			active: {ID: active, Key: key, Phase: domain.Phase("working")},
+			other:  {ID: other, Key: key, Phase: domain.Phase("working")},
+		},
+		listed: []domain.Run{{ID: active, Key: key, Phase: domain.Phase("working")}},
+		active: active,
+	}
+	proofs := &stubProofs{passed: map[int]bool{1: true}}
+	now := time.Unix(1000, 0)
+	runs := newPanelRuns(status.NewHandler(repo), "repo").withLive(key, proofs, func() time.Time { return now })
+	ctx := context.Background()
+	runPart := func(id string) string {
+		t.Helper()
+		card, err := runs.Get(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return card.Version.Run
+	}
+
+	base := runPart(active)
+	if proofs.calls != 1 {
+		t.Fatalf("proof reader called %d times for one Get, want 1", proofs.calls)
+	}
+
+	emptyCommit(t, dir, "two")
+	if got := runPart(active); got != base {
+		t.Errorf("run part changed inside the 1s cache window")
+	}
+	if proofs.calls != 1 {
+		t.Errorf("proof reader called %d times inside the cache window, want 1", proofs.calls)
+	}
+	now = now.Add(2 * time.Second)
+	afterCommit := runPart(active)
+	if afterCommit == base {
+		t.Errorf("run part did not change with the branch head")
+	}
+
+	proofs.passed = map[int]bool{1: true, 2: true}
+	now = now.Add(2 * time.Second)
+	afterProof := runPart(active)
+	if afterProof == afterCommit {
+		t.Errorf("run part did not change with the proofs of the active run")
+	}
+
+	// A run that is not the active one reads no proofs, so a proof change leaves its part alone.
+	calls := proofs.calls
+	otherBase := runPart(other)
+	proofs.passed = map[int]bool{1: false}
+	now = now.Add(2 * time.Second)
+	if got := runPart(other); got != otherBase {
+		t.Errorf("run part of an inactive run changed with the proofs")
+	}
+	if proofs.calls != calls {
+		t.Errorf("proof reader called for an inactive run")
+	}
+
+	// List skips the cache, the head and the proofs.
+	calls = proofs.calls
+	cards, err := runs.List(ctx)
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("List = %+v, %v", cards, err)
+	}
+	if proofs.calls != calls {
+		t.Errorf("List read the proofs")
+	}
+	if cards[0].Version.Run == afterProof {
+		t.Errorf("List run part carries the head and the proofs, want the status version only")
+	}
+}
+
+// newLiveTestRuns builds panelRuns over run a (active) and run b, with a fake head and the stub proofs.
+func newLiveTestRuns(t *testing.T, head func(ctx context.Context, dir string) (string, error), now *time.Time) (panelRuns, *fakeRunRepo) {
+	t.Helper()
+	key := domain.RunKey{Repo: "repo", Worktree: "/wt"}
+	repo := &fakeRunRepo{
+		runs: map[string]domain.Run{
+			"a": {ID: "a", Key: key, Phase: domain.Phase("working")},
+			"b": {ID: "b", Key: domain.RunKey{Repo: "repo", Worktree: "/other"}, Phase: domain.Phase("working")},
+		},
+		active: "a",
+	}
+	proofs := &stubProofs{passed: map[int]bool{1: true}}
+	runs := newPanelRuns(status.NewHandler(repo), "repo").withLive(key, proofs, func() time.Time { return *now })
+	runs.live.head = head
+	return runs, repo
+}
+
+func TestPanelLiveCacheErrors(t *testing.T) {
+	ctx := context.Background()
+	run := func(t *testing.T, runs panelRuns, id string) string {
+		t.Helper()
+		card, err := runs.Get(ctx, id)
+		if err != nil {
+			t.Error(err)
+		}
+		return card.Version.Run
+	}
+
+	t.Run("a failed head is not cached", func(t *testing.T) {
+		now := time.Unix(1000, 0)
+		fail := true
+		runs, _ := newLiveTestRuns(t, func(context.Context, string) (string, error) {
+			if fail {
+				return "", errors.New("git down")
+			}
+			return "h1", nil
+		}, &now)
+		failed := run(t, runs, "a")
+		fail = false
+		if got := run(t, runs, "a"); got == failed {
+			t.Errorf("the failed head stayed cached inside the TTL")
+		}
+	})
+
+	t.Run("a failed head keeps the last good head", func(t *testing.T) {
+		now := time.Unix(1000, 0)
+		fail := false
+		runs, _ := newLiveTestRuns(t, func(context.Context, string) (string, error) {
+			if fail {
+				return "", errors.New("git down")
+			}
+			return "h1", nil
+		}, &now)
+		good := run(t, runs, "a")
+		fail = true
+		now = now.Add(2 * time.Second)
+		if got := run(t, runs, "a"); got != good {
+			t.Errorf("run version flipped when the head read failed")
+		}
+	})
+
+	t.Run("a failed status keeps the last good proofs", func(t *testing.T) {
+		now := time.Unix(1000, 0)
+		runs, repo := newLiveTestRuns(t, func(context.Context, string) (string, error) { return "h1", nil }, &now)
+		good := run(t, runs, "a")
+		repo.activeErr = errors.New("state busy")
+		now = now.Add(2 * time.Second)
+		if got := run(t, runs, "a"); got != good {
+			t.Errorf("run version flipped when the status read failed")
+		}
+	})
+
+	t.Run("stale entries are pruned", func(t *testing.T) {
+		now := time.Unix(1000, 0)
+		runs, repo := newLiveTestRuns(t, func(context.Context, string) (string, error) { return "h1", nil }, &now)
+		for i := range 20 {
+			id := "x" + strconv.Itoa(i)
+			repo.runs[id] = domain.Run{ID: id, Key: domain.RunKey{Repo: "repo", Worktree: "/x"}, Phase: domain.Phase("working")}
+			run(t, runs, id)
+		}
+		now = now.Add(time.Hour)
+		run(t, runs, "a")
+		runs.live.mu.Lock()
+		n := len(runs.live.entries)
+		runs.live.mu.Unlock()
+		if n != 1 {
+			t.Errorf("%d entries kept after an hour, want 1", n)
+		}
+	})
+
+	t.Run("a slow head does not block another run", func(t *testing.T) {
+		now := time.Unix(1000, 0)
+		release := make(chan struct{})
+		runs, _ := newLiveTestRuns(t, func(_ context.Context, dir string) (string, error) {
+			if dir == "/wt" {
+				<-release
+			}
+			return "h1", nil
+		}, &now)
+		var slow sync.WaitGroup
+		slow.Add(1)
+		go func() { defer slow.Done(); run(t, runs, "a") }()
+		time.Sleep(50 * time.Millisecond)
+		done := make(chan struct{})
+		go func() { run(t, runs, "b"); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("a slow git head of one run held up another run")
+		}
+		close(release)
+		slow.Wait()
+	})
+
+	t.Run("a missing worktree gives an empty head that is cached", func(t *testing.T) {
+		now := time.Unix(1000, 0)
+		var heads int
+		missing := filepath.Join(t.TempDir(), "gone")
+		runs, _ := newLiveTestRuns(t, func(ctx context.Context, _ string) (string, error) {
+			heads++
+			return git.Head(ctx, missing)
+		}, &now)
+		first := run(t, runs, "a")
+		if want := paneldomain.Fingerprint("0", "", "1=true"); first != want {
+			t.Errorf("run part = %q, want the one of an empty head %q", first, want)
+		}
+		if got := run(t, runs, "a"); got != first {
+			t.Errorf("run part changed inside the TTL")
+		}
+		if heads != 1 {
+			t.Errorf("head read %d times inside the TTL, want 1", heads)
+		}
+	})
+
+	t.Run("parallel callers after expiry read once", func(t *testing.T) {
+		now := time.Unix(1000, 0)
+		var heads atomic.Int32
+		started := make(chan struct{}, 64)
+		release := make(chan struct{})
+		runs, repo := newLiveTestRuns(t, func(context.Context, string) (string, error) {
+			heads.Add(1)
+			started <- struct{}{}
+			<-release
+			return "h1", nil
+		}, &now)
+		runs.live.entries = map[string]liveEntry{"a": {at: now, head: "old"}}
+		now = now.Add(2 * time.Second)
+		const callers = 8
+		var wg sync.WaitGroup
+		for range callers {
+			wg.Add(1)
+			go func() { defer wg.Done(); run(t, runs, "a") }()
+		}
+		<-started
+		time.Sleep(50 * time.Millisecond)
+		close(release)
+		wg.Wait()
+		if got := heads.Load(); got != 1 {
+			t.Errorf("%d head reads for %d parallel callers, want 1", got, callers)
+		}
+		// Get looks the run up by id, so every Active call is a live status read.
+		if got := repo.activeCalls.Load(); got != 1 {
+			t.Errorf("%d status reads of the active run for %d parallel callers, want 1", got, callers)
+		}
+	})
 }
 
 func TestPanelServeHelpNamesPort(t *testing.T) {

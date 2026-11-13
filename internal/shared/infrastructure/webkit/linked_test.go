@@ -29,10 +29,30 @@ func TestVendoredChecksums(t *testing.T) {
 		}
 		seen[r[1]] = true
 	}
-	for _, f := range []string{"third_party/mermaid.min.js", "third_party/htmx.min.js", "third_party/idiomorph-ext.min.js"} {
+	for _, f := range []string{"third_party/mermaid.min.js", "third_party/htmx.min.js", "third_party/idiomorph-ext.min.js", "third_party/htmx-ext-sse.min.js"} {
 		if !seen[f] {
 			t.Errorf("%s has no sha256 in the notice", f)
 		}
+	}
+}
+
+func TestVendoredSseExtension(t *testing.T) {
+	const want = "98a46496de0c3605fbffdce9167ba427bdd9553184f83f149c261891a92c0136"
+	raw, err := os.ReadFile("third_party/htmx-ext-sse.min.js")
+	if err != nil {
+		t.Fatalf("read the vendored extension: %v", err)
+	}
+	sum := sha256.Sum256(raw)
+	if got := hex.EncodeToString(sum[:]); got != want {
+		t.Errorf("htmx-ext-sse: want sha256 %s, file is %s", want, got)
+	}
+	notice, err := os.ReadFile("NOTICE.md")
+	if err != nil {
+		t.Fatalf("read notice: %v", err)
+	}
+	row := "| `third_party/htmx-ext-sse.min.js` | htmx-ext-sse 2.2.4 | 0BSD | " + want + " |"
+	if !strings.Contains(string(notice), row) {
+		t.Errorf("notice has no row %q", row)
 	}
 }
 
@@ -44,7 +64,7 @@ func TestLinkedAssets(t *testing.T) {
 	url := regexp.MustCompile(`^/assets/([0-9a-f]{12})/([A-Za-z0-9._-]+)$`)
 
 	var hash string
-	scripts := map[string]string{links.Mermaid: "application/javascript", links.Htmx: "", links.Morph: "", links.Panel: ""}
+	scripts := map[string]string{links.Mermaid: "application/javascript", links.Htmx: "", links.Morph: "", links.Panel: "", links.Sse: ""}
 	for u := range scripts {
 		m := url.FindStringSubmatch(u)
 		if m == nil {
@@ -84,6 +104,23 @@ func TestLinkedAssets(t *testing.T) {
 	body, _, _ := Asset(hash, panelFile)
 	if !strings.Contains(string(body), "htmx:configRequest") {
 		t.Errorf("panel.js does not listen to htmx:configRequest")
+	}
+
+	for link, wantType := range map[string]string{links.Live: "text/css", links.Icon: "image/svg+xml"} {
+		m := url.FindStringSubmatch(link)
+		if m == nil || m[1] != hash {
+			t.Fatalf("link %q is not /assets/%s/<file>", link, hash)
+		}
+		body, ctype, ok := Asset(m[1], m[2])
+		if !ok || len(body) == 0 || !strings.HasPrefix(ctype, wantType) {
+			t.Errorf("Asset(%s) ok=%v type=%q, want %s", m[2], ok, ctype, wantType)
+		}
+		if wantType == "text/css" && !strings.Contains(string(body), `body[data-live="on"]`) {
+			t.Errorf("live.css has no live rule")
+		}
+		if wantType == "image/svg+xml" && !strings.Contains(string(body), "<svg") {
+			t.Errorf("icon.svg is not an svg")
+		}
 	}
 
 	denied := [][2]string{
