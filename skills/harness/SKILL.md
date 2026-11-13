@@ -91,7 +91,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - `spec-proof`: each criterion has its code, and its proof fails without the code.
    - `spec-scope`: each task changed only its owned files, with no missing or partial requirement and no scope creep.
    - `spec-text`: each changed doc sentence agrees with the code and with the other docs.
-   - `standards-rules`: the diff follows `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md` and the lint rules.
+   - `standards-rules`: the diff follows `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md`, the ADRs in `docs/adr/` and the lint rules.
    - `standards-judgement`: edge cases, error paths, leaks, dead code and code smells.
    - The worker does not change a value, a name or a limit that `plan.md` sets. When a fix needs one, the worker writes `open` with `plan conflict:` in the evidence. The lead takes each such row, and trims the fix or amends the plan.
    - The worker fixes each miss test first. The lead commits each fix with `git commit --fixup=<sha>`, rebases with autosquash, and runs `harness verify --commits <default branch>` again. Each other `open` check goes to a fix worker.
@@ -99,7 +99,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`. The command refuses a run folder with no `self-check.md` or no `Head: <sha>` line.
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
 5. `reviewing`: on entering `reviewing`, and after `harness run rework`, read `references/reviewing.md` and follow it.
-6. `shipping`: start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body Why, What and How. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run wait --pr <url>`, then `harness run report`, then `harness run done --pr <url>`.
+6. `shipping`: run `harness run learn` and follow `references/learning.md`, then start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body Why, What and How. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run wait --pr <url>`, then `harness run report`, then `harness run done --pr <url>`.
    - The turn may stop while the run waits on the merge. After a `resume` into `shipping`, run the wait again.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.

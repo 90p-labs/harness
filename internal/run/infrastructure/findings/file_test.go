@@ -2,6 +2,7 @@ package findings_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +44,20 @@ func TestReworkNeedsFindings(t *testing.T) {
 	t.Run("a missing file tells the lead to write it", func(t *testing.T) {
 		_, err := findings.File{}.Read(context.Background(), runIn(t, nil))
 		if err == nil || !strings.Contains(err.Error(), "write") || !strings.Contains(err.Error(), "findings.md") {
+			t.Fatalf("got %v", err)
+		}
+	})
+
+	t.Run("a missing file wraps ErrNoFindingsFile", func(t *testing.T) {
+		_, err := findings.File{}.Read(context.Background(), runIn(t, nil))
+		if !errors.Is(err, domain.ErrNoFindingsFile) {
+			t.Fatalf("got %v", err)
+		}
+	})
+
+	t.Run("a malformed file does not wrap ErrNoFindingsFile", func(t *testing.T) {
+		_, err := findings.File{}.Read(context.Background(), runIn(t, &bad))
+		if errors.Is(err, domain.ErrNoFindingsFile) {
 			t.Fatalf("got %v", err)
 		}
 	})

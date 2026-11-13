@@ -470,7 +470,7 @@ Later modules add a span for each run transition, hook and live check.
 - `hook.handle` has `harness.tool` on a tool hook and `harness.rule` on a deny.
 - `run.transition` has `harness.review.round`. A `request-rework` also has `harness.rework.class` and `harness.rework.severity`.
 - `tool.call` (Claude Code only) runs from `PreToolUse` to `PostToolUse`, `PostToolUseFailure` or `SessionEnd`. It has `harness.tool`, `harness.tool.kind`, `harness.tool.outcome` and `harness.session.id`.
-- `run.report` is the span of `harness run report`. No span carries command text, tool input, a response or a tool error text.
+- `run.report` is the span of `harness run report`. `run.learn` is the span of `harness run learn`. No span carries command text, tool input, a response or a tool error text.
 
 ### Run attributes on every span
 

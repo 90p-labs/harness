@@ -118,7 +118,7 @@ A healthy hour closes the run. A breach sends the run back to `planning` with th
 |---|---|
 | `/90p:harness <prompt>` | Start a run |
 | `/90p:harness status`, `approve`, `abandon` | Show the run, approve the plan, or abandon the run |
-| `harness run status`, `harness run report` | Print the phase, or the rework rounds, the stop blocks and the trace ID |
+| `harness run status`, `harness run report`, `harness run learn` | Print the phase, the rework rounds, the stop blocks and the trace ID, or the convention candidates |
 | `harness plan view` | Write the plan as an HTML page |
 | `harness verify` | Run the gates and the acceptance criteria |
 | `harness verify --commits main` | Check each commit of the branch |

@@ -250,6 +250,105 @@ func TestHarnessShippingPolicy(t *testing.T) {
 	}
 }
 
+const (
+	learningFile      = "skills/harness/references/learning.md"
+	learningRefText   = "references/learning.md"
+	learnCommand      = "harness run learn"
+	shippingItem      = "6. `shipping`"
+	reviewerFile      = "agents/reviewer.md"
+	adrDir            = "`docs/adr/`"
+	contextFile       = "`CONTEXT.md`"
+	standardsRulesRow = "- `standards-rules`:"
+	lensColumnHead    = "| File:line | Lens |"
+	lensCellText      = "`Lens` cell"
+	standardsLensHead = "## Lens Standards"
+	conventionsHeader = "`Conventions`"
+	writeOption       = "`Write`"
+	skipOption        = "`Skip`"
+	noDuplicatePhrase = "no duplicate"
+	verifyCommitsText = "harness verify --commits"
+)
+
+var (
+	learningHomes  = []string{"lint rule", "docs/adr/index.md", "CONTEXT.md` entry"}
+	learningFields = []string{"State the rule", "why it matters", "bad example", "good example", "files that follow it"}
+	learningSearch = "search `CONTEXT.md`, `docs/adr/` and the lint pack"
+)
+
+func TestHarnessSkillLearnStep(t *testing.T) {
+	skill, learning := repository.Read(t, skillFile), repository.Read(t, learningFile)
+
+	_, step, found := strings.Cut(skill, shippingItem)
+	if !found {
+		t.Fatalf("%s has no shipping item", skillFile)
+	}
+	step, _, _ = strings.Cut(step, "\n")
+	if learn, open := strings.Index(step, learnCommand), strings.Index(step, "`pr-open`"); learn < 0 || open < 0 || learn > open {
+		t.Errorf("%s: the shipping step must name %s (at %d) before pr-open (at %d)", skillFile, learnCommand, learn, open)
+	}
+	if !strings.Contains(step, learningRefText) {
+		t.Errorf("%s: the shipping step does not name %q", skillFile, learningRefText)
+	}
+
+	last := -1
+	for _, home := range learningHomes {
+		at := strings.Index(learning, home)
+		if at <= last {
+			t.Errorf("%s: the home %q is missing or out of order", learningFile, home)
+		}
+		last = max(last, at)
+	}
+	wants := []string{noDuplicatePhrase, learningSearch, conventionsHeader, writeOption, skipOption, verifyCommitsText, "`docs:`", "harness run start"}
+	wants = append(wants, learningFields...)
+	for _, tool := range shareddomain.QuestionTools {
+		wants = append(wants, tool.Name)
+	}
+	for _, want := range wants {
+		if !strings.Contains(learning, want) {
+			t.Errorf("%s does not name %q", learningFile, want)
+		}
+	}
+	if write, skip := strings.Index(learning, writeOption), strings.Index(learning, skipOption); write < 0 || skip < write {
+		t.Errorf("%s: the option Write must come before Skip", learningFile)
+	}
+	if strings.Contains(learning, repository.EmDash) || strings.ContainsFunc(learning, repository.IsEmoji) {
+		t.Errorf("%s has an em dash or an emoji", learningFile)
+	}
+}
+
+func TestConventionReadPath(t *testing.T) {
+	skill, reviewer, explorer, reviewing := repository.Read(t, skillFile), repository.Read(t, reviewerFile), repository.Read(t, explorerFile), repository.Read(t, reviewingRef)
+
+	_, lens, found := strings.Cut(reviewer, standardsLensHead)
+	if !found {
+		t.Fatalf("%s has no section %q", reviewerFile, standardsLensHead)
+	}
+	lens, _, _ = strings.Cut(lens, "\n## ")
+	_, row, found := strings.Cut(skill, standardsRulesRow)
+	if !found {
+		t.Fatalf("%s has no row %q", skillFile, standardsRulesRow)
+	}
+	row, _, _ = strings.Cut(row, "\n")
+	for _, want := range []string{adrDir, contextFile} {
+		if !strings.Contains(lens, want) {
+			t.Errorf("%s: the lens Standards does not name %s", reviewerFile, want)
+		}
+		if !strings.Contains(row, want) {
+			t.Errorf("%s: the standards-rules row does not name %s", skillFile, want)
+		}
+	}
+	for _, want := range []string{"docs/adr/", "CONTEXT.md"} {
+		if !strings.Contains(explorer, want) {
+			t.Errorf("%s does not name %q", explorerFile, want)
+		}
+	}
+	for _, want := range []string{lensColumnHead, lensCellText} {
+		if !strings.Contains(reviewing, want) {
+			t.Errorf("%s does not name %q", reviewingRef, want)
+		}
+	}
+}
+
 func TestHarnessSkillAmend(t *testing.T) {
 	skill := repository.Read(t, skillFile)
 	for _, want := range []string{
