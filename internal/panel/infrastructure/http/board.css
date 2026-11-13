@@ -9,6 +9,14 @@ body{overflow-x:clip}
 .task .tid .age{color:var(--text-3);font-size:11px;white-space:nowrap}
 .task .tid .rid{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .task .chips{min-width:0}
+/* The kit lifts the whole card on hover, so the whole card opens the run:
+   the title link stretches over the card. h3 stays unpositioned so its
+   line clamp does not clip the overlay. The PR chip sits above it. */
+.task{position:relative}
+.task h3 a::after{content:"";position:absolute;inset:0;border-radius:var(--r)}
+.task h3 a:focus-visible{outline:none}
+.task h3 a:focus-visible::after{box-shadow:0 0 0 2px var(--accent)}
+.task .chip.pr{position:relative;z-index:1}
 .chip{max-width:100%;min-width:0}
 .chip.pr{color:var(--accent);background:var(--accent-bg);border-color:color-mix(in oklch,var(--accent) 40%,var(--border))}
 .chip.pr:hover,.chip.pr:focus-visible{color:var(--accent);border-color:var(--accent)}

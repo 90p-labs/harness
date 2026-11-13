@@ -468,6 +468,36 @@ func TestBoardCard(t *testing.T) {
 	}
 }
 
+// TestBoardCardWholeClick holds the card a single target: the kit lifts the
+// whole card on hover, so the title link stretches over the card, and only
+// the PR chip stays above it as its own link.
+func TestBoardCardWholeClick(t *testing.T) {
+	r := parseRules(t, boardCSS)
+	want := []struct{ sel, prop, value string }{
+		{".task", "position", "relative"},
+		{".task h3 a::after", "content", `""`},
+		{".task h3 a::after", "position", "absolute"},
+		{".task h3 a::after", "inset", "0"},
+		{".task h3 a::after", "border-radius", "var(--r)"},
+		{".task h3 a:focus-visible", "outline", "none"},
+		{".task h3 a:focus-visible::after", "box-shadow", "0002pxvar(--accent)"},
+		{".task .chip.pr", "position", "relative"},
+		{".task .chip.pr", "z-index", "1"},
+	}
+	for _, w := range want {
+		if got := r[w.sel][w.prop]; got != w.value {
+			t.Errorf("%s { %s } = %q, want %q", w.sel, w.prop, got, w.value)
+		}
+	}
+	// A positioned element between the card and the link would shrink the
+	// stretched area to that element.
+	for _, sel := range []string{".task h3", ".task h3 a", ".task .tid", ".task .chips"} {
+		if p := r[sel]["position"]; p != "" {
+			t.Errorf("%s { position: %s } traps the stretched link", sel, p)
+		}
+	}
+}
+
 type rules map[string]map[string]string
 
 // parseRules reads a flat stylesheet into selector and declaration pairs.
