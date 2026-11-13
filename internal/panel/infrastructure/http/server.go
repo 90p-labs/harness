@@ -39,10 +39,9 @@ const (
 )
 
 // Config holds what the server needs: the two queries, the signal source of
-// the event stream, the clock of the card age and the identity it reports.
+// the event stream, the clock of the card age and the version it reports.
 type Config struct {
 	Version string
-	Repo    string
 	Board   board.Handler
 	Page    page.Handler
 	Signals domain.Signals
@@ -265,7 +264,7 @@ func (s *Server) asset(w nethttp.ResponseWriter, r *nethttp.Request) {
 func (s *Server) healthz(w nethttp.ResponseWriter, _ *nethttp.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(map[string]any{"version": s.cfg.Version, "repo": s.cfg.Repo, "pid": os.Getpid()})
+	_ = json.NewEncoder(w).Encode(map[string]any{"version": s.cfg.Version, "pid": os.Getpid()})
 }
 
 func writeHTML(w nethttp.ResponseWriter, body []byte) {

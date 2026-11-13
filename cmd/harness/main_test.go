@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,6 +29,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	guarddomain "github.com/90p-labs/harness/internal/guard/domain"
+	panelprocess "github.com/90p-labs/harness/internal/panel/infrastructure/process"
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/run/ui/approvalplugin"
@@ -42,6 +45,9 @@ const (
 	telemetryPrefix    = "telemetry: "
 	harnessEnvPrefix   = "HARNESS_"
 	envNoBrowser       = "HARNESS_NO_BROWSER"
+	// envHome is the user folder of the panel. clearHarnessEnv keeps it: a blank
+	// value would send a panel test to the real ~/.harness.
+	envHome = "HARNESS_HOME"
 )
 
 func clearOTLPEnv(t *testing.T) {
@@ -281,7 +287,7 @@ func clearHarnessEnv(t *testing.T) {
 	t.Helper()
 	clearOTLPEnv(t)
 	for _, entry := range os.Environ() {
-		if name, _, _ := strings.Cut(entry, "="); strings.HasPrefix(name, harnessEnvPrefix) && name != envNoBrowser {
+		if name, _, _ := strings.Cut(entry, "="); strings.HasPrefix(name, harnessEnvPrefix) && name != envNoBrowser && name != envHome {
 			t.Setenv(name, "")
 		}
 	}
@@ -2146,11 +2152,64 @@ func TestGuardMCPBash(t *testing.T) {
 // clearHarnessEnv blanks every HARNESS_ variable, so the marker has another prefix.
 const panelChildEnv = "PANEL_TEST_CHILD"
 
+// panelChildVersionEnv sets the version of that child.
+const panelChildVersionEnv = "PANEL_TEST_VERSION"
+
+// legacyChildEnv makes the test binary a panel of the old layout. Its value is
+// the folder that holds the lock and panel.json.
+const legacyChildEnv = "PANEL_TEST_LEGACY"
+
+// legacyChild holds the lock of dir, answers /healthz with its pid and a repo,
+// publishes panel.json with a repo field, and exits on SIGTERM.
+func legacyChild(dir string) {
+	proc := panelprocess.New(panelprocess.Config{Dir: dir})
+	claim, err := proc.Claim()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": "0.0.1", "pid": os.Getpid(), "repo": "legacy"})
+	})
+	go func() { _ = http.Serve(ln, mux) }()
+	body, _ := json.Marshal(map[string]any{
+		"pid": os.Getpid(), "port": ln.Addr().(*net.TCPAddr).Port, "version": "0.0.1", "repo": "legacy",
+	})
+	if err := os.WriteFile(filepath.Join(dir, "panel.json"), body, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	term := make(chan os.Signal, 1)
+	signal.Notify(term, syscall.SIGTERM)
+	fmt.Println("ready")
+	<-term
+	_ = claim.Release()
+	os.Exit(0)
+}
+
 func TestMain(m *testing.M) {
+	if dir := os.Getenv(legacyChildEnv); dir != "" {
+		legacyChild(dir)
+	}
 	if os.Getenv(panelChildEnv) != "" {
+		if v := os.Getenv(panelChildVersionEnv); v != "" {
+			version = v // execute runs as testBuildVersion, so a child must match it
+		}
 		main() // the child runs `harness panel serve` and exits
 	}
 	os.Setenv(envNoBrowser, "1")
+	// Backstop: a test that starts a panel and forgets HARNESS_HOME still stays out of ~/.harness.
+	homeDir, err := os.MkdirTemp("", "harness-home-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv(envHome, homeDir)
 	// Keep the Claude plugins of the machine out of the tests: an empty config folder has no plugin.
 	configDir, err := os.MkdirTemp("", "claude-config-")
 	if err != nil {
@@ -2159,6 +2218,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("CLAUDE_CONFIG_DIR", configDir)
 	code := m.Run()
 	os.RemoveAll(configDir)
+	os.RemoveAll(homeDir)
 	os.Exit(code)
 }
 

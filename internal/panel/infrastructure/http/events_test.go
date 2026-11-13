@@ -100,7 +100,6 @@ func eventsServer(t *testing.T, sigs domain.Signals, logs *syncBuf, tweak func(*
 	runs := fakeRuns{cards: cards}
 	cfg := Config{
 		Version: "9.9.9",
-		Repo:    "/work/repo",
 		Board:   board.NewHandler(runs),
 		Page:    page.NewHandler(runs, &fakePages{}),
 		Signals: sigs,

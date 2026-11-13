@@ -26,15 +26,13 @@ const (
 
 // Config wires a Process.
 type Config struct {
-	// Dir is the state dir, <git common dir>/.harness.
+	// Dir is the state dir: the user folder from UserDir.
 	Dir string
 	// Command is the argv to spawn, for example [exe, "panel", "serve"]. A
 	// port above 0 appends "--port <n>".
 	Command []string
 	// WorkDir is the working directory of the spawned server.
 	WorkDir string
-	// Repo is the repo identity the health answer must report.
-	Repo string
 	// Env adds variables to the environment of the spawned server.
 	Env []string
 	// Client probes /healthz. Nil uses a client with a 2 second timeout.
@@ -47,7 +45,6 @@ type Process struct {
 	dir     string
 	command []string
 	workDir string
-	repo    string
 	env     []string
 	client  *http.Client
 
@@ -77,7 +74,6 @@ func New(cfg Config) *Process {
 		dir:       cfg.Dir,
 		command:   cfg.Command,
 		workDir:   cfg.WorkDir,
-		repo:      cfg.Repo,
 		env:       cfg.Env,
 		client:    client,
 		ClaimWait: time.Second,
@@ -88,10 +84,10 @@ func New(cfg Config) *Process {
 }
 
 // Status returns the running panel. It is running only when the lock is held
-// and /healthz answers the repo and the pid of panel.json. Anything else
+// and /healthz answers the pid of panel.json, whatever repo asks. Anything else
 // returns domain.ErrStopped.
 func (p *Process) Status(ctx context.Context) (domain.Instance, error) {
-	raw, err := os.ReadFile(filepath.Join(p.dir, stateFile))
+	raw, err := os.ReadFile(filepath.Join(p.dir, StateFile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return domain.Instance{}, domain.ErrStopped
@@ -109,19 +105,18 @@ func (p *Process) Status(ctx context.Context) (domain.Instance, error) {
 	if free {
 		return domain.Instance{}, domain.ErrStopped
 	}
-	if st.Repo != p.repo || !p.healthy(ctx, st) {
+	if !p.healthy(ctx, st) {
 		return domain.Instance{}, domain.ErrStopped
 	}
 	return domain.Instance{
 		PID:     st.PID,
 		Port:    st.Port,
 		URL:     fmt.Sprintf("http://127.0.0.1:%d/", st.Port),
-		Repo:    st.Repo,
 		Version: st.Version,
 	}, nil
 }
 
-// healthy reports whether /healthz on the port names the repo and pid of st.
+// healthy reports whether /healthz on the port names the pid of st.
 func (p *Process) healthy(ctx context.Context, st state) bool {
 	url := fmt.Sprintf("http://127.0.0.1:%d/healthz", st.Port)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -137,13 +132,12 @@ func (p *Process) healthy(ctx context.Context, st state) bool {
 		return false
 	}
 	var h struct {
-		Repo string `json:"repo"`
-		PID  int    `json:"pid"`
+		PID int `json:"pid"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, healthLimit)).Decode(&h); err != nil {
 		return false
 	}
-	return h.Repo == st.Repo && h.PID == st.PID
+	return h.PID == st.PID
 }
 
 // Start runs the panel in the background. A running panel returns nil with no
@@ -202,7 +196,7 @@ func (p *Process) spawn(port int) (int64, <-chan struct{}, error) {
 	if err := os.MkdirAll(p.dir, dirMode); err != nil {
 		return 0, nil, fmt.Errorf("create panel state dir: %w", err)
 	}
-	log, err := os.OpenFile(filepath.Join(p.dir, logFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, fileMode)
+	log, err := os.OpenFile(filepath.Join(p.dir, LogFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, fileMode)
 	if err != nil {
 		return 0, nil, fmt.Errorf("open panel.log: %w", err)
 	}
@@ -217,7 +211,7 @@ func (p *Process) spawn(port int) (int64, <-chan struct{}, error) {
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = p.workDir
-	cmd.Env = append(os.Environ(), p.env...)
+	cmd.Env = spawnEnv(os.Environ(), p.env)
 	cmd.Stdout, cmd.Stderr = log, log
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
@@ -231,9 +225,32 @@ func (p *Process) spawn(port int) (int64, <-chan struct{}, error) {
 	return offset, exited, nil
 }
 
+// locationVars mirrors git.locationVars in internal/shared/infrastructure/git/git.go: the variables that
+// point git at one repo. The panel serves every repo of the user, so the child must not inherit them.
+var locationVars = []string{
+	"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_INDEX_FILE", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+}
+
+// spawnEnv returns environ without the git location variables, followed by extra.
+// It matches on the "KEY=" prefix, so GIT_DIR_X stays.
+func spawnEnv(environ, extra []string) []string {
+	out := make([]string, 0, len(environ)+len(extra))
+next:
+	for _, kv := range environ {
+		for _, name := range locationVars {
+			if strings.HasPrefix(kv, name+"=") {
+				continue next
+			}
+		}
+		out = append(out, kv)
+	}
+	return append(out, extra...)
+}
+
 // logTail returns the last lines that the child wrote to panel.log.
 func (p *Process) logTail(offset int64) string {
-	raw, err := os.ReadFile(filepath.Join(p.dir, logFile))
+	raw, err := os.ReadFile(filepath.Join(p.dir, LogFile))
 	if err != nil || int64(len(raw)) < offset {
 		return "(no panel.log)"
 	}
@@ -294,13 +311,13 @@ func (p *Process) removeStale() error {
 		return err
 	}
 	if !free {
-		if _, err := os.Stat(filepath.Join(p.dir, stateFile)); os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(p.dir, StateFile)); os.IsNotExist(err) {
 			// serve holds the lock and has not published panel.json yet
 			return errors.New("panel is starting; try again")
 		}
 		return errors.New("panel lock is held by a process that is not a verified panel")
 	}
-	if err := os.Remove(filepath.Join(p.dir, stateFile)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(filepath.Join(p.dir, StateFile)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove stale panel.json: %w", err)
 	}
 	return nil

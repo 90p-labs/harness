@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"html"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -18,6 +20,7 @@ import (
 	"time"
 
 	paneldomain "github.com/90p-labs/harness/internal/panel/domain"
+	"github.com/90p-labs/harness/internal/panel/infrastructure/registry"
 	planmodule "github.com/90p-labs/harness/internal/plan"
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
@@ -66,11 +69,10 @@ func panelGet(t *testing.T, url, host string) (int, string) {
 
 func TestPanelServe(t *testing.T) {
 	clearHarnessEnv(t)
+	home := t.TempDir()
+	t.Setenv(envHome, home)
 	repoDir := initRepo(t)
-	wantRepo, _, err := git.RepoKey(context.Background(), repoDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	wantKey := repoKeyOf(t, repoDir)
 	const prompt = "Add the login page"
 	if code, _, stderr := execute(t, commandRun, "start", prompt); code != exitOK {
 		t.Fatalf("start: code = %d, stderr = %q", code, stderr)
@@ -110,10 +112,13 @@ func TestPanelServe(t *testing.T) {
 	if status, body := panelGet(t, url+"healthz", ""); status != http.StatusOK || !strings.Contains(body, testBuildVersion) {
 		t.Errorf("healthz: status = %d, body = %q", status, body)
 	} else {
-		var health struct{ Repo string }
-		if err := json.Unmarshal([]byte(body), &health); err != nil || health.Repo != wantRepo {
-			t.Errorf("healthz repo = %q (%v), want the repo key %q", health.Repo, err, wantRepo)
+		var health map[string]any
+		if err := json.Unmarshal([]byte(body), &health); err != nil || health["repo"] != nil {
+			t.Errorf("healthz = %q (%v), want no repo field", body, err)
 		}
+	}
+	if repos, err := registry.New(home, nil).List(context.Background()); err != nil || len(repos) != 1 || repos[0].Key != wantKey {
+		t.Errorf("serve registered %+v (%v), want the repo %s", repos, err, wantKey)
 	}
 	if status, _ := panelGet(t, url+"runs/no-such-run", ""); status != http.StatusNotFound {
 		t.Errorf("unknown run: status = %d, want 404", status)
@@ -183,7 +188,7 @@ func TestPanelPagesDeletedWorktreeShowsProblems(t *testing.T) {
 	repo := &fakeRunRepo{runs: map[string]domain.Run{id: {ID: id, Key: domain.RunKey{Repo: "repo", Worktree: gone}, Phase: domain.Phase("working")}}}
 	pages := newPanelPages(status.NewHandler(repo), key,
 		planmodule.NewPages(noProofs{}, func(context.Context) (string, error) { return "", nil }))
-	served := paneldomain.Served{Version: "p.r", Base: "/runs/" + id + "/regions/"}
+	served := paneldomain.Served{Version: "p.r", Base: "/repos/" + testRepoKey + "/runs/" + id + "/regions/"}
 
 	card := paneldomain.Card{ID: id, Phase: "working", Worktree: gone}
 	for _, region := range []string{"", "problems"} {
@@ -213,7 +218,7 @@ func TestPanelPagesDeletedWorktreeOfActiveRun(t *testing.T) {
 	}
 	pages := newPanelPages(status.NewHandler(repo), key,
 		planmodule.NewPages(noProofs{}, func(context.Context) (string, error) { return "", nil }))
-	served := paneldomain.Served{Version: "p.r", Base: "/runs/" + id + "/regions/"}
+	served := paneldomain.Served{Version: "p.r", Base: "/repos/" + testRepoKey + "/runs/" + id + "/regions/"}
 	card := paneldomain.Card{ID: id, Phase: "working", Worktree: gone}
 	for _, region := range []string{"", "problems"} {
 		out, err := pages.render(context.Background(), card, region, served)
@@ -245,7 +250,7 @@ func TestPanelServedHome(t *testing.T) {
 	pages := newPanelPages(status.NewHandler(repo), domain.RunKey{Repo: "repo", Worktree: dir},
 		planmodule.NewPages(noProofs{}, func(context.Context) (string, error) { return "", nil }))
 	card := paneldomain.Card{ID: id, Phase: "working", Worktree: dir}
-	served := paneldomain.Served{Version: "p.r", Base: "/runs/" + id + "/regions/"}
+	served := paneldomain.Served{Version: "p.r", Base: "/repos/" + testRepoKey + "/runs/" + id + "/regions/"}
 	out, err := pages.Page(context.Background(), card, served)
 	if err != nil {
 		t.Fatalf("Page: %v", err)
@@ -275,13 +280,13 @@ func TestPanelPagesServedRunPageCarriesEvents(t *testing.T) {
 	pages := newPanelPages(status.NewHandler(repo), domain.RunKey{Repo: "repo", Worktree: dir},
 		planmodule.NewPages(noProofs{}, func(context.Context) (string, error) { return "", nil }))
 	card := paneldomain.Card{ID: id, Phase: "working", Worktree: dir}
-	events := "/events?run=" + id
-	served := paneldomain.Served{Version: "p.r", Base: "/runs/" + id + "/regions/", Events: events}
+	events := "/events?repo=" + testRepoKey + "&run=" + id
+	served := paneldomain.Served{Version: "p.r", Base: "/repos/" + testRepoKey + "/runs/" + id + "/regions/", Events: events}
 	out, err := pages.Page(context.Background(), card, served)
 	if err != nil {
 		t.Fatalf("Page: %v", err)
 	}
-	if !strings.Contains(string(out), `sse-connect="`+events+`"`) {
+	if !strings.Contains(string(out), `sse-connect="`+html.EscapeString(events)+`"`) {
 		t.Errorf("served run page lacks sse-connect to %s", events)
 	}
 }
@@ -317,7 +322,7 @@ func TestPanelPagesActiveRunErrorSurfaces(t *testing.T) {
 	pages := newPanelPages(status.NewHandler(repo), domain.RunKey{Repo: "repo", Worktree: dir},
 		planmodule.NewPages(noProofs{}, func(context.Context) (string, error) { return "", nil }))
 	card := paneldomain.Card{ID: id, Phase: "working", Worktree: dir}
-	served := paneldomain.Served{Version: "p.r", Base: "/runs/" + id + "/regions/"}
+	served := paneldomain.Served{Version: "p.r", Base: "/repos/" + testRepoKey + "/runs/" + id + "/regions/"}
 	if _, err := pages.render(context.Background(), card, "problems", served); !errors.Is(err, boom) {
 		t.Errorf("render: err = %v, want the status error", err)
 	}
@@ -344,7 +349,7 @@ func TestPanelCardBranchNeedsCleanParse(t *testing.T) {
 			if err := os.WriteFile(planPath(dir, id), []byte(tc.text), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			card := panelCard(status.Status{ID: id, Worktree: dir, Phase: domain.Phase("working")})
+			card := buildCard(status.Status{ID: id, Worktree: dir, Phase: domain.Phase("working")}, nil)
 			if card.Branch != tc.want {
 				t.Errorf("branch = %q, want %q", card.Branch, tc.want)
 			}
@@ -740,12 +745,249 @@ func TestPanelServeHelpNamesPort(t *testing.T) {
 	}
 }
 
+func repoKeyOf(t *testing.T, dir string) string {
+	t.Helper()
+	commonDir, err := git.CommonDir(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return paneldomain.RepoKey(commonDir)
+}
+
+// startLegacyPanel runs a panel as the old layout did: its lock, panel.json
+// with a repo field and a healthz in <common dir>/.harness. It returns the
+// folder and a channel that closes when the process has exited.
+func startLegacyPanel(t *testing.T, repoDir string) (dir string, exited <-chan struct{}) {
+	t.Helper()
+	dir = filepath.Join(repoDir, ".git", ".harness")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), legacyChildEnv+"="+dir, panelChildEnv+"=")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	t.Cleanup(func() { // the child is ours: stop it when a test failed early
+		select {
+		case <-done:
+		default:
+			_ = cmd.Process.Kill()
+			<-done
+		}
+	})
+	line := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 16)
+		n, _ := stdout.Read(buf)
+		line <- string(buf[:n])
+	}()
+	select {
+	case got := <-line:
+		if !strings.HasPrefix(got, "ready") {
+			t.Fatalf("legacy panel said %q, want ready", got)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("legacy panel did not start")
+	}
+	return dir, done
+}
+
+func waitExit(t *testing.T, exited <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-exited:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("%s did not exit", what)
+	}
+}
+
+// testRepoKey is a fixture repo key in the form of the repo routes.
+const testRepoKey = "0123456789ab"
+
+func TestPanelUserState(t *testing.T) {
+	clearHarnessEnv(t)
+	home := filepath.Join(t.TempDir(), "user")
+	t.Setenv(envHome, home)
+	t.Setenv(panelChildEnv, "1")
+	t.Setenv(panelChildVersionEnv, testBuildVersion)
+	first := initRepo(t)
+	t.Cleanup(func() { execute(t, "panel", "stop") })
+
+	code, started, stderr := execute(t, "panel", "start")
+	m := panelURLLine.FindStringSubmatch(started)
+	if code != exitOK || m == nil {
+		t.Fatalf("start: code = %d, stdout = %q, stderr = %q", code, started, stderr)
+	}
+	if info, err := os.Stat(home); err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("user dir: %v, mode %v, want 0700", err, info)
+	}
+	for _, name := range []string{"panel.json", "panel.lock", "panel.log"} {
+		info, err := os.Stat(filepath.Join(home, name))
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Errorf("%s: %v, %v, want a 0600 file in the user dir", name, err, info)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(first, ".git", ".harness", "panel.json")); !os.IsNotExist(err) {
+		t.Errorf("panel.json in the repo: %v, want none", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(home, "panel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state map[string]any
+	if err := json.Unmarshal(raw, &state); err != nil || state["repo"] != nil {
+		t.Errorf("panel.json = %s (%v), want no repo field", raw, err)
+	}
+	repos, err := registry.New(home, nil).List(context.Background())
+	if err != nil || len(repos) != 1 || repos[0].Key != repoKeyOf(t, first) {
+		t.Fatalf("registry after start = %+v (%v), want the repo %s", repos, err, repoKeyOf(t, first))
+	}
+
+	// Another repo sees the same panel and registers beside the first.
+	second := initRepo(t)
+	if code, stdout, _ := execute(t, "panel", "status"); code != exitOK || !strings.HasPrefix(stdout, "panel: "+m[1]+" pid ") {
+		t.Fatalf("status from another repo: code = %d, stdout = %q", code, stdout)
+	}
+	if code, again, _ := execute(t, "panel", "start"); code != exitOK || again != started {
+		t.Fatalf("start from another repo: code = %d, stdout = %q, want %q", code, again, started)
+	}
+	repos, err = registry.New(home, nil).List(context.Background())
+	if err != nil || len(repos) != 2 {
+		t.Fatalf("registry after the second start = %+v (%v), want 2 repos", repos, err)
+	}
+	if got := repoKeyOf(t, second); repos[0].Key != got {
+		t.Errorf("newest repo = %s, want %s", repos[0].Key, got)
+	}
+
+	// Status and stop from a repo that is not registered leave the registry alone.
+	third := initRepo(t)
+	if code, _, _ := execute(t, "panel", "status"); code != exitOK {
+		t.Fatalf("status from the third repo: code = %d", code)
+	}
+	repos, err = registry.New(home, nil).List(context.Background())
+	if err != nil || len(repos) != 2 {
+		t.Fatalf("registry after status = %+v (%v), want 2 repos", repos, err)
+	}
+	for _, r := range repos {
+		if r.Key == repoKeyOf(t, third) {
+			t.Errorf("status registered %s", r.Key)
+		}
+	}
+	execute(t, "panel", "stop")
+	repos, err = registry.New(home, nil).List(context.Background())
+	if err != nil || len(repos) != 2 {
+		t.Fatalf("registry after stop = %+v (%v), want 2 repos", repos, err)
+	}
+	for _, r := range repos {
+		if r.Key == repoKeyOf(t, third) {
+			t.Errorf("stop registered %s", r.Key)
+		}
+	}
+
+}
+
+func TestPanelStartOtherVersion(t *testing.T) {
+	clearHarnessEnv(t)
+	t.Setenv(envHome, t.TempDir())
+	t.Setenv(panelChildEnv, "1")
+	t.Setenv(panelChildVersionEnv, "0.0.1-old") // execute runs as testBuildVersion
+	initRepo(t)
+	t.Cleanup(func() { execute(t, "panel", "stop") })
+
+	code, started, stderr := execute(t, "panel", "start")
+	m := panelURLLine.FindStringSubmatch(started)
+	if code != exitOK || m == nil {
+		t.Fatalf("start: code = %d, stdout = %q, stderr = %q", code, started, stderr)
+	}
+	code, other, _ := execute(t, "panel", "start")
+	want := "panel: running version 0.0.1-old, run harness panel stop to switch to " + testBuildVersion + "\npanel: " + m[1] + "\n"
+	if code != exitOK || other != want {
+		t.Fatalf("second start: code = %d, stdout = %q, want %q", code, other, want)
+	}
+
+	// A start that reuses the panel of another version still registers its repo.
+	second := initRepo(t)
+	if code, out, _ := execute(t, "panel", "start"); code != exitOK || out != want {
+		t.Fatalf("start from another repo: code = %d, stdout = %q, want %q", code, out, want)
+	}
+	repos, err := registry.New(os.Getenv(envHome), nil).List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range repos {
+		found = found || r.Key == repoKeyOf(t, second)
+	}
+	if !found {
+		t.Errorf("registry = %+v, want the repo %s", repos, repoKeyOf(t, second))
+	}
+}
+
+func TestPanelLegacyStop(t *testing.T) {
+	setup := func(t *testing.T) (repoDir string) {
+		clearHarnessEnv(t)
+		t.Setenv(envHome, filepath.Join(t.TempDir(), "user"))
+		t.Setenv(panelChildEnv, "1")
+		repoDir = initRepo(t)
+		t.Cleanup(func() { execute(t, "panel", "stop") })
+		return repoDir
+	}
+	legacyFiles := func(t *testing.T, dir string) {
+		t.Helper()
+		for _, name := range []string{"panel.json", "panel.lock", "panel.log"} {
+			if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+				t.Errorf("legacy %s after the stop: %v, want it removed", name, err)
+			}
+		}
+	}
+
+	t.Run("start stops a legacy panel", func(t *testing.T) {
+		repoDir := setup(t)
+		dir, exited := startLegacyPanel(t, repoDir)
+		if err := os.WriteFile(filepath.Join(dir, "panel.log"), []byte("old\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "state.db"), []byte("keep"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, stderr := execute(t, "panel", "start")
+		if code != exitOK || panelURLLine.FindStringSubmatch(stdout) == nil {
+			t.Fatalf("start: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+		waitExit(t, exited, "the legacy panel")
+		legacyFiles(t, dir)
+		if _, err := os.Stat(filepath.Join(dir, "state.db")); err != nil {
+			t.Errorf("state.db: %v, want it kept", err)
+		}
+	})
+
+	t.Run("stop stops a legacy panel", func(t *testing.T) {
+		repoDir := setup(t)
+		dir, exited := startLegacyPanel(t, repoDir)
+		if code, stdout, stderr := execute(t, "panel", "stop"); code != exitOK || stdout != "panel: stopped\n" {
+			t.Fatalf("stop: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+		waitExit(t, exited, "the legacy panel")
+		legacyFiles(t, dir)
+	})
+}
+
 func TestPanelLifecycle(t *testing.T) {
 	clearHarnessEnv(t)
+	home := t.TempDir()
+	t.Setenv(envHome, home)
 	t.Setenv(panelChildEnv, "1")
-	dir := initRepo(t)
+	t.Setenv(panelChildVersionEnv, testBuildVersion)
+	initRepo(t)
 	t.Cleanup(func() { execute(t, "panel", "stop") })
-	state := filepath.Join(dir, ".git", ".harness", "panel.json")
+	state := filepath.Join(home, "panel.json")
 
 	if code, stdout, _ := execute(t, "panel", "status"); code != exitRuntime || stdout != "panel: stopped\n" {
 		t.Fatalf("status before start: code = %d, stdout = %q", code, stdout)

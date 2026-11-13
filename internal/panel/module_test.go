@@ -68,7 +68,7 @@ func TestLivePhaseChange(t *testing.T) {
 		close(watcherStopped)
 	}
 	defer func() { watcherDone = func() {} }()
-	serve := NewServe("9.9.9", "/work/repo", runs, livePages{}, process.New(process.Config{Dir: t.TempDir(), Repo: "/work/repo"}))
+	serve := NewServe("9.9.9", runs, livePages{}, process.New(process.Config{Dir: t.TempDir()}))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	urls := make(chan string, 1)
@@ -140,11 +140,10 @@ func TestLivePhaseChange(t *testing.T) {
 }
 
 func TestServePublishes(t *testing.T) {
-	const repo = "/work/repo"
 	dir := t.TempDir()
-	proc := process.New(process.Config{Dir: dir, Repo: repo})
+	proc := process.New(process.Config{Dir: dir})
 	proc.ClaimWait = 50 * time.Millisecond
-	serve := NewServe("9.9.9", repo, &liveRuns{phase: "working"}, livePages{}, proc)
+	serve := NewServe("9.9.9", &liveRuns{phase: "working"}, livePages{}, proc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -165,7 +164,7 @@ func TestServePublishes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status after ready: %v", err)
 	}
-	if inst.PID != os.Getpid() || inst.URL != base || inst.Repo != repo || inst.Version != "9.9.9" {
+	if inst.PID != os.Getpid() || inst.URL != base || inst.Version != "9.9.9" {
 		t.Fatalf("instance = %+v, want pid %d url %s", inst, os.Getpid(), base)
 	}
 
@@ -180,7 +179,7 @@ func TestServePublishes(t *testing.T) {
 	}
 	err = json.NewDecoder(res.Body).Decode(&health)
 	res.Body.Close()
-	if err != nil || health.PID != os.Getpid() || health.Repo != repo {
+	if err != nil || health.PID != os.Getpid() || health.Repo != "" {
 		t.Fatalf("healthz = %+v, err = %v", health, err)
 	}
 
@@ -200,7 +199,7 @@ func TestServePublishes(t *testing.T) {
 	}
 
 	// a second serve fails on the held lock and does not touch the state
-	second := NewServe("9.9.9", repo, &liveRuns{phase: "working"}, livePages{}, proc)
+	second := NewServe("9.9.9", &liveRuns{phase: "working"}, livePages{}, proc)
 	err = second(context.Background(), 0, func(string) { t.Error("second serve listened") })
 	if !errors.Is(err, process.ErrClaimed) {
 		t.Fatalf("second serve = %v, want ErrClaimed", err)

@@ -14,6 +14,7 @@ const testURL = "http://127.0.0.1:4711/"
 
 type fakeLife struct {
 	running bool
+	version string
 	ports   []int
 	stops   int
 	startErr,
@@ -38,7 +39,7 @@ func (f *fakeLife) lifecycle() Lifecycle {
 			if !f.running {
 				return domain.Instance{}, domain.ErrStopped
 			}
-			return domain.Instance{PID: 42, Port: 4711, URL: testURL}, nil
+			return domain.Instance{PID: 42, Port: 4711, URL: testURL, Version: f.version}, nil
 		},
 	}
 }
@@ -87,6 +88,57 @@ func TestLifecycleCommands(t *testing.T) {
 		}
 		if f := start.Flags().Lookup("port"); f == nil || f.DefValue != "0" {
 			t.Fatalf("port flag = %+v, want default 0", f)
+		}
+	})
+
+	t.Run("start finds another version running", func(t *testing.T) {
+		f := &fakeLife{running: true, version: "1.0.0"}
+		life := f.lifecycle()
+		life.Version = "2.0.0"
+		out, err := runCommand(t, life, "start")
+		want := "panel: running version 1.0.0, run harness panel stop to switch to 2.0.0\npanel: " + testURL + "\n"
+		if err != nil || out != want || len(f.ports) != 0 {
+			t.Fatalf("out = %q, err = %v, ports = %v", out, err, f.ports)
+		}
+	})
+
+	t.Run("start prepares before the version check and status does not", func(t *testing.T) {
+		f := &fakeLife{running: true, version: "1.0.0"}
+		life := f.lifecycle()
+		life.Version = "2.0.0"
+		prepared := 0
+		life.Prepare = func(context.Context) error { prepared++; return nil }
+		out, err := runCommand(t, life, "start")
+		if err != nil || prepared != 1 || len(f.ports) != 0 || !strings.Contains(out, "running version 1.0.0") {
+			t.Fatalf("out = %q, err = %v, prepared = %d, ports = %v", out, err, prepared, f.ports)
+		}
+		if _, err := runCommand(t, life, "status"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runCommand(t, life, "stop"); err != nil {
+			t.Fatal(err)
+		}
+		if prepared != 1 {
+			t.Errorf("status or stop prepared: %d", prepared)
+		}
+	})
+
+	t.Run("start stops on a prepare error", func(t *testing.T) {
+		f := &fakeLife{}
+		life := f.lifecycle()
+		life.Prepare = func(context.Context) error { return errors.New("prep") }
+		if _, err := runCommand(t, life, "start"); err == nil || len(f.ports) != 0 {
+			t.Fatalf("err = %v, ports = %v", err, f.ports)
+		}
+	})
+
+	t.Run("start finds the same version running", func(t *testing.T) {
+		f := &fakeLife{running: true, version: "2.0.0"}
+		life := f.lifecycle()
+		life.Version = "2.0.0"
+		out, err := runCommand(t, life, "start")
+		if err != nil || out != "panel: "+testURL+"\n" {
+			t.Fatalf("out = %q, err = %v", out, err)
 		}
 	})
 

@@ -77,7 +77,6 @@ func newServerWith(t *testing.T, logs *bytes.Buffer, list []domain.Card) (*Serve
 	logger := slog.New(slog.NewTextHandler(logs, nil))
 	return New(Config{
 		Version: "9.9.9",
-		Repo:    "/work/repo",
 		Board:   board.NewHandler(runs),
 		Page:    page.NewHandler(runs, pages),
 		Logger:  logger,
@@ -150,7 +149,6 @@ func TestRoutes(t *testing.T) {
 		runs := fakeRuns{cards: []domain.Card{{ID: id, Title: longTitle, Phase: "working", Version: domain.Version{Plan: "p1", Run: "r1"}}}}
 		aged := New(Config{
 			Version: "9.9.9",
-			Repo:    "/work/repo",
 			Board:   board.NewHandler(runs),
 			Page:    page.NewHandler(runs, &fakePages{}),
 			Logger:  slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
@@ -270,7 +268,7 @@ func TestRoutes(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 			t.Fatal(err)
 		}
-		if rec.Code != 200 || got["version"] != "9.9.9" || got["repo"] != "/work/repo" || got["pid"] != float64(os.Getpid()) {
+		if rec.Code != 200 || got["version"] != "9.9.9" || got["repo"] != nil || got["pid"] != float64(os.Getpid()) {
 			t.Fatalf("status %d body %v", rec.Code, got)
 		}
 	})
