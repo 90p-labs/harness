@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"strings"
 	"testing"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -24,13 +25,29 @@ const (
 
 var errInjected = errors.New("injected")
 
-type fakeHasher struct{ err error }
+type fakeHasher struct {
+	err   error
+	calls int
+	// short drops this many hashes from the result.
+	short int
+	// extra appends this many hashes to the result.
+	extra int
+}
 
-func (f fakeHasher) InputHash(_ context.Context, _ string, gate domain.Gate) (string, error) {
-	if len(gate.Paths) == 0 {
-		return "tree-all", f.err
+func (f *fakeHasher) InputHashes(_ context.Context, _ string, gates []domain.Gate) ([]string, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
 	}
-	return "tree-" + gate.Paths[0], f.err
+	hashes := make([]string, 0, len(gates))
+	for _, gate := range gates {
+		// Distinct per gate, so a misaligned gate and hash index finds no record.
+		hashes = append(hashes, "tree-"+gate.ID+"-"+strings.Join(gate.Paths, ","))
+	}
+	for i := 0; i < f.extra; i++ {
+		hashes = append(hashes, "tree-extra")
+	}
+	return hashes[:max(0, len(hashes)-f.short)], nil
 }
 
 type fakeEvidence struct {
@@ -52,18 +69,13 @@ func TestEvidenceStatus(t *testing.T) {
 	spans := tracetest.NewSpanRecorder()
 	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)).Tracer("test")
 	records := fakeEvidence{records: map[string]domain.Evidence{
-		testGate + "@tree-all": {Result: domain.ResultPass},
-		lintGate + "@tree-old": {Result: domain.ResultPass},
-		lintGate + "@tree-src": {Result: domain.ResultFail},
+		testGate + "@tree-go-test-": {Result: domain.ResultPass},
+		lintGate + "@tree-lint-old": {Result: domain.ResultPass},
+		lintGate + "@tree-lint-src": {Result: domain.ResultFail},
 	}}
-	handler := evidencestatus.NewHandler(fakeHasher{}, records, tracer)
-	gates := []domain.Gate{
-		{ID: testGate},
-		{ID: lintGate, Paths: []string{"src"}},
-		{ID: typeGate},
-	}
+	handler := evidencestatus.NewHandler(&fakeHasher{}, records, tracer)
 
-	got, err := handler.Handle(context.Background(), evidencestatus.Query{Repo: repo, Dir: workDir, Gates: gates})
+	got, err := handler.Handle(context.Background(), evidencestatus.Query{Repo: repo, Dir: workDir, Gates: threeGates()})
 
 	if err != nil {
 		t.Fatal(err)
@@ -77,11 +89,67 @@ func TestEvidenceStatus(t *testing.T) {
 	}
 }
 
+func threeGates() []domain.Gate {
+	return []domain.Gate{
+		{ID: testGate},
+		{ID: lintGate, Paths: []string{"src"}},
+		{ID: typeGate},
+	}
+}
+
+func TestEvidenceStatusHashesOnce(t *testing.T) {
+	tracer := sdktrace.NewTracerProvider().Tracer("test")
+	hasher := &fakeHasher{}
+	records := fakeEvidence{records: map[string]domain.Evidence{
+		testGate + "@tree-go-test-":    {Result: domain.ResultPass},
+		lintGate + "@tree-lint-src":    {Result: domain.ResultFail},
+		typeGate + "@tree-types-stale": {Result: domain.ResultPass},
+	}}
+	handler := evidencestatus.NewHandler(hasher, records, tracer)
+
+	got, err := handler.Handle(context.Background(), evidencestatus.Query{Repo: repo, Dir: workDir, Gates: threeGates()})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasher.calls != 1 {
+		t.Fatalf("InputHashes calls = %d, want 1", hasher.calls)
+	}
+	want := map[string]domain.Result{testGate: domain.ResultPass, lintGate: domain.ResultFail}
+	if !maps.Equal(got, want) {
+		t.Fatalf("status = %v, want %v", got, want)
+	}
+}
+
+func TestEvidenceStatusHashCount(t *testing.T) {
+	tracer := sdktrace.NewTracerProvider().Tracer("test")
+	cases := map[string]struct {
+		hasher *fakeHasher
+		want   string
+	}{
+		"fewer hashes than gates":       {&fakeHasher{short: 1}, "hasher returned 2 hashes for 3 gates"},
+		"more hashes than gates":        {&fakeHasher{extra: 1}, "hasher returned 4 hashes for 3 gates"},
+		"no hashes at all":              {&fakeHasher{short: 5}, "hasher returned 0 hashes for 3 gates"},
+		"a short list and an extra one": {&fakeHasher{short: 2, extra: 1}, "hasher returned 2 hashes for 3 gates"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			handler := evidencestatus.NewHandler(tc.hasher, fakeEvidence{}, tracer)
+
+			_, err := handler.Handle(context.Background(), evidencestatus.Query{Repo: repo, Dir: workDir, Gates: threeGates()})
+
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestEvidenceStatusErrors(t *testing.T) {
 	tracer := sdktrace.NewTracerProvider().Tracer("test")
 	cases := map[string]evidencestatus.Handler{
-		"hasher": evidencestatus.NewHandler(fakeHasher{err: errInjected}, fakeEvidence{}, tracer),
-		"find":   evidencestatus.NewHandler(fakeHasher{}, fakeEvidence{err: errInjected}, tracer),
+		"hasher": evidencestatus.NewHandler(&fakeHasher{err: errInjected}, fakeEvidence{}, tracer),
+		"find":   evidencestatus.NewHandler(&fakeHasher{}, fakeEvidence{err: errInjected}, tracer),
 	}
 	for name, handler := range cases {
 		t.Run(name, func(t *testing.T) {

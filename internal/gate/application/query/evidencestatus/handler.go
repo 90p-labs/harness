@@ -2,6 +2,7 @@ package evidencestatus
 
 import (
 	"context"
+	"fmt"
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -18,12 +19,12 @@ type Query struct {
 }
 
 type Handler struct {
-	hasher   domain.Hasher
+	hasher   domain.BatchHasher
 	evidence domain.EvidenceRepository
 	tracer   trace.Tracer
 }
 
-func NewHandler(hasher domain.Hasher, evidence domain.EvidenceRepository, tracer trace.Tracer) Handler {
+func NewHandler(hasher domain.BatchHasher, evidence domain.EvidenceRepository, tracer trace.Tracer) Handler {
 	return Handler{hasher: hasher, evidence: evidence, tracer: tracer}
 }
 
@@ -37,13 +38,16 @@ func (h Handler) Handle(ctx context.Context, q Query) (statuses map[string]domai
 		}
 	}()
 
+	hashes, err := h.hasher.InputHashes(ctx, q.Dir, q.Gates)
+	if err != nil {
+		return nil, err
+	}
+	if len(hashes) != len(q.Gates) {
+		return nil, fmt.Errorf("hasher returned %d hashes for %d gates", len(hashes), len(q.Gates))
+	}
 	statuses = make(map[string]domain.Result, len(q.Gates))
-	for _, gate := range q.Gates {
-		hash, err := h.hasher.InputHash(ctx, q.Dir, gate)
-		if err != nil {
-			return nil, err
-		}
-		record, ok, err := h.evidence.Find(ctx, q.Repo, gate.ID, hash)
+	for i, gate := range q.Gates {
+		record, ok, err := h.evidence.Find(ctx, q.Repo, gate.ID, hashes[i])
 		if err != nil {
 			return nil, err
 		}
