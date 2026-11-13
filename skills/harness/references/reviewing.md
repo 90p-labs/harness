@@ -7,11 +7,12 @@ This is phase 5 of the harness loop, `reviewing`. Read it on entering `reviewing
 - Each reviewer returns every finding of its lens in one pass. The lead merges the lists into `findings.md` in the run folder, removes the duplicates and numbers them `F1`, `F2`.
 - `findings.md` holds one or more tables. The columns `ID`, `Severity`, `Verdict` and `Status` are required. The other columns are free. The severity is `blocker`, `major` or `minor`. The verdict is `real` or `not real`. The status is `open` or `closed`.
   ```text
-  | ID | Severity | Verdict | Status | Model | File:line | Finding |
-  |----|----------|---------|--------|-------|-----------|---------|
-  | F1 | major | real | open | opus | internal/a.go:12 | The error is dropped. |
-  | F2 | minor | not real | closed | sonnet | docs/b.md:3 | The name differs. |
+  | ID | Severity | Verdict | Status | Model | File:line | Lens | Finding |
+  |----|----------|---------|--------|-------|-----------|------|---------|
+  | F1 | major | real | open | opus | internal/a.go:12 | standards | The error is dropped. |
+  | F2 | minor | not real | closed | sonnet | docs/b.md:3 | spec | The name differs. |
   ```
+- The lead writes the `Lens` cell from the reviewer id prefix, `spec` or `standards`, like the `Model` cell. The learn step reads it to find the Standards findings.
 - The lead writes the `Model` cell: the model of the reviewer that raised the finding, copied from the `reviewer` role list. The final panel shrinks after a rework only when each reworked blocker or major finding has a `Model` cell naming a listed model. A missing or unlisted `Model` cell gives the full panel.
 - The verifier sets `Verdict`. On a light panel, the single reviewer sets it. The lead sets `Status` to `closed` after a fix and its re-review, or after a minor fixup.
 - The lead does not commit while a reviewer runs. The recorder reads `HEAD` when the reviewer stops.

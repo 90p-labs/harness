@@ -23,7 +23,7 @@ Check the diff against `plan.md`.
 
 ## Lens Standards
 
-Check the diff against the repository rules: `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md` and the lint rules. When a repository rule and your taste differ, the repository rule wins.
+Check the diff against the repository rules: `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md`, the ADRs in `docs/adr/` and the lint rules. When a repository rule and your taste differ, the repository rule wins.
 
 When the lead gives you the path of the `ddd` skill, read it. Check each changed file of a bounded context against its layer, its name and its dependencies.
 
