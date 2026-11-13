@@ -3,6 +3,8 @@ package domain
 import (
 	"slices"
 	"strings"
+
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
 const doneLimit = 20
@@ -18,10 +20,21 @@ type Card struct {
 	Version     Version
 }
 
+// Blocked reports whether the card is blocked.
+func (c Card) Blocked() bool {
+	return c.Phase == shareddomain.PhaseBlocked
+}
+
 type Column struct {
+	Key    string
 	Name   string
 	Phases []string
 	Cards  []Card
+}
+
+// NeedsYou reports whether the column is the approval column and holds a card.
+func (c Column) NeedsYou() bool {
+	return c.Key == "approval" && len(c.Cards) > 0
 }
 
 type Board struct {
@@ -31,12 +44,12 @@ type Board struct {
 
 func columns() []Column {
 	return []Column{
-		{Name: "Planning", Phases: []string{"planning"}},
-		{Name: "Approval", Phases: []string{"awaiting_approval"}},
-		{Name: "Working", Phases: []string{"working"}},
-		{Name: "Reviewing", Phases: []string{"reviewing"}},
-		{Name: "Shipping", Phases: []string{"shipping", "releasing", "observing"}},
-		{Name: "Done", Phases: []string{"done", "abandoned"}},
+		{Key: "planning", Name: "Planning", Phases: []string{shareddomain.PhasePlanning}},
+		{Key: "approval", Name: "Approval", Phases: []string{shareddomain.PhaseAwaitingApproval}},
+		{Key: "working", Name: "Working", Phases: []string{shareddomain.PhaseWorking}},
+		{Key: "reviewing", Name: "Reviewing", Phases: []string{shareddomain.PhaseReviewing}},
+		{Key: "shipping", Name: "Shipping", Phases: []string{shareddomain.PhaseShipping, shareddomain.PhaseReleasing, shareddomain.PhaseObserving}},
+		{Key: "done", Name: "Done", Phases: []string{shareddomain.PhaseDone, shareddomain.PhaseAbandoned}},
 	}
 }
 
@@ -46,7 +59,7 @@ func NewBoard(cards []Card) Board {
 	cols := columns()
 	for _, card := range cards {
 		phase := card.Phase
-		if phase == "blocked" {
+		if card.Blocked() {
 			phase = card.BlockedFrom
 		}
 		for i := range cols {
