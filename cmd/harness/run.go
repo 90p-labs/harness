@@ -155,7 +155,7 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	planView := planmodule.NewViewPlugin(worktree, proofs, defaultBranch, func(ctx context.Context) (int, error) {
 		current, _, err := activeRun(ctx, flags)
 		return current.LiveRound, err
-	})
+	}, panelOpener(cfg, lazyLifecycle(flags), os.Stderr))
 	var bus eventbus.Bus
 	session := livemodule.NewSessionPlugin(func(ctx context.Context) ([]string, error) {
 		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, state: state})
@@ -177,6 +177,7 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 	}
 	handlers.Models = runModels(env.cfg.Roles, install.DetectHosts(env.key.Worktree, os.Getenv))
 	handlers.IgnoreRuns = func() (bool, error) { return addRunsRule(env.key.Worktree) }
+	handlers.AfterStart = panelAutostart(env.cfg, lazyLifecycle(flags))
 	return handlers, env.state.Close, nil
 }
 

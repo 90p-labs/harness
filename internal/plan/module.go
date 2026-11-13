@@ -44,8 +44,8 @@ func NewReviewPlugin(worktree string, proofs domain.ProofReader, defaultBranch D
 
 var opener = browser.New()
 
-func NewViewPlugin(worktree string, proofs domain.ProofReader, defaultBranch DefaultBranch, liveRound viewplugin.LiveRound) shareddomain.Plugin {
-	return viewplugin.New(worktree, newView(newCheck(), worktree, proofs, defaultBranch).Handle, liveRound, opener.Open)
+func NewViewPlugin(worktree string, proofs domain.ProofReader, defaultBranch DefaultBranch, liveRound viewplugin.LiveRound, host viewplugin.HostOpen) shareddomain.Plugin {
+	return viewplugin.New(worktree, newView(newCheck(), worktree, proofs, defaultBranch).Handle, liveRound, opener.Open).WithHost(host)
 }
 
 func NewModule(bus shareddomain.Dispatcher, worktree string, proofs domain.ProofReader, defaultBranch DefaultBranch) cli.Handlers {

@@ -119,6 +119,9 @@ type Handlers struct {
 	Status     status.Handler
 	Report     report.Handler
 	Learn      learn.Handler
+	// AfterStart runs after a run starts and returns one line to print. An
+	// error only prints a warning and never fails the start. Nil skips it.
+	AfterStart func(ctx context.Context) (string, error)
 }
 
 type Connect func(ctx context.Context) (Handlers, func() error, error)
@@ -213,10 +216,31 @@ func startCommand(connect Connect) *cobra.Command {
 				if err := writeStatus(cmd.OutOrStdout(), current, lines); err != nil {
 					return err
 				}
+				if err := runAfterStart(ctx, cmd, h); err != nil {
+					return err
+				}
 				return printRepeatClasses(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), h)
 			})
 		},
 	}
+}
+
+// runAfterStart prints the line of the autostart, or a warning. Only a failed
+// write fails the command.
+func runAfterStart(ctx context.Context, cmd *cobra.Command, h Handlers) error {
+	if h.AfterStart == nil {
+		return nil
+	}
+	line, err := h.AfterStart(ctx)
+	if err != nil {
+		_, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "panel: start failed: %v\n", err)
+		return writeErr
+	}
+	if line == "" {
+		return nil
+	}
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), line)
+	return err
 }
 
 func statusCommand(connect Connect) *cobra.Command {

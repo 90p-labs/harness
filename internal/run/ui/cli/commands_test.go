@@ -536,6 +536,76 @@ func TestStartPrintsModels(t *testing.T) {
 
 const gitignoreLine = "gitignore: added .harness/runs/\n"
 
+func startWithAfter(store *reportStore, after func(context.Context) (string, error)) (stdout, stderr string, err error) {
+	now := time.Date(2026, 11, 10, 8, 20, 0, 0, time.UTC)
+	connect := func(context.Context) (cli.Handlers, func() error, error) {
+		flow := transition.NewFlow(store, silentHooks{}, passingGate{}, nil, domain.Policy{}, func() time.Time { return now }, noop.NewTracerProvider().Tracer("test"), noTrace{})
+		return cli.Handlers{
+			Key:        reportKey,
+			Start:      start.NewHandler(store, flow, func() time.Time { return now }),
+			Status:     status.NewHandler(store),
+			Report:     report.NewHandler(store, store, func() time.Time { return now }, func(id string) string { return "trace-of-" + id }, noop.NewTracerProvider().Tracer("test")),
+			AfterStart: after,
+		}, func() error { return nil }, nil
+	}
+	cmd := cli.NewCommand(connect)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"start", "add login"})
+	err = cmd.ExecuteContext(context.Background())
+	return out.String(), errOut.String(), err
+}
+
+func TestAfterStart(t *testing.T) {
+	t.Run("the panel line prints after the status", func(t *testing.T) {
+		out, errOut, err := startWithAfter(&reportStore{}, func(context.Context) (string, error) {
+			return "panel: http://127.0.0.1:4100/", nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, "panel: http://127.0.0.1:4100/\n") || errOut != "" {
+			t.Fatalf("stdout:\n%s\nstderr:\n%s\nwant the panel line on stdout and no warning", out, errOut)
+		}
+	})
+
+	t.Run("a failure warns and the run still starts", func(t *testing.T) {
+		store := &reportStore{}
+		out, errOut, err := startWithAfter(store, func(context.Context) (string, error) {
+			return "", errors.New("port busy")
+		})
+		if err != nil {
+			t.Fatalf("err = %v, want the start to succeed", err)
+		}
+		if store.run == nil || strings.Contains(out, "panel:") {
+			t.Fatalf("run = %v, stdout:\n%s\nwant a started run and no panel line", store.run, out)
+		}
+		if !strings.Contains(errOut, "panel: start failed: port busy") {
+			t.Fatalf("stderr %q, want the warning", errOut)
+		}
+	})
+
+	t.Run("a nil handler prints nothing", func(t *testing.T) {
+		out, errOut, err := startWithAfter(&reportStore{}, nil)
+		if err != nil || strings.Contains(out, "panel:") || errOut != "" {
+			t.Fatalf("err = %v, stdout:\n%s\nstderr: %q", err, out, errOut)
+		}
+	})
+
+	t.Run("a failed start never autostarts", func(t *testing.T) {
+		store := &reportStore{}
+		if _, _, err := startWithAfter(store, nil); err != nil {
+			t.Fatal(err)
+		}
+		called := false
+		_, _, err := startWithAfter(store, func(context.Context) (string, error) { called = true; return "", nil })
+		if err == nil || called {
+			t.Fatalf("err = %v, called = %v, want a failure and no autostart", err, called)
+		}
+	})
+}
+
 func startWithIgnore(store *reportStore, ignore func() (bool, error), args ...string) (string, error) {
 	return startWithStatus(store, store, ignore, args...)
 }
