@@ -31,6 +31,11 @@ type Hasher interface {
 	InputHash(ctx context.Context, dir string, gate Gate) (string, error)
 }
 
+// BatchHasher hashes many gates from one tree snapshot, one hash per gate in gate order.
+type BatchHasher interface {
+	InputHashes(ctx context.Context, dir string, gates []Gate) ([]string, error)
+}
+
 type Runner interface {
 	Run(ctx context.Context, dir string, gate Gate) (Outcome, error)
 }
