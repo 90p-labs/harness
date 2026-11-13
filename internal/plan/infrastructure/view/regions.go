@@ -36,10 +36,10 @@ func Regions() []Region {
 // valid, and a program input has no regions.
 func (Renderer) RenderRegion(in domain.ViewInput, name string) ([]byte, error) {
 	if !slices.ContainsFunc(regions, func(r Region) bool { return r.Name == name }) {
-		return nil, fmt.Errorf("unknown plan region %q", name)
+		return nil, fmt.Errorf("plan region %q: %w", name, domain.ErrUnknownRegion)
 	}
 	if in.Program != nil {
-		return nil, fmt.Errorf("plan region %q: a program page has no regions", name)
+		return nil, fmt.Errorf("plan region %q: %w", name, domain.ErrNoRegions)
 	}
 	// A region reads the model only, so it skips the 4 MB of inline assets.
 	p := page{model: newBuilder(in).model()}

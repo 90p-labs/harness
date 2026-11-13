@@ -98,6 +98,8 @@ type assets struct {
 	CSS     template.CSS
 	JS      template.JS
 	Mermaid template.JS
+	// Linked is set in the served mode, and then replaces the inline scripts.
+	Linked *webkit.Links
 }
 
 type page struct {
@@ -105,7 +107,20 @@ type page struct {
 	assets
 }
 
-func pageAssets() (assets, error) {
+func pageAssets(served *domain.ViewServed) (assets, error) {
+	if served != nil {
+		links, err := webkit.Linked()
+		if err != nil {
+			return assets{}, err
+		}
+		return assets{
+			Fonts:  links.Fonts,
+			Tokens: links.Tokens,
+			CSS:    template.CSS(pageCSS),
+			JS:     template.JS(pageJS),
+			Linked: &links,
+		}, nil
+	}
 	kit, err := webkit.Inline()
 	if err != nil {
 		return assets{}, err
@@ -120,7 +135,7 @@ func pageAssets() (assets, error) {
 }
 
 func newPage(in domain.ViewInput) (page, error) {
-	a, err := pageAssets()
+	a, err := pageAssets(in.Served)
 	if err != nil {
 		return page{}, err
 	}
@@ -129,7 +144,7 @@ func newPage(in domain.ViewInput) (page, error) {
 
 func (Renderer) Render(in domain.ViewInput) ([]byte, error) {
 	if in.Program != nil {
-		a, err := pageAssets()
+		a, err := pageAssets(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -336,6 +351,17 @@ type model struct {
 	Signals    []signalRow
 	Regression []template.HTML
 	Data       planData
+	Served     *domain.ViewServed
+}
+
+// Poll gives the attributes that make a region poll its fragment. The file
+// mode has none.
+func (m model) Poll(name string) template.HTMLAttr {
+	if m.Served == nil {
+		return ""
+	}
+	return template.HTMLAttr(fmt.Sprintf(` hx-get="%s" hx-trigger="every 5s" hx-swap="morph:outerHTML" data-v="%s"`,
+		html.EscapeString(m.Served.Base+name), html.EscapeString(m.Served.Version)))
 }
 
 type builder struct {
@@ -418,6 +444,7 @@ func (b *builder) model() model {
 	m.Done = b.done(m)
 	m.Nav = b.nav(m)
 	m.Data = b.data()
+	m.Served = b.in.Served
 	return m
 }
 

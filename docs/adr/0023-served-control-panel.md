@@ -28,7 +28,7 @@ Accepted, 2026-11-13. It adds an optional served mode to the plan view. It does 
 
 ## Consequences
 
-- The shared web kit holds the fonts, the mark tokens and mermaid in R1. R2 adds the base CSS, the icons and the shell JavaScript.
+- The shared web kit holds the fonts, the mark tokens and mermaid in R1. A later run adds the base CSS, the icons and the shell JavaScript.
 - A golden hash test holds the bytes of the file mode. A change to the file mode bytes fails the test.
 - The served mode has a second render path, the fragments. Both paths must stay in step with each other.
 - The vendored scripts need a review when their versions change. The checksums in `NOTICE.md` show what changed.

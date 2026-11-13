@@ -61,7 +61,7 @@ func TestStatusQuery(t *testing.T) {
 	t.Run("by key reads the open run", func(t *testing.T) {
 		got, err := handler.Handle(context.Background(), status.Query{Key: key})
 		want := status.Status{
-			ID: open.ID, Phase: domain.PhaseWorking, ReviewRound: 1, LiveRound: 2,
+			ID: open.ID, Repo: key.Repo, Phase: domain.PhaseWorking, ReviewRound: 1, LiveRound: 2,
 			Reason: "the tests miss the empty case", Prompt: "Add login",
 			Worktree: key.Worktree, PRURL: "https://github.com/o/r/pull/3", Version: 7,
 		}
@@ -98,6 +98,21 @@ func TestStatusQuery(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+func TestStatusBlockedFrom(t *testing.T) {
+	open := domain.Run{ID: "r1", Key: key, Phase: domain.PhaseBlocked, BlockedFrom: domain.PhaseReviewing}
+	handler := status.NewHandler(&fakeRepository{open: &open, byID: map[string]domain.Run{open.ID: open}})
+
+	got, err := handler.Handle(context.Background(), status.Query{Key: key})
+	listed, listErr := handler.ByPhase(context.Background(), key.Repo, []domain.Phase{domain.PhaseBlocked})
+
+	if err != nil || got.BlockedFrom != domain.PhaseReviewing {
+		t.Fatalf("got %+v, %v, want BlockedFrom reviewing", got, err)
+	}
+	if listErr != nil || len(listed) != 1 || listed[0].BlockedFrom != domain.PhaseReviewing {
+		t.Fatalf("listed %+v, %v, want BlockedFrom reviewing", listed, listErr)
+	}
 }
 
 func TestStatusHandoffReady(t *testing.T) {
