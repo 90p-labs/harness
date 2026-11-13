@@ -81,6 +81,11 @@ lint:
 live:
   environment: production
   rollback: helm rollback api
+panel:
+  enabled: false
+  port: 0
+  autostart: false
+  open: browser
 ```
 
 ## Go
