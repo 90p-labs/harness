@@ -739,3 +739,44 @@ func TestPanelServeHelpNamesPort(t *testing.T) {
 		t.Fatalf("code = %d, stdout = %q, want the --port flag", code, stdout)
 	}
 }
+
+func TestPanelLifecycle(t *testing.T) {
+	clearHarnessEnv(t)
+	t.Setenv(panelChildEnv, "1")
+	dir := initRepo(t)
+	t.Cleanup(func() { execute(t, "panel", "stop") })
+	state := filepath.Join(dir, ".git", ".harness", "panel.json")
+
+	if code, stdout, _ := execute(t, "panel", "status"); code != exitRuntime || stdout != "panel: stopped\n" {
+		t.Fatalf("status before start: code = %d, stdout = %q", code, stdout)
+	}
+
+	code, first, stderr := execute(t, "panel", "start")
+	m := panelURLLine.FindStringSubmatch(first)
+	if code != exitOK || m == nil {
+		t.Fatalf("start: code = %d, stdout = %q, stderr = %q", code, first, stderr)
+	}
+	if status, _ := panelGet(t, m[1]+"healthz", ""); status != http.StatusOK {
+		t.Fatalf("healthz: status = %d", status)
+	}
+	if _, err := os.Stat(state); err != nil {
+		t.Fatalf("panel.json: %v", err)
+	}
+
+	if code, second, _ := execute(t, "panel", "start"); code != exitOK || second != first {
+		t.Fatalf("second start: code = %d, stdout = %q, want %q", code, second, first)
+	}
+	if code, stdout, _ := execute(t, "panel", "status"); code != exitOK || !strings.HasPrefix(stdout, "panel: "+m[1]+" pid ") {
+		t.Fatalf("status: code = %d, stdout = %q", code, stdout)
+	}
+
+	if code, stdout, stderr := execute(t, "panel", "stop"); code != exitOK || stdout != "panel: stopped\n" {
+		t.Fatalf("stop: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	if _, err := os.Stat(state); !os.IsNotExist(err) {
+		t.Fatalf("panel.json after stop: %v", err)
+	}
+	if code, _, _ := execute(t, "panel", "status"); code != exitRuntime {
+		t.Fatalf("status after stop: code = %d, want %d", code, exitRuntime)
+	}
+}

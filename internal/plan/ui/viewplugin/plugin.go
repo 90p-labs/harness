@@ -19,11 +19,22 @@ type LiveRound func(ctx context.Context) (int, error)
 
 type Open func(ctx context.Context, page string) error
 
+// HostOpen shows the plan of a run in the host, for example through the panel.
+// An error makes the plugin open the browser instead.
+type HostOpen func(ctx context.Context, run string) error
+
 type Plugin struct {
 	worktree  string
 	render    Render
 	liveRound LiveRound
 	open      Open
+	host      HostOpen
+}
+
+// WithHost returns the plugin with a host open. A nil host open keeps the browser.
+func (p Plugin) WithHost(host HostOpen) Plugin {
+	p.host = host
+	return p
 }
 
 var _ shareddomain.Plugin = Plugin{}
@@ -59,6 +70,9 @@ func (p Plugin) Handle(ctx context.Context, envelope shareddomain.Envelope) (sha
 		return allow, errors.Join(roundErr, err)
 	}
 	if payload.To != shareddomain.PhaseAwaitingApproval {
+		return allow, roundErr
+	}
+	if p.host != nil && p.host(ctx, envelope.Run.ID) == nil {
 		return allow, roundErr
 	}
 	return allow, errors.Join(roundErr, p.open(ctx, page))

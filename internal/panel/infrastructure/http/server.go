@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	nethttp "net/http"
 	"net/url"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -264,7 +265,7 @@ func (s *Server) asset(w nethttp.ResponseWriter, r *nethttp.Request) {
 func (s *Server) healthz(w nethttp.ResponseWriter, _ *nethttp.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(map[string]string{"version": s.cfg.Version, "repo": s.cfg.Repo})
+	_ = json.NewEncoder(w).Encode(map[string]any{"version": s.cfg.Version, "repo": s.cfg.Repo, "pid": os.Getpid()})
 }
 
 func writeHTML(w nethttp.ResponseWriter, body []byte) {

@@ -266,11 +266,11 @@ func TestRoutes(t *testing.T) {
 
 	t.Run("healthz", func(t *testing.T) {
 		rec := get(h, "localhost", "/healthz")
-		var got map[string]string
+		var got map[string]any
 		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 			t.Fatal(err)
 		}
-		if rec.Code != 200 || got["version"] != "9.9.9" || got["repo"] != "/work/repo" {
+		if rec.Code != 200 || got["version"] != "9.9.9" || got["repo"] != "/work/repo" || got["pid"] != float64(os.Getpid()) {
 			t.Fatalf("status %d body %v", rec.Code, got)
 		}
 	})

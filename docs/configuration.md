@@ -488,6 +488,27 @@ live:
   rollback: helm rollback api
 ```
 
+## `panel`
+
+The web panel, which shows the plans and the runs of the repository. `panel.enabled` is the master switch. It gates the autostart and the host open. The explicit `harness panel` commands work with any value.
+
+| Key | Type | Default | Env | Effect |
+|---|---|---|---|---|
+| `enabled` | bool | `false` | `HARNESS_PANEL_ENABLED` | `true` lets the panel autostart and open with a run. `false` turns both off and keeps the other keys |
+| `port` | int, 0 to 65535 | `0` | `HARNESS_PANEL_PORT` | The port of the panel. `0` lets the system pick a free port. Any other value is a fixed port |
+| `autostart` | bool | `false` | `HARNESS_PANEL_AUTOSTART` | `true` starts the panel after `harness run start` succeeds. A failed start prints a warning and the run goes on |
+| `open` | string, `browser` or `host` | `browser` | `HARNESS_PANEL_OPEN` | `browser` opens the plan page in the browser. `host` prints the run URL on stderr and opens no browser |
+
+A port outside 0 to 65535 is an error. So is an `open` value other than `browser` or `host`.
+
+```yaml
+panel:
+  enabled: true
+  port: 8765
+  autostart: true
+  open: host
+```
+
 ## How to configure
 
 ### A new repository

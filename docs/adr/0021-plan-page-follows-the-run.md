@@ -12,7 +12,7 @@ Accepted, 2026-11-11. It changes the render rule of ADR 0010, and it makes the a
 
 ## Decision
 
-1. The view plugin writes `plan.html` after every `run.transition.after`, in every phase. A render error never blocks the transition. The plugin opens the page in the browser only when the new phase is `awaiting_approval`.
+1. The view plugin writes `plan.html` after every `run.transition.after`, in every phase. A render error never blocks the transition. The plugin opens the page in the browser only when the new phase is `awaiting_approval`. With `panel.open: host` the plugin prints the run URL of the panel instead, see [ADR 0023](0023-served-control-panel.md), and the browser stays the fallback.
 2. The page shows the phase as a status label, such as "Waiting for approval" or "Building". Each task shows open or committed, from the commits of the branch.
 3. In `awaiting_approval` the approval is a reply to the agent. Approve copies "Plan approved. Go ahead with the build." Send corrections copies the corrections as a list.
 4. The human pastes the copied reply into the chat. The page never runs a command and shows no CLI step.

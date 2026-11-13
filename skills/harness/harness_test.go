@@ -44,6 +44,7 @@ const (
 	skillRewriteStep   = "After each edit of `plan.md`, run `harness plan view`"
 	changePlanStep     = "edit `plan.md`, run `harness plan view`"
 	grillRewriteStep   = "Run `harness plan check` and `harness plan view` after each change of `plan.md`"
+	panelPreviewPhrase = "host preview"
 )
 
 // The handoff phrases of SKILL.md.
@@ -61,6 +62,25 @@ var (
 	planViewOpen = regexp.MustCompile("harness plan view[^`\\n]*--open")
 	reviewLabels = []string{"**Common list**", "**Verify**", "**Fix**", "**Re-review**", "**Final panel**"}
 )
+
+func TestSkillOpensPanelURL(t *testing.T) {
+	skill := repository.Read(t, skillFile)
+	var line string
+	for _, l := range strings.Split(skill, "\n") {
+		if strings.Contains(l, panelPreviewPhrase) {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatalf("%s has no line that names %q", skillFile, panelPreviewPhrase)
+	}
+	for _, want := range []string{"`panel:`", "open"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the %q line of %s does not name %q: %s", panelPreviewPhrase, skillFile, want, line)
+		}
+	}
+}
 
 func TestHarnessSkillGrill(t *testing.T) {
 	skill, grill, explorer := repository.Read(t, skillFile), repository.Read(t, grillFile), repository.Read(t, explorerFile)

@@ -2123,7 +2123,14 @@ func TestGuardMCPBash(t *testing.T) {
 	}
 }
 
+// panelChildEnv marks the test binary as a panel server that a test spawned.
+// clearHarnessEnv blanks every HARNESS_ variable, so the marker has another prefix.
+const panelChildEnv = "PANEL_TEST_CHILD"
+
 func TestMain(m *testing.M) {
+	if os.Getenv(panelChildEnv) != "" {
+		main() // the child runs `harness panel serve` and exits
+	}
 	os.Setenv(envNoBrowser, "1")
 	// Keep the Claude plugins of the machine out of the tests: an empty config folder has no plugin.
 	configDir, err := os.MkdirTemp("", "claude-config-")

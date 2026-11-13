@@ -343,6 +343,57 @@ func TestLoadLive(t *testing.T) {
 	}
 }
 
+func TestPanelConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		file string
+		want config.Panel
+	}{
+		{name: "defaults", want: config.Panel{Enabled: false, Port: 0, Autostart: false, Open: "browser"}},
+		{
+			name: "file over defaults",
+			file: "panel:\n  enabled: true\n  port: 8765\n  autostart: true\n  open: host\n",
+			want: config.Panel{Enabled: true, Port: 8765, Autostart: true, Open: "host"},
+		},
+		{
+			name: "port bounds",
+			file: "panel:\n  port: 65535\n",
+			want: config.Panel{Port: 65535, Open: "browser"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := load(t, tc.file)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if got.Panel != tc.want {
+				t.Errorf("panel = %+v, want %+v", got.Panel, tc.want)
+			}
+		})
+	}
+
+	for name, file := range map[string]string{
+		"port below range": "panel:\n  port: -1\n",
+		"port above range": "panel:\n  port: 65536\n",
+		"open unknown":     "panel:\n  open: tab\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := load(t, file)
+			if err == nil {
+				t.Fatal("want an error")
+			}
+			if !strings.Contains(err.Error(), "panel.") {
+				t.Errorf("error %q does not name the panel key", err)
+			}
+		})
+	}
+
+	if _, err := load(t, "panel:\n  rot: x\n"); err == nil {
+		t.Fatal("want an error for the unknown panel key")
+	}
+}
+
 func TestLoadSetupConfig(t *testing.T) {
 	got, err := load(t, "setup:\n  - id: deps\n    run: composer install\n    paths: [composer.lock]\n    creates: vendor/autoload.php\n")
 	if err != nil {

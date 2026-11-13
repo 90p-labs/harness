@@ -51,6 +51,16 @@ const (
 
 	defaultLiveEnvironment = "production"
 
+	keyPanelEnabled   = "panel.enabled"
+	keyPanelPort      = "panel.port"
+	keyPanelAutostart = "panel.autostart"
+	keyPanelOpen      = "panel.open"
+
+	panelOpenBrowser = "browser"
+	// PanelOpenHost is the panel.open value that prints the panel URL in place of the browser open.
+	PanelOpenHost = "host"
+	maxPanelPort  = 65535
+
 	keyLintDisabled      = "lint.disabled"
 	keyLintDDDRoot       = "lint.ddd.root"
 	keyLintDDDSrcFiles   = "lint.ddd.src_files"
@@ -83,11 +93,19 @@ type Config struct {
 	Verify  Verify              `mapstructure:"verify"`
 	Lint    Lint                `mapstructure:"lint"`
 	Live    Live                `mapstructure:"live"`
+	Panel   Panel               `mapstructure:"panel"`
 	Hooks   Hooks               `mapstructure:"hooks"`
 }
 
 type Hooks struct {
 	Matched bool `mapstructure:"matched"`
+}
+
+type Panel struct {
+	Enabled   bool   `mapstructure:"enabled"`
+	Port      int    `mapstructure:"port"`
+	Autostart bool   `mapstructure:"autostart"`
+	Open      string `mapstructure:"open"`
 }
 
 type Live struct {
@@ -272,6 +290,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault(keyVerifyParallel, defaultParallel)
 	v.SetDefault(keyLiveEnvironment, defaultLiveEnvironment)
 	v.SetDefault(keyLiveRollback, "")
+	v.SetDefault(keyPanelEnabled, false)
+	v.SetDefault(keyPanelPort, 0)
+	v.SetDefault(keyPanelAutostart, false)
+	v.SetDefault(keyPanelOpen, panelOpenBrowser)
 	v.SetDefault(keyLintDisabled, []any{})
 	v.SetDefault(keyLintDDDRoot, defaultLintDDDRoot)
 	v.SetDefault(keyLintDDDSrcFiles, []string{defaultLintSrcFile})
@@ -323,6 +345,13 @@ func (c *Config) validate() error {
 		if value < 1 {
 			return fmt.Errorf("%s is %d, want 1 or more", key, value)
 		}
+	}
+
+	if c.Panel.Port < 0 || c.Panel.Port > maxPanelPort {
+		return fmt.Errorf("%s is %d, want 0 to %d", keyPanelPort, c.Panel.Port, maxPanelPort)
+	}
+	if c.Panel.Open != panelOpenBrowser && c.Panel.Open != PanelOpenHost {
+		return fmt.Errorf("%s is %q, want %s or %s", keyPanelOpen, c.Panel.Open, panelOpenBrowser, PanelOpenHost)
 	}
 
 	seen := map[string]bool{}

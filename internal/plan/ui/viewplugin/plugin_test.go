@@ -104,6 +104,70 @@ func envelope(t *testing.T, to string) shareddomain.Envelope {
 	}
 }
 
+func TestHostOpen(t *testing.T) {
+	const pagePath = "/work/tree/.harness/runs/r1/plan.html"
+	render := func(context.Context, renderview.Command) (string, error) { return pagePath, nil }
+	errHost := errors.New("panel did not start")
+	errBrowser := errors.New("no browser")
+	opening := func(pages *[]string) viewplugin.Open {
+		return func(_ context.Context, page string) error { *pages = append(*pages, page); return nil }
+	}
+
+	t.Run("the host open gets the run id and the browser stays closed", func(t *testing.T) {
+		var runs, pages []string
+		host := func(_ context.Context, run string) error { runs = append(runs, run); return nil }
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), opening(&pages)).WithHost(host)
+
+		_, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
+
+		if err != nil || !slices.Equal(runs, []string{runID}) || len(pages) != 0 {
+			t.Errorf("err = %v, runs = %v, pages = %v, want the run id and no browser", err, runs, pages)
+		}
+	})
+
+	t.Run("a host open error falls back to the browser", func(t *testing.T) {
+		var pages []string
+		host := func(context.Context, string) error { return errHost }
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), opening(&pages)).WithHost(host)
+
+		verdict, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
+
+		if err != nil || verdict.Kind != shareddomain.VerdictAllow || !slices.Equal(pages, []string{pagePath}) {
+			t.Errorf("verdict = %v, err = %v, pages = %v, want allow and the browser page", verdict, err, pages)
+		}
+	})
+
+	t.Run("a nil host open uses the browser", func(t *testing.T) {
+		var pages []string
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), opening(&pages)).WithHost(nil)
+
+		if _, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval)); err != nil || !slices.Equal(pages, []string{pagePath}) {
+			t.Errorf("err = %v, pages = %v, want the browser page", err, pages)
+		}
+	})
+
+	t.Run("the fallback browser error is returned", func(t *testing.T) {
+		host := func(context.Context, string) error { return errHost }
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), func(context.Context, string) error { return errBrowser }).WithHost(host)
+
+		_, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseAwaitingApproval))
+
+		if !errors.Is(err, errBrowser) {
+			t.Errorf("err = %v, want the browser error", err)
+		}
+	})
+
+	t.Run("another phase calls no host open", func(t *testing.T) {
+		called := false
+		host := func(context.Context, string) error { called = true; return nil }
+		plugin := viewplugin.New(worktree, render, liveRound(1, nil), noOpen).WithHost(host)
+
+		if _, err := plugin.Handle(t.Context(), envelope(t, shareddomain.PhaseWorking)); err != nil || called {
+			t.Errorf("err = %v, called = %v, want nothing", err, called)
+		}
+	})
+}
+
 func TestPluginRendersEveryPhase(t *testing.T) {
 	var commands []renderview.Command
 	render := func(_ context.Context, c renderview.Command) (string, error) {

@@ -731,7 +731,7 @@ A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. 
 - The branch base is the `## PR sequence` base of this run, else the default branch. A branch or proof read error gives no evidence and one page problem. The page still renders.
 - The page embeds mermaid, the fonts and rough.js. The renderer draws each Excalidraw sketch to SVG in Go.
 - A view plugin on `run.transition.after` writes the page after every transition, in every phase. A render error never denies. ADR 0021 records this.
-- When the new phase is `awaiting_approval`, the same move opens the page in the browser, with `open` on macOS and `xdg-open` elsewhere. `harness plan view --open` opens it on demand. Set `HARNESS_NO_BROWSER` to any value to turn the open off, as tests and headless hosts do. An open error never denies.
+- When the new phase is `awaiting_approval`, the same move opens the page in the browser, with `open` on macOS and `xdg-open` elsewhere. `harness plan view --open` opens it on demand. Set `HARNESS_NO_BROWSER` to any value to turn the open off, as tests and headless hosts do. An open error never denies. With `panel.enabled: true` and `panel.open: host`, the run prints `panel: <url>runs/<id>` on stderr in place of the browser open. The browser opens only when the panel cannot start.
 - In `awaiting_approval` the page holds a reply box for the chat. Approve copies a reply for the agent, and Send corrections copies the corrections. The page runs no command.
 - The rule `diagram-required` refuses a plan with a missing diagram or sketch file.
 - The render records the span `plan.view` with `harness.plan.problems` and `harness.view.bytes`.
