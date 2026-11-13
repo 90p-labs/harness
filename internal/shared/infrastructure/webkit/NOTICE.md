@@ -4,10 +4,12 @@ The web kit embeds the third-party files below. Each keeps its own license.
 
 ## Scripts
 
-| File | Version | License |
-|---|---|---|
-| `third_party/mermaid.min.js` | mermaid 11.17.2 | MIT |
-| rough.js (used by the `excalidraw` package, not by the web kit) | 4.6.6 | MIT |
+| File | Version | License | sha256 |
+|---|---|---|---|
+| `third_party/mermaid.min.js` | mermaid 11.17.2 | MIT | 581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8 |
+| `third_party/htmx.min.js` | htmx 2.0.4 | 0BSD | e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447 |
+| `third_party/idiomorph-ext.min.js` | idiomorph 0.7.3 | 0BSD | 1589f425608653a841fa06ef2bb103a59e19f1e6d27064cff894d365efd6d948 |
+| rough.js (used by the `excalidraw` package, not by the web kit) | 4.6.6 | MIT | not vendored here |
 
 The mermaid bundle also includes these libraries. The source column says where the license was read.
 

@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"regexp"
 	"strings"
+	"sync"
 
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
@@ -40,13 +41,18 @@ type Kit struct {
 }
 
 // Inline gives the font faces, the mark tokens and mermaid for a self-contained page.
+// The kit is built once and shared.
 func Inline() (Kit, error) {
+	return inline()
+}
+
+var inline = sync.OnceValues(func() (Kit, error) {
 	fonts, err := fontCSS()
 	if err != nil {
 		return Kit{}, err
 	}
 	return Kit{Fonts: fonts, Tokens: tokenCSS(), Mermaid: template.JS(mermaidJS)}, nil
-}
+})
 
 func fontCSS() (template.CSS, error) {
 	var css strings.Builder
