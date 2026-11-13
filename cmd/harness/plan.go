@@ -30,10 +30,10 @@ func newPlanCommand(flags *pflag.FlagSet) *cobra.Command {
 		handlers.RepoTop = env.key.Worktree
 		handlers.AdvisorModels = advisorModels(env.cfg.Roles, install.DetectHosts(env.key.Worktree, os.Getenv))
 		handlers.DefaultPlan = func(ctx context.Context) (checkplan.Query, error) {
-			return activePlan(ctx, flags)
+			return activePlan(ctx, flags, env.key.Worktree)
 		}
 		handlers.DefaultView = func(ctx context.Context) (renderview.Command, error) {
-			return activeView(ctx, flags)
+			return activeView(ctx, flags, env.key.Worktree)
 		}
 		return handlers, func() error { return nil }, nil
 	})
@@ -69,16 +69,16 @@ func planPath(worktree, runID string) string {
 	return filepath.Join(worktree, filepath.FromSlash(shareddomain.RunPlanFile(runID)))
 }
 
-func activePlan(ctx context.Context, flags *pflag.FlagSet) (checkplan.Query, error) {
-	current, worktree, err := activeRun(ctx, flags)
+func activePlan(ctx context.Context, flags *pflag.FlagSet, dir string) (checkplan.Query, error) {
+	current, worktree, err := activeRun(ctx, flags, dir)
 	if err != nil {
 		return checkplan.Query{}, err
 	}
 	return checkplan.Query{Path: planPath(worktree, current.ID), LiveRound: current.LiveRound}, nil
 }
 
-func activeView(ctx context.Context, flags *pflag.FlagSet) (renderview.Command, error) {
-	current, worktree, err := activeRun(ctx, flags)
+func activeView(ctx context.Context, flags *pflag.FlagSet, dir string) (renderview.Command, error) {
+	current, worktree, err := activeRun(ctx, flags, dir)
 	if err != nil {
 		return renderview.Command{}, err
 	}
@@ -88,12 +88,17 @@ func activeView(ctx context.Context, flags *pflag.FlagSet) (renderview.Command, 
 	}, nil
 }
 
-func activeRun(ctx context.Context, flags *pflag.FlagSet) (current status.Status, worktree string, err error) {
-	handlers, closeStore, err := connect(ctx, flags)
+// activeRun reads the active run of the repo that holds dir.
+func activeRun(ctx context.Context, flags *pflag.FlagSet, dir string) (current status.Status, worktree string, err error) {
+	env, err := environmentAt(ctx, flags, dir)
 	if err != nil {
 		return status.Status{}, "", err
 	}
-	defer func() { err = errors.Join(err, closeStore()) }()
+	defer func() { err = errors.Join(err, env.state.Close()) }()
+	handlers, _, err := openRun(ctx, env)
+	if err != nil {
+		return status.Status{}, "", err
+	}
 	current, err = handlers.Status.Handle(ctx, status.Query{Key: handlers.Key})
 	if errors.Is(err, domain.ErrRunNotFound) {
 		return status.Status{}, "", usageError{plancli.ErrNoPlanFile}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,7 +23,6 @@ import (
 	panelprocess "github.com/90p-labs/harness/internal/panel/infrastructure/process"
 	panelregistry "github.com/90p-labs/harness/internal/panel/infrastructure/registry"
 	panelcli "github.com/90p-labs/harness/internal/panel/ui/cli"
-	planmodule "github.com/90p-labs/harness/internal/plan"
 	"github.com/90p-labs/harness/internal/plan/application/query/viewpage"
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	planview "github.com/90p-labs/harness/internal/plan/infrastructure/view"
@@ -126,14 +126,50 @@ func (e panelEnv) register(ctx context.Context) error {
 	return panelregistry.New(e.dir, os.Stderr).Register(ctx, repo)
 }
 
+// registerServe registers the repo of the serve process and returns its key.
+// The panel serves every registered repo, and the serve flags apply to the repo
+// it started in, if any.
+func (e panelEnv) registerServe(ctx context.Context) (string, error) {
+	// The spawned serve runs in the user folder, which is never a repo of the
+	// panel, even when a repo (dotfiles at ~) holds it.
+	if e.repo == nil || workInUserDir(e.dir) {
+		return "", nil
+	}
+	if err := e.register(ctx); err != nil {
+		return "", err
+	}
+	return e.repo.Key, nil
+}
+
+// workInUserDir reports whether the working folder is the user folder,
+// comparing absolute paths with symlinks resolved.
+func workInUserDir(userDir string) bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	resolve := func(p string) string {
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
+		if resolved, err := filepath.EvalSymlinks(p); err == nil {
+			p = resolved
+		}
+		return filepath.Clean(p)
+	}
+	rel, err := filepath.Rel(resolve(userDir), resolve(cwd))
+	return err == nil && rel == "."
+}
+
 // stopLegacy stops a panel of the old layout in <common dir>/.harness and
 // removes its panel.json, panel.lock and panel.log. It does nothing when the
-// repo has none of them, and it never touches the state database there.
+// repo has none of them, and it never touches the state database there. It
+// removes no file when the stop failed.
 func (e panelEnv) stopLegacy(ctx context.Context) error {
 	if e.legacy == "" {
 		return nil
 	}
-	names := []string{"panel.json", "panel.lock", "panel.log"}
+	names := []string{panelprocess.StateFile, panelprocess.LockFile, panelprocess.LogFile}
 	found := false
 	for _, name := range names {
 		if _, err := os.Stat(filepath.Join(e.legacy, name)); err == nil {
@@ -144,7 +180,8 @@ func (e panelEnv) stopLegacy(ctx context.Context) error {
 		return nil
 	}
 	if err := panelprocess.New(panelprocess.Config{Dir: e.legacy}).Stop(ctx); err != nil {
-		return fmt.Errorf("stop the panel of %s: %w", e.legacy, err)
+		// The files stay: the next start tries again.
+		return err
 	}
 	for _, name := range names {
 		if err := os.Remove(filepath.Join(e.legacy, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -156,8 +193,9 @@ func (e panelEnv) stopLegacy(ctx context.Context) error {
 
 // lazyLifecycle builds the process adapter when a command runs, so the help of
 // a command needs no setup. Start and stop also end a legacy panel, and start
-// registers the repo.
-func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
+// registers the repo. A failed stop of a legacy panel on start writes one line
+// to warn.
+func lazyLifecycle(flags *pflag.FlagSet, warn io.Writer) panelcli.Lifecycle {
 	with := func(ctx context.Context) (panelEnv, panelcli.Lifecycle, error) {
 		env, err := panelSetup(ctx, flags)
 		if err != nil {
@@ -181,8 +219,9 @@ func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
 		if err != nil {
 			return panelcli.Lifecycle{}, err
 		}
+		// A failed stop of the old panel never blocks the user-wide panel.
 		if err := env.stopLegacy(ctx); err != nil {
-			return panelcli.Lifecycle{}, err
+			fmt.Fprintf(warn, "panel: could not stop the old panel in %s: %v\n", env.legacy, err)
 		}
 		if err := env.register(ctx); err != nil {
 			return panelcli.Lifecycle{}, err
@@ -213,7 +252,7 @@ func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
 				return err
 			}
 			if err := env.stopLegacy(ctx); err != nil {
-				return err
+				return fmt.Errorf("stop the panel of %s: %w", env.legacy, err)
 			}
 			return life.Stop(ctx)
 		},
@@ -227,53 +266,29 @@ func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
 	}
 }
 
-// emptyRuns and emptyPages serve a panel that was spawned outside a git
-// repository: it has no repo to read until the multi-repo adapter lands.
-type emptyRuns struct{}
+// writerFunc makes a function an io.Writer.
+type writerFunc func([]byte) (int, error)
 
-func (emptyRuns) List(context.Context) (paneldomain.Listing, error) {
-	return paneldomain.Listing{}, nil
-}
-func (emptyRuns) Get(context.Context, paneldomain.RunRef) (paneldomain.Card, error) {
-	return paneldomain.Card{}, paneldomain.ErrNotFound
-}
-
-type emptyPages struct{}
-
-func (emptyPages) Page(context.Context, paneldomain.Card, paneldomain.Served) ([]byte, error) {
-	return nil, paneldomain.ErrNotFound
-}
-
-func (emptyPages) Region(context.Context, paneldomain.Card, string, paneldomain.Served) ([]byte, error) {
-	return nil, paneldomain.ErrNotFound
-}
-func (emptyPages) HasRegion(string) bool { return false }
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 
 func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
-	cmd := panelcli.NewCommand(func(ctx context.Context, port int, ready func(url string)) (err error) {
+	var cmd *cobra.Command
+	// The command exists when the lifecycle runs, so warn reaches the stderr
+	// that the command writes to.
+	warn := writerFunc(func(p []byte) (int, error) { return cmd.ErrOrStderr().Write(p) })
+	cmd = panelcli.NewCommand(func(ctx context.Context, port int, ready func(url string)) (err error) {
 		panel, err := panelSetup(ctx, flags)
 		if err != nil {
 			return err
 		}
-		if err := panel.register(ctx); err != nil {
-			return err
-		}
-		if panel.repo == nil { // spawned in the user folder: no repo to read yet
-			return panelmodule.NewServe(version, emptyRuns{}, emptyPages{}, panel.proc)(ctx, port, ready)
-		}
-		env, err := newEnvironment(ctx, flags)
+		serveKey, err := panel.registerServe(ctx)
 		if err != nil {
 			return err
 		}
-		defer func() { err = errors.Join(err, env.state.Close()) }()
-		handlers, _, err := openRun(ctx, env)
-		if err != nil {
-			return err
-		}
-		runs := newPanelRuns(handlers.Status, env.key.Repo).forRepo(*panel.repo).withLive(env.key, env.proofs, time.Now)
-		pages := newPanelPages(handlers.Status, env.key, planmodule.NewPages(env.proofs, env.defaultBranch))
-		return panelmodule.NewServe(version, runs, pages, panel.proc)(ctx, port, ready)
-	}, lazyLifecycle(flags))
+		repos := newPanelRepos(panelregistry.New(panel.dir, os.Stderr), flags, serveKey, os.Stderr)
+		defer func() { err = errors.Join(err, repos.Close()) }()
+		return panelmodule.NewServe(version, repos, repos, panel.proc)(ctx, port, ready)
+	}, lazyLifecycle(flags, warn))
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
 	return cmd
 }
@@ -281,7 +296,7 @@ func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
 // panelRuns lists the runs of the repo as cards. It reads the state and the run folders, and writes nothing.
 type panelRuns struct {
 	status status.Handler
-	// info is the panel repo, the only lane of the board until the multi-repo adapter lands.
+	// info is the registry entry of the repo, whose key goes on each card.
 	info     paneldomain.Repo
 	repo     string
 	branches *branchCache
@@ -484,7 +499,7 @@ func readBranch(read func(string) ([]byte, error), path string) string {
 	return doc.RunPR().Branch
 }
 
-// List returns the listing of the one repo this panel reads, with its key on each card.
+// List returns the listing of the one repo this value reads, with its key on each card.
 func (r panelRuns) List(ctx context.Context) (paneldomain.Listing, error) {
 	phases := make([]domain.Phase, len(shareddomain.Phases))
 	for i, p := range shareddomain.Phases {

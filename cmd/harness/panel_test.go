@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
+	"github.com/spf13/pflag"
 )
 
 type lockedBuffer struct {
@@ -815,6 +818,67 @@ func waitExit(t *testing.T, exited <-chan struct{}, what string) {
 // testRepoKey is a fixture repo key in the form of the repo routes.
 const testRepoKey = "0123456789ab"
 
+// TestPanelServeInUserFolder: the spawned serve runs in the user folder, and a
+// repo around that folder (dotfiles at ~) is never a listed repo or the serve repo.
+func TestPanelServeInUserFolder(t *testing.T) {
+	clearHarnessEnv(t)
+	outer := initRepo(t)
+	home := filepath.Join(outer, "state")
+	t.Setenv(envHome, home)
+	run := func(t *testing.T, dir string) string {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Chdir(dir)
+		panel, err := panelSetup(context.Background(), pflag.NewFlagSet("t", pflag.ContinueOnError))
+		if err != nil {
+			t.Fatal(err)
+		}
+		key, err := panel.registerServe(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return key
+	}
+	if key := run(t, home); key != "" {
+		t.Errorf("serve key in %s = %q, want none", home, key)
+	}
+	if _, err := os.Stat(filepath.Join(home, "repos.json")); err == nil {
+		repos, err := registry.New(home, nil).List(context.Background())
+		if err != nil || len(repos) != 0 {
+			t.Fatalf("registry = %+v (%v), want no repo", repos, err)
+		}
+	}
+
+	// A serve run by hand in a real repo still registers it and serves it.
+	other := initRepo(t)
+	if key := run(t, other); key != repoKeyOf(t, other) {
+		t.Errorf("serve key in a repo = %q, want %q", key, repoKeyOf(t, other))
+	}
+	repos, err := registry.New(home, nil).List(context.Background())
+	if err != nil || len(repos) != 1 || repos[0].Key != repoKeyOf(t, other) {
+		t.Fatalf("registry = %+v (%v), want only %s", repos, err, repoKeyOf(t, other))
+	}
+
+	// A user folder that is a parent of a repo does not hide that repo.
+	parent := t.TempDir()
+	t.Setenv(envHome, parent)
+	inner := filepath.Join(parent, "work")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, inner, "init", "--quiet")
+	key := run(t, inner)
+	if key == "" {
+		t.Errorf("serve key in a repo inside the user folder is empty, want the repo key")
+	}
+	repos, err = registry.New(parent, nil).List(context.Background())
+	if err != nil || len(repos) != 1 || repos[0].Key != key {
+		t.Fatalf("registry = %+v (%v), want only %q", repos, err, key)
+	}
+}
+
 func TestPanelUserState(t *testing.T) {
 	clearHarnessEnv(t)
 	home := filepath.Join(t.TempDir(), "user")
@@ -980,6 +1044,51 @@ func TestPanelLegacyStop(t *testing.T) {
 		}
 		waitExit(t, exited, "the legacy panel")
 		legacyFiles(t, dir)
+	})
+
+	t.Run("a failed legacy stop warns on start and keeps the files", func(t *testing.T) {
+		repoDir := setup(t)
+		dir := filepath.Join(repoDir, ".git", ".harness")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// A process that is not a panel holds the lock, and panel.json names it.
+		lock, err := os.OpenFile(filepath.Join(dir, "panel.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lock.Close() })
+		if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			t.Fatal(err)
+		}
+		state := fmt.Sprintf(`{"pid":%d,"port":1,"version":"x"}`, os.Getpid())
+		if err := os.WriteFile(filepath.Join(dir, "panel.json"), []byte(state), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		code, stdout, stderr := execute(t, "panel", "start")
+		if code != exitOK || panelURLLine.FindStringSubmatch(stdout) == nil {
+			t.Fatalf("start: code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+		}
+		if want := "panel: could not stop the old panel in " + dir + ": "; strings.Count(stderr, want) != 1 || strings.Count(stderr, "could not stop") != 1 {
+			t.Errorf("stderr = %q, want one line with %q", stderr, want)
+		}
+		for _, name := range []string{"panel.json", "panel.lock"} {
+			if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+				t.Errorf("legacy %s after the failed stop: %v, want it kept", name, err)
+			}
+		}
+		repos, err := registry.New(os.Getenv(envHome), nil).List(context.Background())
+		if err != nil || len(repos) != 1 || repos[0].Key != repoKeyOf(t, repoDir) {
+			t.Errorf("registry = %+v (%v), want %s", repos, err, repoKeyOf(t, repoDir))
+		}
+		if code, _, stderr := execute(t, "panel", "stop"); code == exitOK {
+			t.Errorf("stop: code = %d, stderr = %q, want the legacy error", code, stderr)
+		}
+		// The failed stop leaves the user-wide panel running.
+		if code, stdout, stderr := execute(t, "panel", "status"); code != exitOK || !strings.HasPrefix(stdout, "panel: http://127.0.0.1:") {
+			t.Errorf("status after the failed stop: code = %d, stdout = %q, stderr = %q, want the panel running", code, stdout, stderr)
+		}
 	})
 }
 

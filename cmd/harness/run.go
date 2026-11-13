@@ -112,11 +112,16 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	if err != nil {
 		return environment{}, err
 	}
-	repo, worktree, err := git.RepoKey(ctx, cwd)
+	return environmentAt(ctx, flags, cwd)
+}
+
+// environmentAt builds the environment of the repo that holds dir, so the panel can build the environment of any registered repo.
+func environmentAt(ctx context.Context, flags *pflag.FlagSet, dir string) (environment, error) {
+	repo, worktree, err := git.RepoKey(ctx, dir)
 	if err != nil {
 		return environment{}, err
 	}
-	commonDir, err := git.CommonDir(ctx, cwd)
+	commonDir, err := git.CommonDir(ctx, dir)
 	if err != nil {
 		return environment{}, err
 	}
@@ -145,7 +150,7 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	if err != nil {
 		return environment{}, err
 	}
-	proofs := proofAdapter{flags: flags, cfg: cfg, commonDir: commonDir, key: key}
+	proofs := proofAdapter{flags: flags, cfg: cfg, commonDir: commonDir, key: key, dir: worktree}
 	defaultBranch := func(ctx context.Context) (string, error) {
 		if cfg.Git.DefaultBranch != "" {
 			return cfg.Git.DefaultBranch, nil
@@ -154,9 +159,9 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	}
 	review := planmodule.NewReviewPlugin(worktree, proofs, defaultBranch)
 	planView := planmodule.NewViewPlugin(worktree, proofs, defaultBranch, func(ctx context.Context) (int, error) {
-		current, _, err := activeRun(ctx, flags)
+		current, _, err := activeRun(ctx, flags, worktree)
 		return current.LiveRound, err
-	}, panelOpener(cfg, lazyLifecycle(flags), os.Stderr, paneldomain.RepoKey(commonDir)))
+	}, panelOpener(cfg, lazyLifecycle(flags, os.Stderr), os.Stderr, paneldomain.RepoKey(commonDir)))
 	var bus eventbus.Bus
 	session := livemodule.NewSessionPlugin(func(ctx context.Context) ([]string, error) {
 		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, state: state})
@@ -178,7 +183,7 @@ func connect(ctx context.Context, flags *pflag.FlagSet) (cli.Handlers, func() er
 	}
 	handlers.Models = runModels(env.cfg.Roles, install.DetectHosts(env.key.Worktree, os.Getenv))
 	handlers.IgnoreRuns = func() (bool, error) { return addRunsRule(env.key.Worktree) }
-	handlers.AfterStart = panelAutostart(env.cfg, lazyLifecycle(flags))
+	handlers.AfterStart = panelAutostart(env.cfg, lazyLifecycle(flags, os.Stderr))
 	return handlers, env.state.Close, nil
 }
 
