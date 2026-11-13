@@ -45,10 +45,13 @@ func (f *fakePages) Page(_ context.Context, card domain.Card, _ domain.Served) (
 	return []byte("<html>page " + card.ID + "</html>"), nil
 }
 
-func (f *fakePages) HasRegion(name string) bool { return name == "criteria" }
+func (f *fakePages) HasRegion(name string) bool { return name == "criteria" || name == "summary" }
 
 func (f *fakePages) Region(_ context.Context, card domain.Card, name string, _ domain.Served) ([]byte, error) {
 	f.calls++
+	if card.ID == "noplan" {
+		return nil, domain.ErrNoPlan
+	}
 	if name != "criteria" {
 		return nil, domain.ErrNotFound
 	}
@@ -89,6 +92,29 @@ func get(h nethttp.Handler, host, target string) *httptest.ResponseRecorder {
 	return rec
 }
 
+func TestRegionMissingLogOnlyForKnownRun(t *testing.T) {
+	t.Run("an unknown run answers 404 with no missing-region log", func(t *testing.T) {
+		var logs bytes.Buffer
+		srv, _ := newServer(t, &logs)
+		if rec := get(srv.Handler(), "localhost", "/runs/gone/regions/criteria"); rec.Code != 404 {
+			t.Fatalf("status %d", rec.Code)
+		}
+		if strings.Contains(logs.String(), "panel region missing") {
+			t.Errorf("unknown run raised the missing-region log: %q", logs.String())
+		}
+	})
+	t.Run("a known run with an unknown region logs it", func(t *testing.T) {
+		var logs bytes.Buffer
+		srv, _ := newServer(t, &logs)
+		if rec := get(srv.Handler(), "localhost", "/runs/20261113-a/regions/nope"); rec.Code != 404 {
+			t.Fatalf("status %d", rec.Code)
+		}
+		if !strings.Contains(logs.String(), "panel region missing") {
+			t.Errorf("log %q", logs.String())
+		}
+	})
+}
+
 func TestRoutes(t *testing.T) {
 	var logs bytes.Buffer
 	srv, pages := newServer(t, &logs)
@@ -104,10 +130,42 @@ func TestRoutes(t *testing.T) {
 		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
 			t.Fatalf("status %d type %q", rec.Code, rec.Header().Get("Content-Type"))
 		}
-		for _, want := range []string{`hx-get="/regions/board"`, `every 5s`, "panel serve", `href="/runs/20261113-a"`,
+		for _, want := range []string{`hx-get="/regions/board"`, `every 5s`, `hx-ext="morph,sse"`, `sse-connect="/events"`,
+			`sse:runs-changed, every 5s [!window.harnessLive]`, links.Sse, links.Live, links.Icon, "panel serve", `href="/runs/20261113-a"`,
 			"Planning", "Approval", "Working", "Reviewing", "Shipping", "Done", links.Htmx, links.Panel, "no plan &lt;b&gt;"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("board page lacks %q", want)
+			}
+		}
+	})
+
+	t.Run("board card shows the short title, the short id and the age", func(t *testing.T) {
+		const id = "20261113-133205-panel-live"
+		stamp, err := time.ParseInLocation("20060102-150405", id[:15], time.Local)
+		if err != nil {
+			t.Fatal(err)
+		}
+		now := stamp.Add(3*time.Hour + 5*time.Minute)
+		longTitle := strings.Repeat("t", 100)
+		runs := fakeRuns{cards: []domain.Card{{ID: id, Title: longTitle, Phase: "working", Version: domain.Version{Plan: "p1", Run: "r1"}}}}
+		aged := New(Config{
+			Version: "9.9.9",
+			Repo:    "/work/repo",
+			Board:   board.NewHandler(runs),
+			Page:    page.NewHandler(runs, &fakePages{}),
+			Logger:  slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+			Now:     func() time.Time { return now },
+		})
+		for _, target := range []string{"/", "/regions/board"} {
+			body := get(aged.Handler(), "localhost", target).Body.String()
+			for _, want := range []string{
+				`<span class="rid" title="` + id + `">20261113-133205</span>`,
+				`<span class="age">3h</span>`,
+				`title="` + longTitle + `">` + longTitle[:79] + `…</a>`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s lacks %q", target, want)
+				}
 			}
 		}
 	})
@@ -127,7 +185,7 @@ func TestRoutes(t *testing.T) {
 			attrs[m[1]] = m[2]
 		}
 		for name, want := range map[string]string{"class": "app", "id": "board", "hx-get": "/regions/board",
-			"hx-trigger": "every 5s", "hx-swap": "morph:outerHTML", "data-v": version} {
+			"hx-trigger": "sse:runs-changed, every 5s [!window.harnessLive]", "hx-swap": "morph:outerHTML", "data-v": version} {
 			if attrs[name] != want {
 				t.Errorf("region root %s = %q, want %q", name, attrs[name], want)
 			}
@@ -152,10 +210,11 @@ func TestRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("run with no plan gets the placeholder", func(t *testing.T) {
+	t.Run("run with no plan gets the styled page", func(t *testing.T) {
 		rec := get(h, "localhost", "/runs/noplan")
-		if rec.Code != 200 || !strings.Contains(rec.Body.String(), `http-equiv="refresh" content="5"`) {
-			t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
+		body := rec.Body.String()
+		if rec.Code != 200 || !strings.Contains(body, `sse-connect="/events?run=noplan"`) || strings.Contains(body, "http-equiv") {
+			t.Fatalf("status %d body %q", rec.Code, body)
 		}
 	})
 
@@ -385,7 +444,7 @@ func TestBoardCard(t *testing.T) {
 		`<h3><a href="/runs/20261113-a" title="panel serve">panel serve</a></h3>`,
 		`<span class="chip" title="feat/x"><span class="chip-t">feat/x</span></span>`,
 		`<a class="chip pr" href="https://example.test/pr/1" title="https://example.test/pr/1" target="_blank" rel="noopener noreferrer"><span class="chip-t">PR #1</span></a>`,
-		`<h3><a href="/runs/20261113-c" title="` + longToken + `">` + longToken + `</a></h3>`,
+		`<h3><a href="/runs/20261113-c" title="` + longToken + `">` + longToken[:79] + `…</a></h3>`,
 		`<span class="st st-fail">blocked</span>`,
 	} {
 		if !strings.Contains(body, want) {
@@ -456,7 +515,8 @@ func TestBoardNoPageOverflow(t *testing.T) {
 		{".col", "min-width", "0"},
 		{".task", "min-width", "0"},
 		{".task", "overflow-wrap", "anywhere"},
-		{".task h3", "-webkit-line-clamp", "3"},
+		{".task h3", "-webkit-line-clamp", "2"},
+		{".task h3", "line-clamp", "2"},
 		{".task h3", "overflow", "hidden"},
 		{".chip", "max-width", "100%"},
 		{".chip .chip-t", "text-overflow", "ellipsis"},

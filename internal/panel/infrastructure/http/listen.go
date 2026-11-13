@@ -38,6 +38,8 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		return err
 	case <-ctx.Done():
 	}
+	// A stream never ends on its own, so end each one before the drain starts.
+	s.stopStreams()
 	stop, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(stop); err != nil {
