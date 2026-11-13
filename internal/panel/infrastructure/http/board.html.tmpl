@@ -17,9 +17,9 @@
 {{range .Board.Columns}}<div class="col" id="col-{{.Key}}">
 <div class="col-h">{{.Name}}<span class="n">{{len .Cards}}</span></div>
 {{range .Cards}}<article class="task">
-<div class="tid"><span class="rid" title="{{.ID}}">{{.ID}}</span><span class="spacer"></span>{{if .Blocked}}<span class="st st-fail">blocked</span>{{else}}<span class="st">{{.Phase}}</span>{{end}}</div>
+<div class="tid"><span class="rid" title="{{.ID}}">{{.ID}}</span><span class="spacer"></span>{{if .Blocked}}<span class="st st-fail">blocked</span>{{end}}</div>
 <h3><a href="/runs/{{.ID}}" title="{{.Title}}">{{.Title}}</a></h3>
-{{if or .Branch .PRURL}}<div class="chips">{{with .Branch}}<span class="chip" title="{{.}}"><span class="chip-t">{{.}}</span></span>{{end}}{{with .PRURL}}<a class="chip" href="{{.}}" title="{{.}}" rel="noopener noreferrer"><span class="chip-t">PR</span></a>{{end}}</div>{{end}}
+{{if or .Branch .PRURL}}<div class="chips">{{with .Branch}}<span class="chip" title="{{.}}"><span class="chip-t">{{.}}</span></span>{{end}}{{if .PRURL}}<a class="chip pr" href="{{.PRURL}}" title="{{.PRURL}}" target="_blank" rel="noopener noreferrer"><span class="chip-t">PR{{with .PRNumber}} #{{.}}{{end}}</span></a>{{end}}</div>{{end}}
 </article>
 {{end}}</div>
 {{end}}</div>

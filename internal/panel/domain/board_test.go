@@ -116,6 +116,20 @@ func TestColumnKeys(t *testing.T) {
 	}
 }
 
+func TestCardPRNumber(t *testing.T) {
+	for url, want := range map[string]string{
+		"https://github.com/o/r/pull/129":  "129",
+		"https://github.com/o/r/pull/129/": "129",
+		"https://example.test/pr/1":        "1",
+		"https://example.test/pr/abc":      "",
+		"":                                 "",
+	} {
+		if got := (domain.Card{PRURL: url}).PRNumber(); got != want {
+			t.Errorf("PRNumber(%q) = %q, want %q", url, got, want)
+		}
+	}
+}
+
 func TestVersionParse(t *testing.T) {
 	v := domain.Version{Plan: "abc", Run: "def"}
 	if v.String() != "abc.def" || domain.ParseVersion(v.String()) != v {

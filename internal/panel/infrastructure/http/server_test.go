@@ -382,10 +382,9 @@ func TestBoardCard(t *testing.T) {
 	for _, want := range []string{
 		`<article class="task">`,
 		`<span class="rid" title="20261113-a">20261113-a</span>`,
-		`<span class="st">working</span>`,
 		`<h3><a href="/runs/20261113-a" title="panel serve">panel serve</a></h3>`,
 		`<span class="chip" title="feat/x"><span class="chip-t">feat/x</span></span>`,
-		`<a class="chip" href="https://example.test/pr/1"`,
+		`<a class="chip pr" href="https://example.test/pr/1" title="https://example.test/pr/1" target="_blank" rel="noopener noreferrer"><span class="chip-t">PR #1</span></a>`,
 		`<h3><a href="/runs/20261113-c" title="` + longToken + `">` + longToken + `</a></h3>`,
 		`<span class="st st-fail">blocked</span>`,
 	} {
@@ -396,15 +395,17 @@ func TestBoardCard(t *testing.T) {
 	if strings.Contains(body, `href="javascript`) || !strings.Contains(body, "#ZgotmplZ") {
 		t.Errorf("an unsafe PR url became a live link")
 	}
-	if strings.Contains(body, `<span class="st">blocked</span>`) {
-		t.Errorf("a blocked card shows a plain phase")
+	// The column names the phase, so only a blocked card carries a badge.
+	if strings.Contains(body, `<span class="st">`) {
+		t.Errorf("a card shows a plain phase badge")
 	}
 	// The kit styles .lbl as a bordered pill, so a chip must not use it.
 	if strings.Contains(body, `class="lbl"`) {
 		t.Errorf("a board chip uses the kit class lbl, which draws a pill inside the chip")
 	}
+	// A PR url with no trailing number keeps the plain label.
 	if !strings.Contains(body, `<span class="chip-t">PR</span>`) {
-		t.Errorf("the PR chip lacks its chip-t label")
+		t.Errorf("the unsafe PR chip lacks its plain chip-t label")
 	}
 }
 
@@ -465,6 +466,8 @@ func TestBoardNoPageOverflow(t *testing.T) {
 		{".task .tid .rid", "text-overflow", "ellipsis"},
 		{".task .tid .rid", "overflow", "hidden"},
 		{".task .tid .rid", "white-space", "nowrap"},
+		{".chip.pr", "color", "var(--accent)"},
+		{".chip.pr", "background", "var(--accent-bg)"},
 	}
 	for _, w := range want {
 		if got := r[w.sel][w.prop]; got != w.value {

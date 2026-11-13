@@ -9,4 +9,6 @@ body{overflow-x:clip}
 .task .tid .rid{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .task .chips{min-width:0}
 .chip{max-width:100%;min-width:0}
+.chip.pr{color:var(--accent);background:var(--accent-bg);border-color:color-mix(in oklch,var(--accent) 40%,var(--border))}
+.chip.pr:hover,.chip.pr:focus-visible{color:var(--accent);border-color:var(--accent)}
 .chip .chip-t{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

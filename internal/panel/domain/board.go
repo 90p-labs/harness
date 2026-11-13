@@ -25,6 +25,16 @@ func (c Card) Blocked() bool {
 	return c.Phase == shareddomain.PhaseBlocked
 }
 
+// PRNumber returns the trailing number of the PR url, or "" when it has none.
+func (c Card) PRNumber() string {
+	url := strings.TrimRight(c.PRURL, "/")
+	last := url[strings.LastIndex(url, "/")+1:]
+	if last == "" || strings.Trim(last, "0123456789") != "" {
+		return ""
+	}
+	return last
+}
+
 type Column struct {
 	Key    string
 	Name   string
