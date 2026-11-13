@@ -284,6 +284,16 @@ func TestShippingHintNamesWait(t *testing.T) {
 	}
 }
 
+func TestShippingHintNamesLearn(t *testing.T) {
+	lines := cli.Lines(status.Status{ID: submitRunID, Phase: domain.PhaseShipping})
+
+	got := lines[len(lines)-1]
+	learnAt := strings.Index(got, "harness run learn")
+	if learnAt < 0 || learnAt > strings.Index(got, "pull request") {
+		t.Errorf("hint = %q, want it to name harness run learn before the pull request", got)
+	}
+}
+
 func TestPlanningHintNamesThePlanFile(t *testing.T) {
 	lines := cli.Lines(status.Status{ID: submitRunID, Phase: domain.PhasePlanning})
 
