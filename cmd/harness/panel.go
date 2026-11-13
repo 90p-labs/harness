@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -25,6 +26,7 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 const sketchSuffix = ".excalidraw"
@@ -40,7 +42,7 @@ func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		runs := newPanelRuns(handlers.Status, env.key.Repo)
+		runs := newPanelRuns(handlers.Status, env.key.Repo).withLive(env.key, env.proofs, time.Now)
 		pages := newPanelPages(handlers.Status, env.key, planmodule.NewPages(env.proofs, env.defaultBranch))
 		return panelmodule.NewServe(version, env.key.Repo, runs, pages)(ctx, port, ready)
 	})
@@ -53,10 +55,154 @@ type panelRuns struct {
 	status   status.Handler
 	repo     string
 	branches *branchCache
+	live     *liveCache
 }
 
 func newPanelRuns(statuses status.Handler, repo string) panelRuns {
 	return panelRuns{status: statuses, repo: repo, branches: &branchCache{read: os.ReadFile}}
+}
+
+// withLive adds the branch head and the proofs of the active run to the run part that Get returns.
+// key is the panel worktree, whose active run is the only one the proof reader reads.
+func (r panelRuns) withLive(key domain.RunKey, proofs plandomain.ProofReader, now func() time.Time) panelRuns {
+	r.live = &liveCache{key: key, proofs: proofs, head: git.Head, now: now}
+	return r
+}
+
+// liveTTL is how long the head and the proofs of a run stay cached, so a burst of region requests spawns one git call.
+const liveTTL = time.Second
+
+// liveKeep is how long an entry that went stale stays, as the last good value while a read fails.
+const liveKeep = time.Minute
+
+// liveCache keeps the head and the proofs of each run for liveTTL.
+type liveCache struct {
+	key    domain.RunKey
+	proofs plandomain.ProofReader
+	head   func(ctx context.Context, dir string) (string, error)
+	now    func() time.Time
+
+	mu      sync.Mutex
+	entries map[string]liveEntry
+	flights map[string]*liveFlight
+}
+
+type liveEntry struct {
+	at     time.Time
+	head   string
+	proofs []string
+}
+
+// liveFlight is the read of one run that is in progress. Later callers of the run wait on done.
+type liveFlight struct {
+	done  chan struct{}
+	parts []string
+}
+
+// parts returns the head of the worktree, then the sorted proofs when the run is the active run.
+// A failed read is not cached: the last good value stays in its place, and the next call reads again.
+// A missing worktree has an empty head, which is cached like a good read.
+// One caller per run reads at a time, and the others wait for its result.
+// The lock is not held across the git and status calls.
+func (c *liveCache) parts(ctx context.Context, statuses status.Handler, s status.Status) []string {
+	c.mu.Lock()
+	now := c.now()
+	for id, e := range c.entries {
+		if now.Sub(e.at) >= liveKeep {
+			delete(c.entries, id)
+		}
+	}
+	prev, had := c.entries[s.ID]
+	if had && now.Sub(prev.at) < liveTTL {
+		c.mu.Unlock()
+		return append([]string{prev.head}, prev.proofs...)
+	}
+	if f, running := c.flights[s.ID]; running {
+		c.mu.Unlock()
+		select {
+		case <-f.done:
+			return f.parts
+		case <-ctx.Done():
+			return append([]string{prev.head}, prev.proofs...)
+		}
+	}
+	f := &liveFlight{done: make(chan struct{})}
+	if c.flights == nil {
+		c.flights = map[string]*liveFlight{}
+	}
+	c.flights[s.ID] = f
+	c.mu.Unlock()
+	f.parts = append([]string{prev.head}, prev.proofs...)
+	defer func() {
+		// Deferred so that waiters are released even when the read panics.
+		c.mu.Lock()
+		delete(c.flights, s.ID)
+		c.mu.Unlock()
+		close(f.done)
+	}()
+
+	entry, ok := c.read(ctx, statuses, s, now, prev)
+	f.parts = append([]string{entry.head}, entry.proofs...)
+	if ok {
+		c.mu.Lock()
+		if c.entries == nil {
+			c.entries = map[string]liveEntry{}
+		}
+		c.entries[s.ID] = entry
+		c.mu.Unlock()
+	}
+	return f.parts
+}
+
+// read reads the head and the proofs of a run. ok is false when a read failed, and the entry then keeps prev for it.
+func (c *liveCache) read(ctx context.Context, statuses status.Handler, s status.Status, now time.Time, prev liveEntry) (entry liveEntry, ok bool) {
+	entry = liveEntry{at: now, head: prev.head, proofs: prev.proofs}
+	ok = true
+	head, err := c.head(ctx, s.Worktree)
+	switch {
+	case err == nil:
+		entry.head = head
+	case errors.Is(err, fs.ErrNotExist):
+		entry.head = ""
+	default:
+		ok = false
+	}
+	if proofs, err := c.proofParts(ctx, statuses, s.ID); err == nil {
+		entry.proofs = proofs
+	} else {
+		ok = false
+	}
+	return entry, ok
+}
+
+// proofParts lists the passed criteria of the active run. Any other run has none.
+// A failed status read returns its error, and a worktree with no active run has no proofs.
+func (c *liveCache) proofParts(ctx context.Context, statuses status.Handler, id string) ([]string, error) {
+	active, err := statuses.Handle(ctx, status.Query{Key: c.key})
+	if errors.Is(err, domain.ErrRunNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if active.ID != id {
+		return nil, nil
+	}
+	passed, err := c.proofs.Passed(ctx)
+	if err != nil {
+		// The error text joins the parts, so a later recovery changes the version.
+		return []string{"proof error", err.Error()}, nil
+	}
+	nums := make([]int, 0, len(passed))
+	for n := range passed {
+		nums = append(nums, n)
+	}
+	slices.Sort(nums)
+	parts := make([]string, len(nums))
+	for i, n := range nums {
+		parts[i] = strconv.Itoa(n) + "=" + strconv.FormatBool(passed[n])
+	}
+	return parts, nil
 }
 
 // branchCache keeps the branch of each plan under the plan part it was read at.
@@ -129,7 +275,12 @@ func (r panelRuns) Get(ctx context.Context, id string) (paneldomain.Card, error)
 	if s.Repo != r.repo {
 		return paneldomain.Card{}, paneldomain.ErrNotFound
 	}
-	return buildCard(s, r.branches), nil
+	card := buildCard(s, r.branches)
+	if r.live != nil {
+		parts := append([]string{strconv.Itoa(s.Version)}, r.live.parts(ctx, r.status, s)...)
+		card.Version.Run = paneldomain.Fingerprint(parts...)
+	}
+	return card, nil
 }
 
 func panelCard(s status.Status) paneldomain.Card {
@@ -251,7 +402,7 @@ func (p panelPages) render(ctx context.Context, card paneldomain.Card, region st
 		RunID: card.ID, Phase: card.Phase, LiveRound: current.LiveRound,
 		Proofs:   active && !gone, // the gone view has no proof reader, and a deleted worktree has no proofs
 		Worktree: card.Worktree,
-		Served:   &plandomain.ViewServed{Version: served.Version, Base: served.Base, Home: "/"},
+		Served:   &plandomain.ViewServed{Version: served.Version, Base: served.Base, Home: "/", Events: served.Events},
 		Region:   region,
 	})
 	if errors.Is(err, plandomain.ErrUnknownRegion) || errors.Is(err, plandomain.ErrNoRegions) {
