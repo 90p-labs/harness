@@ -12,28 +12,34 @@ import (
 )
 
 const (
-	advisorFile   = "agents/advisor.md"
-	workerFile    = "agents/worker.md"
-	agentDocs     = "agents/*.md"
-	reviewerAgent = "agents/reviewer.md"
-	verifierAgent = "agents/verifier.md"
-	findingLine   = "`<id> | <severity> | <file>:<line> | <defect and failure scenario> | <observed or inferred> | <proof>`"
-	verifierLine  = "`<id> | real or not real | <severity> | <reason>`"
-	filesReadLine = "Files read:"
-	reReviewTitle = "## Re-review"
-	standardsRule = "does not report a rule that a gate checks"
-	reviewAnswer  = "Answer `closed` or `open`, to say whether its fixup fixes it."
-	explorerFile  = "agents/explorer.md"
-	templateName  = "references/plan-template.md"
-	templateRoot  = "skills/harness/"
-	binaryName    = "harness"
-	helpFlag      = "--help"
-	workerFixLine = "For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test."
-	workerIntro   = "You implement one task of a plan, one fix or one self-check. The lead gives you the path of the harness binary, the path of `plan.md` and one input."
-	workerCheck   = "For a self-check, the lead gives the self-check brief of the harness skill."
-	workerTask    = "For a task, the lead gives the number of the task."
-	workerRead    = "For a fix, read the file of each finding, its test and the values that `plan.md` sets for them."
-	workerPlan    = "Keep each value, name and limit that `plan.md` sets. When your change needs another one, skip that change, name the conflict in the report and end with `ISSUES`. In a self-check, write the conflict as `open` in `self-check.md`, with `plan conflict:` in the evidence."
+	advisorFile     = "agents/advisor.md"
+	workerFile      = "agents/worker.md"
+	agentDocs       = "agents/*.md"
+	reviewerAgent   = "agents/reviewer.md"
+	verifierAgent   = "agents/verifier.md"
+	findingLine     = "`<id> | <severity> | <file>:<line> | <defect and failure scenario> | <observed or inferred> | <proof>`"
+	verifierLine    = "`<id> | real or not real | <severity> | <reason>`"
+	filesReadLine   = "Files read:"
+	reReviewTitle   = "## Re-review"
+	standardsRule   = "does not report a rule that a gate checks"
+	reviewAnswer    = "Answer `closed` or `open`, to say whether its fixup fixes it."
+	explorerFile    = "agents/explorer.md"
+	templateName    = "references/plan-template.md"
+	templateRoot    = "skills/harness/"
+	binaryName      = "harness"
+	helpFlag        = "--help"
+	workerFixLine   = "For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test."
+	workerIntro     = "You implement one task of a plan, one fix or one self-check. The lead gives you the path of the harness binary, the path of `plan.md` and one input."
+	workerCheck     = "For a self-check, the lead gives the self-check brief of the harness skill."
+	workerTask      = "For a task, the lead gives the number of the task."
+	workerRead      = "For a fix, read the file of each finding, its test and the values that `plan.md` sets for them."
+	baselineTrigger = "modifies, replaces or removes existing behaviour"
+	baselineSkip    = "`baseline: not needed: <one-line reason>`"
+	classIntended   = "`intended`"
+	classBug        = "`bug`"
+	classAccidental = "`accidental`"
+	classAmbiguous  = "`ambiguous`"
+	workerPlan      = "Keep each value, name and limit that `plan.md` sets. When your change needs another one, skip that change, name the conflict in the report and end with `ISSUES`. In a self-check, write the conflict as `open` in `self-check.md`, with `plan conflict:` in the evidence."
 )
 
 var (
@@ -91,6 +97,59 @@ func checkBrief(t *testing.T, path string, steps []string) {
 }
 
 func TestExplorerBrief(t *testing.T) { checkBrief(t, explorerFile, explorerSteps) }
+
+var explorerBaseline = []string{
+	"## Evidence baseline",
+	baselineTrigger,
+	baselineSkip,
+	"This holds unless an ADR, `CONTEXT.md` entry or test fully pins that behaviour.",
+	"behaviour that is already fully pinned",
+	"When only part of the behaviour is pinned, the baseline covers the part that nothing pins.",
+	classIntended, classBug, classAccidental, classAmbiguous,
+	"`#`, `Behaviour`, `Code`, `Test`, `Values`, `Anomaly` and `Class`",
+	"When the code and a test disagree, the test states the intent.",
+	"A behaviour that only a doc describes is an aspiration.",
+	"one table for each independent area",
+	"The tables may add 600 words more in total.",
+	"An `ambiguous` baseline item stays in its table and is not repeated as an open decision.",
+	"touched files, evidence baseline or its `not needed` line, review risks",
+}
+
+var explorerSources = []string{
+	"- A contract states what the system promises",
+	"- The code states what the system does.",
+	"- A test is decisive.",
+	"- A doc helps to find the code.",
+}
+
+func TestExplorerBaseline(t *testing.T) {
+	raw := repository.Read(t, explorerFile)
+	for _, want := range explorerBaseline {
+		if !strings.Contains(raw, want) {
+			t.Errorf("%s does not hold %q", explorerFile, want)
+		}
+	}
+	_, order, _ := strings.Cut(raw, "## Evidence baseline")
+	last := -1
+	for _, bullet := range explorerSources {
+		at := strings.Index(order, bullet)
+		if at < 0 {
+			t.Errorf("%s source bullet %q is missing", explorerFile, bullet)
+			continue
+		}
+		if at < last {
+			t.Errorf("%s source bullet %q is out of order", explorerFile, bullet)
+		}
+		last = at
+	}
+	if !regexp.MustCompile(`(?m)^3\. .*evidence baseline`).MatchString(raw) {
+		t.Errorf("%s step 3 does not decide the evidence baseline", explorerFile)
+	}
+	desc := regexp.MustCompile(`(?m)^description: .*`).FindString(raw)
+	if !strings.Contains(desc, "evidence baseline") {
+		t.Errorf("%s description does not name the evidence baseline", explorerFile)
+	}
+}
 
 func TestAdvisorBrief(t *testing.T) { checkBrief(t, advisorFile, advisorSteps) }
 

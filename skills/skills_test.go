@@ -85,9 +85,34 @@ const (
 	reviewerBothLensesText  = "applies both checklists and sets the severity of each finding itself"
 )
 
+const (
+	baselineTriggerText     = "modifies, replaces or removes existing behaviour"
+	baselineNotNeededText   = "`baseline: not needed`"
+	baselineOneRoundText    = "one round"
+	baselineBeforePlanText  = "before you write `plan.md`"
+	baselineBugReportText   = "Report each bug to the user"
+	baselineDecisionsText   = "under `## Decisions`"
+	baselineQuestionTool    = "the question tool of the host"
+	baselineGrillRefText    = "references/grill.md"
+	baselineNotFullyPinned  = "not fully pinned"
+	baselineNotNeededRecord = "`- <date>: evidence baseline: not needed: <reason>`"
+	baselineClassRecord     = "`- <date>: evidence baseline: <class>: <behaviour>: <outcome>`"
+	baselineReplacesGrill   = "this record replaces the grill form `<question>: <answer>`"
+	contextFile             = "CONTEXT.md"
+	runsDoc                 = "docs/runs.md"
+	grillFile               = "skills/harness/references/grill.md"
+	evidenceBaselineTerm    = "**Evidence baseline**"
+	lintBaselineText        = "`harness lint baseline`"
+	grillRoundText          = "ambiguous items of the evidence baseline get one round before `plan.md` is written"
+	grillAnswersText        = "their answers go to `## Decisions`"
+	grillScopeText          = "except the one early round for the evidence baseline"
+	runsBaselineText        = "it also returns an evidence baseline. The lead asks the user about its ambiguous items in one round before `plan.md`."
+)
+
 var (
 	selfCheckIDs       = []string{"spec-proof", "spec-scope", "spec-text", "standards-rules", "standards-judgement"}
 	roleAgents         = []string{"explorer", "advisor", "worker", "reviewer", "verifier"}
+	baselineClasses    = []string{"`intended`", "`bug`", "`accidental`", "`ambiguous`"}
 	crossReference     = regexp.MustCompile("`([a-z][a-z-]*)` (" + skillKind + "|" + agentKind + ")\\b")
 	roleAgentLine      = regexp.MustCompile("`(" + strings.Join(roleAgents, "|") + ")` agents?\\b|model of the (?:`(?:" + strings.Join(roleAgents, "|") + ")` )?role\\b")
 	requiredReferences = map[string][]string{
@@ -349,6 +374,85 @@ func TestSkillAgentStartsNameModelField(t *testing.T) {
 	for _, role := range roleAgents {
 		if !started[role] {
 			t.Errorf("%s and %s start no %s agent with the %s", skillFile, reviewingFile, role, modelFieldText)
+		}
+	}
+}
+
+func TestSkillBaselineStep(t *testing.T) {
+	doc := repository.Read(t, skillFile)
+	start := strings.Index(doc, planningItemStart)
+	end := strings.Index(doc, planningSecondItemStart)
+	if start < 0 || end < start {
+		t.Fatalf("%s has no first planning item before the second planning item", skillFile)
+	}
+	item := doc[start:end]
+	explorer := repository.Read(t, explorerFile)
+	shared := append([]string{baselineTriggerText, baselineNotNeededText, baselineNotFullyPinned}, baselineClasses...)
+	for _, phrase := range shared {
+		if !strings.Contains(item, phrase) {
+			t.Errorf("the first planning item does not name %q", phrase)
+		}
+		if !strings.Contains(explorer, phrase) {
+			t.Errorf("%s does not name %q", explorerFile, phrase)
+		}
+	}
+	for _, phrase := range []string{baselineOneRoundText, baselineBeforePlanText, baselineBugReportText, baselineDecisionsText, baselineQuestionTool, baselineGrillRefText, baselineNotNeededRecord, baselineClassRecord, baselineReplacesGrill} {
+		if !strings.Contains(item, phrase) {
+			t.Errorf("the first planning item does not name %q", phrase)
+		}
+	}
+}
+
+func TestBaselineDocs(t *testing.T) {
+	context := repository.Read(t, contextFile)
+	_, term, found := strings.Cut(context, evidenceBaselineTerm)
+	if !found {
+		t.Fatalf("%s has no term %s", contextFile, evidenceBaselineTerm)
+	}
+	term, _, _ = strings.Cut(term, "\n")
+	for _, phrase := range append([]string{baselineNotNeededText, lintBaselineText, baselineNotFullyPinned}, baselineClasses...) {
+		if !strings.Contains(term, phrase) {
+			t.Errorf("the term %s of %s does not name %q", evidenceBaselineTerm, contextFile, phrase)
+		}
+	}
+	runs := repository.Read(t, runsDoc)
+	for _, phrase := range []string{runsBaselineText, baselineNotFullyPinned} {
+		if !strings.Contains(runs, phrase) {
+			t.Errorf("%s does not hold %q", runsDoc, phrase)
+		}
+	}
+	grill := repository.Read(t, grillFile)
+	for _, phrase := range []string{grillRoundText, grillAnswersText, grillScopeText} {
+		if !strings.Contains(grill, phrase) {
+			t.Errorf("%s does not name %q", grillFile, phrase)
+		}
+	}
+	design := repository.Read(t, designFile)
+	limit := regexp.MustCompile(`under (\d+) words`)
+	tableLimit := regexp.MustCompile(`The tables may add (\d+) words more`)
+	for _, entry := range []struct{ agent, file string }{{"explorer", explorerFile}, {"linter", linterAgent}} {
+		match := limit.FindStringSubmatch(repository.Read(t, entry.file))
+		if match == nil {
+			t.Fatalf("%s has no word limit", entry.file)
+		}
+		_, rest, found := strings.Cut(design, "The `"+entry.agent+"` agent returns")
+		if !found {
+			t.Errorf("%s has no sentence for the %s agent word limit", designFile, entry.agent)
+			continue
+		}
+		sentence, _, _ := strings.Cut(rest, ". ")
+		if want := "under " + match[1] + " words"; !strings.Contains(sentence, want) {
+			t.Errorf("%s does not give the %s agent %q", designFile, entry.agent, want)
+		}
+		if entry.agent != "explorer" {
+			continue
+		}
+		tables := tableLimit.FindStringSubmatch(repository.Read(t, entry.file))
+		if tables == nil {
+			t.Fatalf("%s has no table word limit", entry.file)
+		}
+		if want := "up to " + tables[1] + " words of evidence baseline tables"; !strings.Contains(sentence, want) {
+			t.Errorf("%s does not give the explorer agent %q", designFile, want)
 		}
 	}
 }
