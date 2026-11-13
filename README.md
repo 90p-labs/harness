@@ -134,7 +134,7 @@ An agent should not merge what you did not approve, or claim what it did not pro
 - **Proof, not claims.** A gate is one shell command that proves one property, such as the tests. `harness verify` runs the gates and each criterion, and keeps the evidence.
 - **Tests before code.** A `test:` commit must fail a gate, and every other commit must pass.
 - **More than one reviewer.** Two or more models review the change, and a verifier checks each finding. A light track with no guard, security or hook path gets one reviewer, and the floor is 1 model.
-- **Hard limits.** The guard rules run on the host hooks. They deny a PR merge, a PR that is not a draft, a forced push, a read of a secret and an early stop. `guard.disabled` can turn off the two PR rules, see `harness pr policy`.
+- **Hard limits.** The guard rules run on the host hooks. They deny a PR merge, a PR that is not a draft, a forced push and an early stop. They also deny a read of a secret and a dump of the process environment. `guard.disabled` can turn off the two PR rules, see `harness pr policy`.
 - **Clean architecture.** Lint packs for DDD, event sourcing, observability, Next.js and shadcn, with a baseline ratchet.
 - **Open to your tools.** An exec plugin reads a JSON event on stdin and prints a verdict. It can veto a transition, a plan or a gate.
 

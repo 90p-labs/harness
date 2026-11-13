@@ -91,7 +91,7 @@ func isSecretPath(path string) bool {
 	case base == envFile, strings.HasPrefix(base, envFilePrefix), strings.HasPrefix(base, sshKeyPrefix):
 		return true
 	}
-	return slices.ContainsFunc(secretSuffixes, func(s string) bool { return strings.HasSuffix(base, s) })
+	return isProcEnviron(path) || slices.ContainsFunc(secretSuffixes, func(s string) bool { return strings.HasSuffix(base, s) })
 }
 
 func denySecretsRead(call ToolCall, _ RuleContext) (string, bool) {
@@ -100,10 +100,51 @@ func denySecretsRead(call ToolCall, _ RuleContext) (string, bool) {
 			return deny(reasonSecret, nextStepSecret)
 		}
 	}
-	for _, c := range invocations(call.Command) {
-		if slices.ContainsFunc(slices.Concat(readOperands(c), c.Inputs, c.Redirects), isSecretPath) {
-			return deny(reasonSecret, nextStepSecret)
+	checker := &secretChecker{seen: map[string]bool{}}
+	if reason, found := checker.script(call.Command); found {
+		return deny(reason, nextStepSecret)
+	}
+	return "", false
+}
+
+// secretChecker holds the scripts that one top-level check has scanned.
+type secretChecker struct {
+	seen map[string]bool
+}
+
+// script checks a line and, recursively, each script nested in it.
+// A body is a part of the line, or a word of it with quotes removed, so it is shorter.
+// That is why the recursion ends. A script text is also scanned once.
+func (k *secretChecker) script(line string) (string, bool) {
+	if k.seen[line] {
+		return "", false
+	}
+	k.seen[line] = true
+	line = neutralANSIC(line)
+	for _, c := range Commands(line) {
+		if reason, found := k.command(c); found {
+			return reason, true
 		}
+	}
+	for _, body := range nestedScripts(line) {
+		if reason, found := k.script(body); found {
+			return reason, true
+		}
+	}
+	return "", false
+}
+
+func (k *secretChecker) command(c Command) (string, bool) {
+	raw := expandSplitStrings(c.Args)
+	c.Args = programArgs(raw)
+	switch {
+	case isEnvDump(raw):
+		return reasonEnvDump, true
+	case slices.ContainsFunc(slices.Concat(readOperands(c), c.Inputs, c.Redirects), isSecretPath):
+		return reasonSecret, true
+	}
+	if script, ok := shellScript(c.Args); ok {
+		return k.script(script)
 	}
 	return "", false
 }
