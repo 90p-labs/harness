@@ -37,33 +37,52 @@ const (
 type Tree struct{}
 
 func (Tree) InputHash(ctx context.Context, dir string, gate domain.Gate) (string, error) {
-	files, err := inputFiles(ctx, dir, gate)
+	hashes, err := Tree{}.InputHashes(ctx, dir, []domain.Gate{gate})
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256([]byte(strings.Join([]string{gate.Run, gate.Baseline, files}, nulSeparator)))
-	return hex.EncodeToString(sum[:]), nil
+	return hashes[0], nil
 }
 
-func inputFiles(ctx context.Context, dir string, gate domain.Gate) (string, error) {
+// InputHashes builds one scratch index and derives the hash of each gate from it.
+func (Tree) InputHashes(ctx context.Context, dir string, gates []domain.Gate) ([]string, error) {
+	hashes := make([]string, 0, len(gates))
+	if len(gates) == 0 {
+		return hashes, nil
+	}
 	scratch, err := os.MkdirTemp("", "harness-index-*")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer os.RemoveAll(scratch)
 	env := []string{indexFileEnv + filepath.Join(scratch, indexFileName)}
 
 	if _, err := git.Run(ctx, dir, env, "add", "-A"); err != nil {
-		return "", err
+		return nil, err
 	}
-	if len(gate.Paths) == 0 {
-		return git.Run(ctx, dir, env, "write-tree")
+	var treeID, listing string
+	if slices.ContainsFunc(gates, func(g domain.Gate) bool { return len(g.Paths) == 0 }) {
+		if treeID, err = git.Run(ctx, dir, env, "write-tree"); err != nil {
+			return nil, err
+		}
 	}
-	listing, err := git.Run(ctx, dir, env, "ls-files", "-s", "-z")
-	if err != nil {
-		return "", err
+	if slices.ContainsFunc(gates, func(g domain.Gate) bool { return len(g.Paths) > 0 }) {
+		if listing, err = git.Run(ctx, dir, env, "ls-files", "-s", "-z"); err != nil {
+			return nil, err
+		}
 	}
+	for _, gate := range gates {
+		files := treeID
+		if len(gate.Paths) > 0 {
+			files = filterListing(listing, gate)
+		}
+		sum := sha256.Sum256([]byte(strings.Join([]string{gate.Run, gate.Baseline, files}, nulSeparator)))
+		hashes = append(hashes, hex.EncodeToString(sum[:]))
+	}
+	return hashes, nil
+}
 
+func filterListing(listing string, gate domain.Gate) string {
 	patterns := gate.Paths
 	if gate.Baseline != "" {
 		patterns = append(slices.Clip(patterns), gate.Baseline)
@@ -78,7 +97,7 @@ func inputFiles(ctx context.Context, dir string, gate domain.Gate) (string, erro
 		lines = append(lines, name+" "+fields[modeFieldIndex]+" "+fields[blobFieldIndex]+"\n")
 	}
 	sort.Strings(lines)
-	return strings.Join(lines, ""), nil
+	return strings.Join(lines, "")
 }
 
 func (Tree) Head(ctx context.Context, dir string) (string, error) {
