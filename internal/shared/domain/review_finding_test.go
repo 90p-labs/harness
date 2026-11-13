@@ -20,8 +20,8 @@ func TestParseReviewFindings(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := []domain.ReviewFinding{
-			{ID: "F1", Severity: domain.SeverityBlocker, Verdict: domain.FindingReal, Status: domain.FindingOpen},
-			{ID: "F2", Severity: domain.SeverityMinor, Verdict: domain.FindingNotReal, Status: domain.FindingClosed},
+			{ID: "F1", Severity: domain.SeverityBlocker, Verdict: domain.FindingReal, Status: domain.FindingOpen, Location: "a.go:1", Text: "bad"},
+			{ID: "F2", Severity: domain.SeverityMinor, Verdict: domain.FindingNotReal, Status: domain.FindingClosed, Location: "b.go:2", Text: "nit"},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %+v, want %+v", got, want)
@@ -115,6 +115,40 @@ func TestNamesFinding(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseReviewFindingsLearnColumns(t *testing.T) {
+	const header = "| ID | Severity | File:line | Finding | Lens | Verdict | Status |\n|---|---|---|---|---|---|---|\n"
+	text := header +
+		"| S1 | major | a.go:7 | Wrap the error | Standards | real | open |\n" +
+		"| S2 | minor | b.go:2 | Name it | spec | real | closed |\n"
+	got, err := domain.ParseReviewFindings(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.ReviewFinding{
+		{ID: "S1", Severity: domain.SeverityMajor, Verdict: domain.FindingReal, Status: domain.FindingOpen,
+			Lens: "standards", Location: "a.go:7", Text: "Wrap the error"},
+		{ID: "S2", Severity: domain.SeverityMinor, Verdict: domain.FindingReal, Status: domain.FindingClosed,
+			Lens: "spec", Location: "b.go:2", Text: "Name it"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+
+	t.Run("the columns are optional", func(t *testing.T) {
+		plain, err := domain.ParseReviewFindings("| ID | Severity | Verdict | Status |\n|---|---|---|---|\n| F1 | major | real | open |\n")
+		if err != nil || plain[0].Lens != "" || plain[0].Location != "" || plain[0].Text != "" {
+			t.Fatalf("got %+v, %v, want no lens, location or text", plain, err)
+		}
+	})
+
+	t.Run("a short row leaves the cells empty", func(t *testing.T) {
+		short, err := domain.ParseReviewFindings("| ID | Severity | Verdict | Status | Lens |\n|---|---|---|---|---|\n| F1 | major | real | open |\n")
+		if err != nil || short[0].Lens != "" {
+			t.Fatalf("got %+v, %v, want no lens", short, err)
+		}
+	})
 }
 
 func TestParseReviewFindingsModel(t *testing.T) {

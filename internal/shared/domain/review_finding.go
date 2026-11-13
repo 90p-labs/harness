@@ -59,9 +59,18 @@ type ReviewFinding struct {
 	Status   FindingStatus
 	// Model is the optional Model cell: the reviewer model that raised the finding.
 	Model string
+	// Lens is the optional Lens cell, lower case: the reviewer lens that raised the finding.
+	Lens string
+	// Location is the optional File:line cell.
+	Location string
+	// Text is the optional Finding cell.
+	Text string
 }
 
 const (
+	columnLens     = "lens"
+	columnLocation = "file:line"
+	columnText     = "finding"
 	columnID       = "id"
 	columnSeverity = "severity"
 	columnVerdict  = "verdict"
@@ -201,9 +210,16 @@ func findingOf(cells []string, columns map[string]int) (ReviewFinding, error) {
 		Verdict:  FindingVerdict(values[2]),
 		Status:   FindingStatus(values[3]),
 	}
-	if at, ok := columns[columnModel]; ok && at < len(cells) {
-		finding.Model = cells[at]
+	optional := func(name string) string {
+		if at, ok := columns[name]; ok && at < len(cells) {
+			return cells[at]
+		}
+		return ""
 	}
+	finding.Model = optional(columnModel)
+	finding.Lens = strings.ToLower(optional(columnLens))
+	finding.Location = optional(columnLocation)
+	finding.Text = optional(columnText)
 	switch {
 	case finding.ID == "":
 		return ReviewFinding{}, errors.New("empty ID")
