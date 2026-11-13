@@ -30,3 +30,4 @@ One line per ADR. Read this first, then only the ADRs that the change touches.
 | [0024](0024-learn-conventions-at-ship.md) | 0024 Learn conventions at ship |
 | [0025](0025-reproduce-a-bug-before-the-plan.md) | 0025 Reproduce a bug before the plan |
 | [0026](0026-program-layers-around-a-run.md) | 0026 Program layers around a run |
+| [0027](0027-one-panel-per-user.md) | 0027 One panel per user |
