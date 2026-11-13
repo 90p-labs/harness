@@ -2,27 +2,21 @@ package renderview
 
 import (
 	"context"
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/90p-labs/harness/internal/plan/application/query/viewpage"
 	"github.com/90p-labs/harness/internal/plan/domain"
 )
 
 const (
-	spanName      = "plan.view"
-	attrProblems  = "harness.plan.problems"
-	attrViewBytes = "harness.view.bytes"
-	pageFile      = "plan.html"
-	pageMode      = 0o600
+	pageFile = "plan.html"
+	pageMode = 0o600
 
-	RuleBranchRead domain.RuleID = "branch-read"
-	RuleProofRead  domain.RuleID = "proof-read"
+	RuleBranchRead = viewpage.RuleBranchRead
+	RuleProofRead  = viewpage.RuleProofRead
 )
 
 type Command struct {
@@ -49,51 +43,36 @@ type Dependencies struct {
 }
 
 type Handler struct {
-	deps Dependencies
+	page     viewpage.Handler
+	worktree string
 }
 
 func NewHandler(deps Dependencies) Handler {
-	return Handler{deps: deps}
+	return Handler{page: viewpage.NewHandler(viewpage.Dependencies{
+		Check:         viewpage.Check(deps.Check),
+		Branches:      deps.Branches,
+		Proofs:        deps.Proofs,
+		Charts:        deps.Charts,
+		Sketches:      deps.Sketches,
+		Renderer:      deps.Renderer,
+		DefaultBranch: deps.DefaultBranch,
+		Tracer:        deps.Tracer,
+	}), worktree: deps.Worktree}
 }
 
-func (h Handler) Handle(ctx context.Context, c Command) (out string, err error) {
-	ctx, span := h.deps.Tracer.Start(ctx, spanName)
-	problems, size := 0, 0
-	defer func() {
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-		}
-		span.SetAttributes(attribute.Int(attrProblems, problems), attribute.Int(attrViewBytes, size))
-		span.End()
-	}()
-
-	report, err := h.deps.Check(ctx, c.Path, c.LiveRound)
+func (h Handler) Handle(ctx context.Context, c Command) (string, error) {
+	page, _, err := h.page.Handle(ctx, viewpage.Query{
+		Path:      c.Path,
+		RunID:     c.RunID,
+		Phase:     c.Phase,
+		LiveRound: c.LiveRound,
+		Proofs:    c.Proofs,
+		Worktree:  h.worktree,
+	})
 	if err != nil {
 		return "", err
 	}
-	var in domain.ViewInput
-	if report.Program != nil {
-		in = domain.ViewInput{Program: report.Program, Problems: report.Problems}
-	} else {
-		in = domain.ViewInput{
-			Doc:      report.Doc,
-			Problems: report.Problems,
-			Links:    domain.Trace(report.Doc),
-			Run:      domain.ViewRun{ID: c.RunID, Phase: c.Phase, Track: string(report.Track), Branch: report.Doc.RunPR().Branch},
-			Charts:   h.charts(report.Doc),
-			Sketches: h.sketches(report.Doc, filepath.Dir(c.Path)),
-		}
-		h.addEvidence(ctx, c, &in)
-	}
-	problems = len(in.Problems)
-
-	page, err := h.deps.Renderer.Render(in)
-	if err != nil {
-		return "", err
-	}
-	size = len(page)
-	out = c.Out
+	out := c.Out
 	if out == "" {
 		out = filepath.Join(filepath.Dir(c.Path), pageFile)
 	}
@@ -101,65 +80,4 @@ func (h Handler) Handle(ctx context.Context, c Command) (out string, err error) 
 		return "", err
 	}
 	return out, nil
-}
-
-func (h Handler) addEvidence(ctx context.Context, c Command, in *domain.ViewInput) {
-	base := in.Doc.Base()
-	if base == "" {
-		var err error
-		if base, err = h.deps.DefaultBranch(ctx); err != nil {
-			in.Problems = append(in.Problems, readProblem(RuleBranchRead, err))
-		}
-	}
-	if base != "" {
-		branch, err := h.deps.Branches.Read(ctx, h.deps.Worktree, base, domain.TestFiles(in.Doc))
-		if err != nil {
-			in.Problems = append(in.Problems, readProblem(RuleBranchRead, err))
-		} else {
-			in.Branch = &branch
-		}
-	}
-	if c.Proofs {
-		proofs, err := h.deps.Proofs.Passed(ctx)
-		if err != nil {
-			in.Problems = append(in.Problems, readProblem(RuleProofRead, err))
-		}
-		in.Proofs = proofs
-	}
-}
-
-func readProblem(rule domain.RuleID, err error) domain.Problem {
-	return domain.Problem{Rule: rule, Message: err.Error()}
-}
-
-func (h Handler) charts(doc domain.Document) map[int]string {
-	charts := map[int]string{}
-	for _, d := range doc.Diagrams {
-		if d.Kind != domain.DiagramState {
-			continue
-		}
-		if chart, err := h.deps.Charts.StateChart(d.Body); err == nil {
-			charts[d.Line] = chart
-		}
-	}
-	return charts
-}
-
-func (h Handler) sketches(doc domain.Document, dir string) map[string][]byte {
-	sketches := map[string][]byte{}
-	for _, s := range doc.Sketches {
-		scene, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(s.Path)))
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		var svg []byte
-		if err == nil {
-			svg, err = h.deps.Sketches.RenderSVG(scene)
-		}
-		if err != nil {
-			svg = []byte(err.Error())
-		}
-		sketches[s.Path] = svg
-	}
-	return sketches
 }

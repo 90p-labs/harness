@@ -9,6 +9,7 @@ import (
 	"github.com/90p-labs/harness/internal/plan/application/command/submitplan"
 	"github.com/90p-labs/harness/internal/plan/application/query/checkplan"
 	"github.com/90p-labs/harness/internal/plan/application/query/markdiagram"
+	"github.com/90p-labs/harness/internal/plan/application/query/viewpage"
 	"github.com/90p-labs/harness/internal/plan/domain"
 	"github.com/90p-labs/harness/internal/plan/infrastructure/browser"
 	"github.com/90p-labs/harness/internal/plan/infrastructure/excalidraw"
@@ -55,6 +56,23 @@ func NewModule(bus shareddomain.Dispatcher, worktree string, proofs domain.Proof
 		View:   newView(check, worktree, proofs, defaultBranch),
 		Open:   opener.Open,
 	}
+}
+
+// NewPages returns the page query for the served panel. Each query names its
+// own worktree, so the module holds none.
+func NewPages(proofs domain.ProofReader, defaultBranch DefaultBranch) viewpage.Handler {
+	renderer := view.NewRenderer()
+	return viewpage.NewHandler(viewpage.Dependencies{
+		Check:         checkFile(newCheck()),
+		Branches:      gitdiff.Reader{},
+		Proofs:        proofs,
+		Charts:        chartConverter{},
+		Sketches:      sketchRenderer{},
+		Renderer:      renderer,
+		Regions:       renderer,
+		DefaultBranch: defaultBranch,
+		Tracer:        otel.Tracer(tracerName),
+	})
 }
 
 func newCheck() checkplan.Handler {

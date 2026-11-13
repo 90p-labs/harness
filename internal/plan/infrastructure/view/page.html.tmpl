@@ -8,7 +8,7 @@
 <style>{{.Tokens}}</style>
 <style>{{.CSS}}</style>
 </head>
-<body>
+<body{{if .Served}} hx-ext="morph"{{end}}>
 <div class="app">
 <aside class="side" aria-label="Sections">
 <div class="ws"><span class="ws-logo" aria-hidden="true"></span>harness</div>
@@ -93,24 +93,28 @@
 <div class="toast" id="toast" role="status"></div>
 <aside class="tracer" id="tracer" aria-live="polite" hidden><header><p class="tr-k">Trace</p><p class="tr-t" id="tracer-title"></p><button type="button" id="tracer-close" aria-label="Close the trace">Close</button></header><div id="tracer-body"></div><p class="tr-hint">Click an item to pin its trace.</p></aside>
 <script type="application/json" id="plan-data">{{.Data}}</script>
-<script>{{.Mermaid}}</script>
-<script>{{.JS}}</script>
+{{if .Linked}}<script src="{{.Linked.Htmx}}"></script>
+<script src="{{.Linked.Morph}}"></script>
+<script src="{{.Linked.Panel}}"></script>
+<script src="{{.Linked.Mermaid}}"></script>
+{{else}}<script>{{.Mermaid}}</script>
+{{end}}<script>{{.JS}}</script>
 </body>
 </html>
 {{define "chips"}}{{if .Chips}}<span class="lk">{{if .Name}}<em>{{.Name}}</em>{{end}}{{range .Chips}}{{if .Href}}<a class="chip" href="#{{.Href}}" data-key="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}</a>{{else}}<span class="chip broken" title="No such item">{{.Label}}</span>{{end}}{{end}}</span>{{end}}{{end}}
-{{define "ico"}}<span class="ico {{cls .}}" aria-hidden="true"><svg class="i" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>{{if eq (cls .) "pass"}}<path d="m4.4 7.2 1.8 1.8 3.5-3.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>{{else if eq (cls .) "fail"}}<path d="m5 5 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>{{end}}</svg></span>{{end}}{{define "plan/status"}}<span class="status-pill" id="top-status">{{with .Run.Phase}}{{if eq . "done"}}{{template "ico" "pass"}}{{else if eq . "working"}}{{template "ico" "work"}}{{else if eq . "blocked"}}{{template "ico" "fail"}}{{else}}{{template "ico" "open"}}{{end}}{{$.Status}}{{end}}</span>{{end}}{{define "plan/summary"}}<section id="summary" class="masthead" data-group="{{.G.Product}}">
+{{define "ico"}}<span class="ico {{cls .}}" aria-hidden="true"><svg class="i" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>{{if eq (cls .) "pass"}}<path d="m4.4 7.2 1.8 1.8 3.5-3.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>{{else if eq (cls .) "fail"}}<path d="m5 5 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>{{end}}</svg></span>{{end}}{{define "plan/status"}}<span class="status-pill" id="top-status"{{.Poll "status"}}>{{with .Run.Phase}}{{if eq . "done"}}{{template "ico" "pass"}}{{else if eq . "working"}}{{template "ico" "work"}}{{else if eq . "blocked"}}{{template "ico" "fail"}}{{else}}{{template "ico" "open"}}{{end}}{{$.Status}}{{end}}</span>{{end}}{{define "plan/summary"}}<section id="summary"{{.Poll "summary"}} class="masthead" data-group="{{.G.Product}}">
 <p class="eyebrow">{{with .Track}}<span>{{.}}</span>{{end}}</p>
 <h1 class="title">{{.Title}}</h1>
 {{range .Goal}}<p class="goal">{{.}}</p>
-{{end}}</section>{{end}}{{define "plan/criteria"}}<section id="criteria" data-group="{{.G.Product}}" aria-labelledby="criteria-h"><h2 id="criteria-h">Acceptance criteria <span class="n">{{.Counts.Criteria}}</span></h2>
+{{end}}</section>{{end}}{{define "plan/criteria"}}<section id="criteria"{{.Poll "criteria"}} data-group="{{.G.Product}}" aria-labelledby="criteria-h"><h2 id="criteria-h">Acceptance criteria <span class="n">{{.Counts.Criteria}}</span></h2>
 <ol class="list criteria">
 {{range .Criteria}}<li id="{{.Key}}" data-state="{{.State}}" data-key="{{.Key}}" class="row criterion">{{template "ico" .State}}<span class="id">C{{.Number}}</span><div class="txt"><p>{{.Text}}</p>
 <p class="verdict"><span class="st st-{{cls .State}}">{{.State}}</span></p>
 <div class="links">
 {{template "chips" dict "Name" "Tasks" "Chips" .Tasks}}{{template "chips" dict "Name" "Specs" "Chips" .Specs}}{{template "chips" dict "Name" "Commits" "Chips" .Commits}}{{template "chips" dict "Name" "Signal" "Chips" .Signal}}{{if .Proof}}<span class="lk"><em>Proof</em><a class="chip proof" href="#proofs" title="{{.Proof}}">command</a></span>{{end}}</div></div></li>
-{{end}}</ol></section>{{end}}{{define "plan/notes"}}{{if .Notes}}<section id="notes" data-group="{{.G.Product}}" aria-labelledby="notes-h"><h2 id="notes-h">Decisions and risks</h2>
+{{end}}</ol></section>{{end}}{{define "plan/notes"}}{{if .Notes}}<section id="notes"{{.Poll "notes"}} data-group="{{.G.Product}}" aria-labelledby="notes-h"><h2 id="notes-h">Decisions and risks</h2>
 {{range .Notes}}{{if .Items}}<details class="grp"{{if .Open}} open{{end}}><summary><svg class="i chev" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 3.5 3.5 3.5L5 10.5"/></svg>{{.Title}}<span class="n">{{len .Items}}</span></summary><ul class="notes">{{range .Items}}<li><span>{{.}}</span></li>{{end}}</ul></details>
-{{end}}{{end}}</section>{{end}}{{end}}{{define "plan/specs"}}<section id="specs" data-group="{{.G.Specs}}" aria-labelledby="specs-h"><h2 id="specs-h">Tech specs <span class="n">{{len .Specs}}</span></h2>
+{{end}}{{end}}</section>{{end}}{{end}}{{define "plan/specs"}}<section id="specs"{{.Poll "specs"}} data-group="{{.G.Specs}}" aria-labelledby="specs-h"><h2 id="specs-h">Tech specs <span class="n">{{len .Specs}}</span></h2>
 <p class="lede">Colors mark the change: <span class="mark mark-new">new</span> <span class="mark mark-changed">changed</span> <span class="mark mark-deleted">deleted</span></p>
 <div class="specs">
 {{range .Specs}}<article id="{{.Key}}" class="card spec" data-key="{{.Key}}"><header><h3>{{.Title}}</h3><p class="spec-meta">{{template "chips" dict "Name" "Criteria" "Chips" .Criteria}}</p></header>
@@ -120,7 +124,7 @@
 {{end}}{{range .Sketches}}<figure class="diagram sketch-fig"><div class="sketch-wrap" role="img" aria-label="{{.Title}}">{{if .SVG}}{{.SVG}}{{else if .Error}}<p class="sketch-error">{{.Error}}</p>{{else}}<p class="sketch-error">No sketch for this link.</p>{{end}}</div>
 <figcaption><span>excalidraw, <code>{{.Path}}</code></span><span class="cap">{{.Title}}</span></figcaption></figure>
 {{end}}</article>
-{{end}}</div></section>{{end}}{{define "plan/tasks"}}<section id="tasks" data-group="{{.G.Tasks}}" aria-labelledby="tasks-h"><h2 id="tasks-h">Tasks <span class="n">{{.Counts.Tasks}}</span></h2>
+{{end}}</div></section>{{end}}{{define "plan/tasks"}}<section id="tasks"{{.Poll "tasks"}} data-group="{{.G.Tasks}}" aria-labelledby="tasks-h"><h2 id="tasks-h">Tasks <span class="n">{{.Counts.Tasks}}</span></h2>
 <p class="lede">Tasks in one wave share no dependency, so they can run in parallel.</p><div class="board">
 {{range .Waves}}<div class="col"><div class="col-h">Wave {{.Number}}<span class="n">{{len .Tasks}}</span></div>
 {{range .Tasks}}<article id="{{.Key}}" class="task" data-key="{{.Key}}" data-state="{{.State}}"><header class="tid">{{if eq .State "committed"}}{{template "ico" "pass"}}{{else}}{{template "ico" "open"}}{{end}}<span class="tn">T{{.Number}}</span><span class="spacer"></span>{{template "chips" dict "Name" "after" "Chips" .After}}</header><h3>{{.Name}}</h3>
@@ -129,31 +133,31 @@
 <details class="owned"><summary>{{len .Owned}} file{{if ne (len .Owned) 1}}s{{end}}</summary><ul>{{range .Owned}}<li><code>{{.}}</code></li>{{end}}</ul></details>
 <div class="links">{{template "chips" dict "Name" "DoD" "Chips" .DoD}}{{template "chips" dict "Name" "Commit" "Chips" .Commits}}</div></article>
 {{end}}</div>
-{{end}}</div></section>{{end}}{{define "plan/trees"}}<section id="trees" data-group="{{.G.Specs}}" aria-labelledby="trees-h"><h2 id="trees-h">Files <span class="n">{{.Counts.Files}}</span></h2>
+{{end}}</div></section>{{end}}{{define "plan/trees"}}<section id="trees"{{.Poll "trees"}} data-group="{{.G.Specs}}" aria-labelledby="trees-h"><h2 id="trees-h">Files <span class="n">{{.Counts.Files}}</span></h2>
 <div class="toolbar" id="ftool" role="group" aria-label="Filter files by change"><button class="fbtn on" type="button" data-filter="all" aria-pressed="true">All <span class="n">{{.Counts.Files}}</span></button><button class="fbtn" type="button" data-filter="new" aria-pressed="false"><i class="dot dot-new" aria-hidden="true"></i>New <span class="n">{{.Done.NewFiles}}</span></button><button class="fbtn" type="button" data-filter="changed" aria-pressed="false"><i class="dot dot-changed" aria-hidden="true"></i>Changed <span class="n">{{.Done.ChangedFiles}}</span></button><button class="fbtn" type="button" data-filter="deleted" aria-pressed="false"><i class="dot dot-deleted" aria-hidden="true"></i>Deleted <span class="n">{{.Done.DeletedFiles}}</span></button></div>
 <div class="trees">
 {{range .Trees}}<div class="tree"><p class="tree-h">{{.Title}}</p><div class="rows">{{range .Rows}}<span class="tr{{if .Dir}} dir-row{{else}} file ch-{{.Mark}}{{end}}"{{if .ID}} id="{{.ID}}" data-key="{{.ID}}"{{end}}{{if .State}} data-state="{{.State}}"{{end}}{{if .Dir}} role="button" tabindex="0" aria-expanded="true"{{else}} data-change="{{.Mark}}"{{end}} data-depth="{{.Depth}}" style="--depth: {{.Depth}}">{{if .Dir}}<svg class="i chev" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 3.5 3.5 3.5L5 10.5"/></svg><span class="dir">{{.Name}}</span>{{else}}<span class="mark mark-{{.Mark}}" title="{{.Mark}}">{{.Mark}}</span><span class="fname">{{.Name}}</span><span class="who">{{if and .State (not (or (and (eq .Mark "new") (eq .State "added")) (and (eq .Mark "changed") (eq .State "modified")) (and (eq .Mark "deleted") (eq .State "deleted"))))}}<span class="st st-{{cls .State}}">{{.State}}</span>{{end}}{{template "chips" dict "Name" "" "Chips" .Owners}}</span>{{end}}</span>
 {{end}}</div></div>
-{{end}}</div></section>{{end}}{{define "plan/delivery"}}<section id="delivery" data-group="{{.G.Tasks}}" aria-labelledby="delivery-h"><h2 id="delivery-h">Commits and PR <span class="n">{{len .Commits}}</span></h2>
+{{end}}</div></section>{{end}}{{define "plan/delivery"}}<section id="delivery"{{.Poll "delivery"}} data-group="{{.G.Tasks}}" aria-labelledby="delivery-h"><h2 id="delivery-h">Commits and PR <span class="n">{{len .Commits}}</span></h2>
 {{with .Run.Branch}}<p class="route"><code>{{.}}</code>{{with $.Base}} to <code>{{.}}</code>{{end}}</p>
 {{end}}<ol class="commits">
 {{range .Commits}}<li id="{{.Key}}" data-state="{{.State}}" data-key="{{.Key}}"><span class="kn">{{.Number}}</span><code>{{.Subject}}</code><span class="links"><span class="st st-{{cls .State}}">{{.State}}</span>{{template "chips" dict "Name" "" "Chips" .Tasks}}</span></li>
 {{end}}</ol>
 {{range .PRs}}<div id="{{.Key}}" class="pr" data-key="{{.Key}}">{{if .ThisRun}}<span class="pr-tag">this run</span>{{end}}<code>{{.Branch}}</code>{{with .Base}} into <code>{{.}}</code>{{end}}</div>
-{{end}}</section>{{end}}{{define "plan/problems"}}<section id="problems" class="problems{{if not .Problems}} ok{{end}}" data-group="{{.G.QA}}" aria-labelledby="problems-h"><h2 id="problems-h">Problems <span class="n">{{.Counts.Problems}}</span></h2>
+{{end}}</section>{{end}}{{define "plan/problems"}}<section id="problems"{{.Poll "problems"}} class="problems{{if not .Problems}} ok{{end}}" data-group="{{.G.QA}}" aria-labelledby="problems-h"><h2 id="problems-h">Problems <span class="n">{{.Counts.Problems}}</span></h2>
 {{if .Problems}}<ul>
 {{range .Problems}}<li class="problem">{{if .Anchor}}<a class="loc" href="#{{.Anchor}}">plan.md:{{.Line}}</a>{{else}}<span class="loc">plan.md{{with .Line}}:{{.}}{{end}}</span>{{end}}<span class="rule">{{.Rule}}</span><span class="ptext">{{.Message}}</span></li>
 {{end}}</ul>{{else}}<p class="clean">The plan passes every check.</p>{{end}}
-</section>{{end}}{{define "plan/trace-matrix"}}<section id="trace-matrix" data-group="{{.G.QA}}" aria-labelledby="matrix-h"><h2 id="matrix-h">Traceability</h2>
+</section>{{end}}{{define "plan/trace-matrix"}}<section id="trace-matrix"{{.Poll "trace-matrix"}} data-group="{{.G.QA}}" aria-labelledby="matrix-h"><h2 id="matrix-h">Traceability</h2>
 <p class="lede">Each row is a criterion. A dot marks the task that owns it. Point at any item to see its links and their state.</p>
 <div class="matrix-wrap"><table class="matrix"><thead><tr><th scope="col">Criterion</th>{{range .Matrix.Tasks}}<th scope="col"><a href="#{{.Href}}" data-key="{{.Href}}" title="{{.Title}}">{{.Label}}</a></th>{{end}}<th scope="col">Specs</th><th scope="col">Files</th><th scope="col">Signal</th><th scope="col">Proof</th></tr></thead><tbody>
 {{range .Matrix.Rows}}<tr data-key="{{.Key}}" data-state="{{.State}}"><th scope="row"><a href="#{{.Key}}" data-key="{{.Key}}" title="{{.Text}}"><b>{{.Number}}</b> {{.Text}}</a></th>{{range .Dots}}<td>{{if .}}<span class="dot" aria-label="owns"></span>{{end}}</td>{{end}}<td class="num">{{.Specs}}</td><td class="num">{{.Files}}</td><td class="num">{{.Signals}}</td><td><span class="st st-{{cls .State}}">{{.State}}</span></td></tr>
-{{end}}</tbody></table></div></section>{{end}}{{define "plan/proofs"}}<section id="proofs" data-group="{{.G.QA}}" aria-labelledby="proofs-h"><h2 id="proofs-h">Proof commands <span class="n">{{.Counts.Criteria}}</span></h2>
+{{end}}</tbody></table></div></section>{{end}}{{define "plan/proofs"}}<section id="proofs"{{.Poll "proofs"}} data-group="{{.G.QA}}" aria-labelledby="proofs-h"><h2 id="proofs-h">Proof commands <span class="n">{{.Counts.Criteria}}</span></h2>
 <ul class="proofs">
 {{range .Criteria}}<li data-key="{{.Key}}">{{template "ico" .State}}<span class="cn-mini">{{.Number}}</span><code class="cmd" title="{{.Proof}}">{{.Proof}}</code><button type="button" class="iconbtn" data-copy="{{.Proof}}" aria-label="Copy the command"><svg class="i" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5"/></svg></button></li>
-{{end}}</ul></section>{{end}}{{define "plan/source"}}<section id="source" data-group="{{.G.QA}}" aria-labelledby="source-h"><h2 id="source-h">Source</h2>
+{{end}}</ul></section>{{end}}{{define "plan/source"}}<section id="source"{{.Poll "source"}} data-group="{{.G.QA}}" aria-labelledby="source-h"><h2 id="source-h">Source</h2>
 <details class="source" id="source-details"><summary><code>plan.md</code>, {{len .Source}} lines</summary><pre class="lines">{{range .Source}}<span id="L{{.N}}" class="ln{{if .Bad}} bad{{end}}"><a href="#L{{.N}}">{{.N}}</a>{{.Text}}</span>
-{{end}}</pre></details></section>{{end}}{{define "plan/signals"}}<section id="signals" data-group="{{.G.Signals}}" aria-labelledby="signals-h"><h2 id="signals-h">Signals</h2>
+{{end}}</pre></details></section>{{end}}{{define "plan/signals"}}<section id="signals"{{.Poll "signals"}} data-group="{{.G.Signals}}" aria-labelledby="signals-h"><h2 id="signals-h">Signals</h2>
 <p class="lede">After the deploy, the live loop checks each signal over its window. A breach sends the run back to planning.</p>
 {{if .Signals}}<div class="table-wrap"><table class="signals"><thead><tr><th>Criterion</th><th>Signal</th><th>Source</th><th>Query</th><th>Breach</th><th>Window</th><th>Panel</th></tr></thead><tbody>
 {{range .Signals}}<tr id="{{.Key}}" data-key="{{.Key}}"><td>{{template "chips" dict "Name" "" "Chips" .Criterion}}</td><td>{{.Signal}}</td><td>{{.Source}}</td><td><code>{{.Query}}</code></td><td><code>{{.Breach}}</code></td><td><code>{{.Window}}</code></td><td>{{.Panel}}</td></tr>
