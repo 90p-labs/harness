@@ -3,7 +3,9 @@ package domain_test
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/90p-labs/harness/internal/panel/domain"
 )
@@ -142,5 +144,40 @@ func TestVersionParse(t *testing.T) {
 	}
 	if len(domain.Fingerprint("a", "b")) != 12 {
 		t.Error("fingerprint length")
+	}
+}
+
+func TestCardSummary(t *testing.T) {
+	id := "20261113-133205-r3-panel-live-of-the-served-control-pane"
+	ts := time.Date(2026, 11, 13, 13, 32, 5, 0, time.Local)
+	tests := []struct {
+		name         string
+		card         domain.Card
+		now          time.Time
+		title, short string
+		age          string
+	}{
+		{"minutes", domain.Card{ID: id, Title: "Live panel\nsecond line"}, ts.Add(12 * time.Minute), "Live panel", "20261113-133205", "12m"},
+		{"hours", domain.Card{ID: id, Title: "t"}, ts.Add(3*time.Hour + 59*time.Minute), "t", "20261113-133205", "3h"},
+		{"days", domain.Card{ID: id}, ts.Add(50 * time.Hour), "", "20261113-133205", "2d"},
+		{"just now", domain.Card{ID: id}, ts.Add(20 * time.Second), "", "20261113-133205", "0m"},
+		{"future", domain.Card{ID: id}, ts.Add(-time.Hour), "", "20261113-133205", "0m"},
+		{"long", domain.Card{ID: id, Title: strings.Repeat("é", 100)}, ts, strings.Repeat("é", 79) + "…", "20261113-133205", "0m"},
+		{"exact 80", domain.Card{ID: id, Title: strings.Repeat("a", 80)}, ts, strings.Repeat("a", 80), "20261113-133205", "0m"},
+		{"no timestamp", domain.Card{ID: "r1", Title: "x"}, ts, "x", "", ""},
+		{"bad timestamp", domain.Card{ID: "20269999-999999-x"}, ts, "", "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.card.ShortTitle(); got != tc.title {
+				t.Errorf("ShortTitle = %q, want %q", got, tc.title)
+			}
+			if got := tc.card.ShortID(); got != tc.short {
+				t.Errorf("ShortID = %q, want %q", got, tc.short)
+			}
+			if got := tc.card.Age(tc.now); got != tc.age {
+				t.Errorf("Age = %q, want %q", got, tc.age)
+			}
+		})
 	}
 }

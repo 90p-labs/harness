@@ -6,6 +6,8 @@ import "context"
 type Served struct {
 	Version string
 	Base    string
+	// Events is the route of the event stream of the run.
+	Events string
 }
 
 // Runs lists the runs of the current repo.

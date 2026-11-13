@@ -110,3 +110,53 @@ func TestPlanChangeRefreshes(t *testing.T) {
 		t.Fatalf("malformed version must refresh: %+v", res)
 	}
 }
+
+type noPlanPages struct{ pages }
+
+func (*noPlanPages) Page(context.Context, domain.Card, domain.Served) ([]byte, error) {
+	return nil, domain.ErrNoPlan
+}
+
+func (*noPlanPages) Region(context.Context, domain.Card, string, domain.Served) ([]byte, error) {
+	return nil, domain.ErrNoPlan
+}
+
+type servedPages struct {
+	pages
+	served domain.Served
+}
+
+func (p *servedPages) Page(_ context.Context, _ domain.Card, s domain.Served) ([]byte, error) {
+	p.served = s
+	return []byte("page"), nil
+}
+
+func TestNoPlan(t *testing.T) {
+	h := page.NewHandler(runs{}, &noPlanPages{})
+	res, err := h.Handle(context.Background(), page.Query{RunID: "r1"})
+	if err != nil || !res.NoPlan || res.Card.ID != "r1" || res.Version != card.Version.String() || len(res.Body) != 0 {
+		t.Fatalf("page res = %+v, err = %v", res, err)
+	}
+	if res.Events != "/events?run=r1" {
+		t.Fatalf("no-plan Events = %q", res.Events)
+	}
+	res, err = h.Handle(context.Background(), page.Query{RunID: "r1", Region: "summary", Version: "p1.other"})
+	if err != nil || !res.Unchanged || res.Refresh {
+		t.Fatalf("region res = %+v, err = %v", res, err)
+	}
+	res, err = h.Handle(context.Background(), page.Query{RunID: "r1", Region: "summary", Version: "old.r1"})
+	if err != nil || !res.Refresh {
+		t.Fatalf("plan appeared must refresh: %+v, %v", res, err)
+	}
+}
+
+func TestServedEvents(t *testing.T) {
+	ps := &servedPages{}
+	h := page.NewHandler(runs{}, ps)
+	if _, err := h.Handle(context.Background(), page.Query{RunID: "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	if ps.served.Events != "/events?run=r1" {
+		t.Fatalf("Events = %q", ps.served.Events)
+	}
+}

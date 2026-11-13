@@ -121,7 +121,7 @@ func (s *Server) boardRegion(w nethttp.ResponseWriter, r *nethttp.Request) {
 func (s *Server) runPage(w nethttp.ResponseWriter, r *nethttp.Request) {
 	res, err := s.cfg.Page.Handle(r.Context(), page.Query{RunID: r.PathValue("id")})
 	switch {
-	case errors.Is(err, domain.ErrNoPlan):
+	case errors.Is(err, domain.ErrNoPlan), err == nil && res.NoPlan:
 		writeHTML(w, []byte(placeholderDoc))
 	case errors.Is(err, domain.ErrNotFound):
 		nethttp.NotFound(w, r)
