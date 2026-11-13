@@ -101,10 +101,10 @@ run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=reviewing rev
 next: review the change, then harness run ship, or harness run rework --findings
 $ harness run ship
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=shipping review_round=0 live_round=0
-next: open the pull request and run harness run wait --pr URL, then after the merge harness run done --pr URL
+next: run harness run learn, open the pull request and run harness run wait --pr URL, then after the merge harness run done --pr URL
 $ harness run wait --pr https://github.com/acme/shop/pull/42
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=shipping review_round=0 live_round=0
-next: open the pull request and run harness run wait --pr URL, then after the merge harness run done --pr URL
+next: run harness run learn, open the pull request and run harness run wait --pr URL, then after the merge harness run done --pr URL
 $ harness run done --pr https://github.com/acme/shop/pull/42
 run 20261108-132848-let-a-customer-cancel-an-order-before-it phase=done review_round=0 live_round=0
 next: the run is closed, start the next with harness run start

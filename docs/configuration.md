@@ -104,11 +104,14 @@ A hook cannot see model time or a server tool call. A gap between hook spans sit
 - `run.transition`: has `harness.review.round`. A `request-rework` also has `harness.rework.class` and `harness.rework.severity`.
 - `tool.call`: one span for each tool call. It starts at `PreToolUse`. It ends at `PostToolUse`, `PostToolUseFailure` or `SessionEnd`. It has `harness.tool`, `harness.tool.kind`, `harness.tool.outcome` (`succeeded`, `failed` or `interrupted`) and `harness.session.id`.
 - `run.report`: one span for each call of `harness run report`.
+- `run.learn`: one span for each call of `harness run learn`.
 - No span carries command text, tool input, a response or an error text from a tool.
 
 ### Audit a run
 
 `harness run report [<run id>]` prints the rework rounds, the amends, the stop blocks and the rework classes. It also prints the minutes in each phase and the trace ID. Use the trace ID to find the trace in Jaeger.
+
+`harness run learn [<run id>]` prints the convention candidates of the run, one `candidate:` line for each, then a `next:` line. A candidate is a real Standards finding, or a real finding that a `gate-checkable` rework names. The command is read-only.
 
 To count the denies, the reworks, the amends, the stop blocks and the tool outcomes, read the trace from Jaeger. Use the jq program `docs/audit-trace.jq`:
 
