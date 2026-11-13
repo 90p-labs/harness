@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-08. Superseded in part by ADR 0021, 2026-11-11: the render rule.
+Accepted, 2026-11-08. Superseded in part by ADR 0021, 2026-11-11: the render rule. Amended by [ADR 0023](0023-served-control-panel.md): the served mode.
 
 ## Context
 

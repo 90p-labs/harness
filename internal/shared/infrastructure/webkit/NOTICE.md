@@ -1,13 +1,13 @@
 # Notice
 
-The plan page embeds the third-party files below. Each keeps its own license.
+The web kit embeds the third-party files below. Each keeps its own license.
 
 ## Scripts
 
 | File | Version | License |
 |---|---|---|
-| `assets/mermaid.min.js` | mermaid 11.17.2 | MIT |
-| rough.js (used by the `excalidraw` package, not by this page) | 4.6.6 | MIT |
+| `third_party/mermaid.min.js` | mermaid 11.17.2 | MIT |
+| rough.js (used by the `excalidraw` package, not by the web kit) | 4.6.6 | MIT |
 
 The mermaid bundle also includes these libraries. The source column says where the license was read.
 
@@ -33,4 +33,4 @@ The mermaid bundle also includes these libraries. The source column says where t
 | `assets/IBMPlexMono.woff2` | IBM Plex Mono | SIL OFL 1.1 | fontsource `package.json` |
 | `assets/Excalifont.woff2` | Excalifont | SIL OFL 1.1 | not verified in a file |
 
-The page embeds each font as a base64 data URL. It loads nothing from the network.
+The web kit embeds each font as a base64 data URL. It loads nothing from the network.

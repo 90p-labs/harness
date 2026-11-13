@@ -26,3 +26,4 @@ One line per ADR. Read this first, then only the ADRs that the change touches.
 | [0020](0020-review-round-counts-blocker-and-major.md) | 0020 Review round counts blocker and major |
 | [0021](0021-plan-page-follows-the-run.md) | 0021 The plan page follows the run |
 | [0022](0022-setup-recipes.md) | 0022 Setup recipes |
+| [0023](0023-served-control-panel.md) | 0023 The served control panel |
