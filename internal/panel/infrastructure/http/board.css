@@ -21,3 +21,19 @@ body{overflow-x:clip}
 .chip.pr{color:var(--accent);background:var(--accent-bg);border-color:color-mix(in oklch,var(--accent) 40%,var(--border))}
 .chip.pr:hover,.chip.pr:focus-visible{color:var(--accent);border-color:var(--accent)}
 .chip .chip-t{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* One board for every repo: a repo chip on each card, a notice list for the
+   repos that failed to load, and the active item of the repo list. */
+.chip.repo-chip{color:var(--text-2)}
+.task > .chips:first-child{margin:0 0 8px}
+.board-problems{list-style:none;margin:0 0 12px;padding:0;color:var(--text-3);font-size:12px;overflow-wrap:anywhere}
+.nav a[aria-current="page"]{background:var(--bg-hover);color:var(--text);font-weight:500}
+/* The kit hides the side nav at 860px and below, so the same links show as a
+   wrapping chip row there. The media block follows the base rule. */
+.repo-chips{display:none}
+.repo-chips a{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--border);border-radius:99px;color:var(--text-2);font-size:13px}
+.repo-chips a[aria-current="page"]{background:var(--bg-hover);color:var(--text);font-weight:500}
+.repo-chips .n{font-size:11px;color:var(--text-3)}
+.repo-chips .n.bad{color:var(--on-accent);background:var(--red);padding:2px 6px;border-radius:99px}
+@media (max-width: 860px){
+.repo-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+}

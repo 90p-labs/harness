@@ -41,24 +41,25 @@ func (b *syncBuf) String() string {
 // fakeSignals is a Signals port that a test drives by hand.
 type fakeSignals struct {
 	mu        sync.Mutex
-	known     map[string]bool
-	subs      map[string][]chan string
+	known     map[domain.RunRef]bool
+	subs      map[domain.RunRef][]chan string
 	cancelled int
 	opened    chan struct{}
 }
 
+// newFakeSignals knows one run of testRepo for each id.
 func newFakeSignals(ids ...string) *fakeSignals {
-	f := &fakeSignals{known: map[string]bool{}, subs: map[string][]chan string{}, opened: make(chan struct{}, 16)}
+	f := &fakeSignals{known: map[domain.RunRef]bool{}, subs: map[domain.RunRef][]chan string{}, opened: make(chan struct{}, 16)}
 	for _, id := range ids {
-		f.known[id] = true
+		f.known[domain.RunRef{Repo: testRepo, ID: id}] = true
 	}
 	return f
 }
 
-func (f *fakeSignals) Subscribe(_ context.Context, run string) (<-chan string, func(), error) {
+func (f *fakeSignals) Subscribe(_ context.Context, run domain.RunRef) (<-chan string, func(), error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if run != "" && !f.known[run] {
+	if run != (domain.RunRef{}) && !f.known[run] {
 		return nil, nil, domain.ErrNotFound
 	}
 	ch := make(chan string, 1)
@@ -78,7 +79,10 @@ func (f *fakeSignals) Subscribe(_ context.Context, run string) (<-chan string, f
 	return ch, cancel, nil
 }
 
-func (f *fakeSignals) send(run, name string) {
+// send signals the subscribers of one run of testRepo.
+func (f *fakeSignals) send(run, name string) { f.sendRef(domain.RunRef{Repo: testRepo, ID: run}, name) }
+
+func (f *fakeSignals) sendRef(run domain.RunRef, name string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, ch := range f.subs[run] {
@@ -93,6 +97,25 @@ func (f *fakeSignals) cancels() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.cancelled
+}
+
+func TestEventsBadRepoKeyReachesNoStore(t *testing.T) {
+	for _, key := range []string{"NOTHEX", "abc", "ABCDEF012345", ""} {
+		sigs := newFakeSignals("20261113-a")
+		calls := 0
+		srv := eventsServer(t, sigs, &syncBuf{}, func(c *Config) {
+			runs := recordingRuns{fakeRuns: fakeRuns{cards: cards}, calls: &calls}
+			c.Board = board.NewHandler(runs)
+			c.Page = page.NewHandler(runs, &fakePages{})
+		})
+		rec := get(srv.Handler(), "localhost", "/events?repo="+key+"&run=20261113-a")
+		if rec.Code != 404 {
+			t.Errorf("key %q: status %d, want 404", key, rec.Code)
+		}
+		if calls != 0 || len(sigs.opened) != 0 || len(sigs.subs) != 0 {
+			t.Errorf("key %q: %d store calls, %d subscriptions, want 0", key, calls, len(sigs.subs))
+		}
+	}
 }
 
 func eventsServer(t *testing.T, sigs domain.Signals, logs *syncBuf, tweak func(*Config)) *Server {
@@ -156,7 +179,7 @@ func TestEvents(t *testing.T) {
 		ts := httptest.NewServer(srv.Handler())
 		defer ts.Close()
 
-		res, err := nethttp.Get(ts.URL + "/events?run=20261113-a")
+		res, err := nethttp.Get(ts.URL + "/events?repo=" + testRepo + "&run=20261113-a")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -212,7 +235,7 @@ func TestEvents(t *testing.T) {
 		srv := eventsServer(t, sigs, logs, nil)
 		ts := httptest.NewServer(srv.Handler())
 		defer ts.Close()
-		res, err := nethttp.Get(ts.URL + "/events?run=20261113-a")
+		res, err := nethttp.Get(ts.URL + "/events?repo=aaaaaaaaaaaa&run=20261113-a")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -241,7 +264,7 @@ func TestEvents(t *testing.T) {
 		done := make(chan error, 1)
 		go func() { done <- srv.Serve(ctx, ln) }()
 
-		res, err := nethttp.Get("http://" + ln.Addr().String() + "/events?run=20261113-a")
+		res, err := nethttp.Get("http://" + ln.Addr().String() + "/events?repo=aaaaaaaaaaaa&run=20261113-a")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -271,7 +294,7 @@ func TestEvents(t *testing.T) {
 		srv := eventsServer(t, sigs, logs, func(c *Config) { c.WriteTimeout = timeout; c.PingEvery = time.Hour })
 		w := &stalledWriter{header: nethttp.Header{}, release: make(chan struct{})}
 		defer close(w.release)
-		req := httptest.NewRequest(nethttp.MethodGet, "/events?run=20261113-a", nil)
+		req := httptest.NewRequest(nethttp.MethodGet, "/events?repo=aaaaaaaaaaaa&run=20261113-a", nil)
 		req.Host = "localhost"
 		done := make(chan struct{})
 		start := time.Now()
@@ -338,11 +361,84 @@ func (w *stalledWriter) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
+func TestEventsByRepo(t *testing.T) {
+	const runUpdated = "event: run-updated\ndata: run-updated"
+	a := domain.RunRef{Repo: testRepo, ID: "20261113-same"}
+	b := domain.RunRef{Repo: otherRepo, ID: "20261113-same"}
+	newSigs := func() *fakeSignals {
+		sigs := newFakeSignals()
+		sigs.known[a], sigs.known[b] = true, true
+		return sigs
+	}
+
+	t.Run("a run signal reaches only that run of that repo", func(t *testing.T) {
+		sigs := newSigs()
+		srv := eventsServer(t, sigs, &syncBuf{}, func(c *Config) { c.PingEvery = time.Hour })
+		ts := httptest.NewServer(srv.Handler())
+		defer ts.Close()
+		res, err := nethttp.Get(ts.URL + "/events?repo=" + testRepo + "&run=" + a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		in := frames(t, res.Body)
+		if got := next(t, in); got != runUpdated {
+			t.Fatalf("connect frame %q", got)
+		}
+
+		sigs.sendRef(b, domain.SignalRunUpdated)
+		select {
+		case got := <-in:
+			t.Fatalf("a run of another repo signalled %q", got)
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		sigs.sendRef(a, domain.SignalRunUpdated)
+		if got := next(t, in); got != runUpdated {
+			t.Fatalf("frame %q", got)
+		}
+	})
+
+	t.Run("the board stream takes no run", func(t *testing.T) {
+		srv := eventsServer(t, newSigs(), &syncBuf{}, nil)
+		ts := httptest.NewServer(srv.Handler())
+		defer ts.Close()
+		res, err := nethttp.Get(ts.URL + "/events")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if got := next(t, frames(t, res.Body)); got != "event: runs-changed\ndata: runs-changed" {
+			t.Fatalf("connect frame %q", got)
+		}
+	})
+
+	h := eventsServer(t, newSigs(), &syncBuf{}, nil).Handler()
+	for _, tc := range []struct{ name, target string }{
+		{"a run with no repo", "/events?run=" + a.ID},
+		{"a bad repo key", "/events?repo=ZZZ&run=" + a.ID},
+		{"an uppercase repo key", "/events?repo=AAAAAAAAAAAA&run=" + a.ID},
+		{"an unknown repo", "/events?repo=cccccccccccc&run=" + a.ID},
+		{"an unknown run", "/events?repo=" + testRepo + "&run=gone"},
+	} {
+		t.Run(tc.name+" answers 404", func(t *testing.T) {
+			if rec := get(h, "localhost", tc.target); rec.Code != 404 {
+				t.Fatalf("status %d", rec.Code)
+			}
+		})
+	}
+	t.Run("a foreign host answers 403", func(t *testing.T) {
+		if rec := get(h, "evil.com", "/events?repo="+testRepo+"&run="+a.ID); rec.Code != 403 {
+			t.Fatalf("status %d", rec.Code)
+		}
+	})
+}
+
 func TestHostGuardEvents(t *testing.T) {
 	srv := eventsServer(t, newFakeSignals("20261113-a"), &syncBuf{}, nil)
 	h := srv.Handler()
 	for _, host := range []string{"", "evil.com", "localhost.evil.com", "127.0.0.1.evil.com", "[::1]:80", "0.0.0.0:80"} {
-		for _, target := range []string{"/events", "/events?run=20261113-a"} {
+		for _, target := range []string{"/events", "/events?repo=aaaaaaaaaaaa&run=20261113-a"} {
 			if rec := get(h, host, target); rec.Code != 403 {
 				t.Errorf("host %q %s: status %d", host, target, rec.Code)
 			}
@@ -363,14 +459,14 @@ func TestNoPlanPage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := get(h, "localhost", "/runs/noplan")
+	rec := get(h, "localhost", repoBase+"/runs/noplan")
 	body := rec.Body.String()
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
 		t.Fatalf("status %d type %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 	for _, want := range []string{
-		`<body hx-ext="morph,sse" sse-connect="/events?run=noplan">`,
-		`id="summary"`, `hx-get="/runs/noplan/regions/summary"`, `data-v="p2.r2"`,
+		`<body hx-ext="morph,sse" sse-connect="/events?repo=` + testRepo + `&amp;run=noplan">`,
+		`id="summary"`, `hx-get="` + repoBase + `/runs/noplan/regions/summary"`, `data-v="p2.r2"`,
 		`hx-trigger="sse:run-updated, every 5s [!window.harnessLive]"`, `hx-swap="morph:outerHTML"`,
 		"no plan &lt;b&gt;", "planning", "noplan",
 		links.Htmx, links.Morph, links.Sse, links.Panel, links.Live, links.Icon, `class="live-dot"`,
@@ -384,7 +480,7 @@ func TestNoPlanPage(t *testing.T) {
 		t.Errorf("no-plan page keeps the old placeholder or an unescaped title")
 	}
 
-	region := "/runs/noplan/regions/summary"
+	region := repoBase + "/runs/noplan/regions/summary"
 	for _, v := range []string{"p2.r2", "p2.r1"} {
 		if rec := get(h, "localhost", region+"?v="+v); rec.Code != 204 || rec.Body.Len() != 0 || rec.Header().Get("HX-Refresh") != "" {
 			t.Errorf("v=%s: status %d refresh %q", v, rec.Code, rec.Header().Get("HX-Refresh"))
@@ -400,11 +496,11 @@ func TestNoPlanPage(t *testing.T) {
 func TestTrailingSlashRedirects(t *testing.T) {
 	var logs bytes.Buffer
 	srv, _ := newServer(t, &logs)
-	rec := get(srv.Handler(), "localhost", "/runs/20261113-a/")
-	if rec.Code != 301 || rec.Header().Get("Location") != "/runs/20261113-a" {
+	rec := get(srv.Handler(), "localhost", repoBase+"/runs/20261113-a/")
+	if rec.Code != 301 || rec.Header().Get("Location") != repoBase+"/runs/20261113-a" {
 		t.Fatalf("status %d location %q", rec.Code, rec.Header().Get("Location"))
 	}
-	if rec := get(srv.Handler(), "evil.com", "/runs/20261113-a/"); rec.Code != 403 {
+	if rec := get(srv.Handler(), "evil.com", repoBase+"/runs/20261113-a/"); rec.Code != 403 {
 		t.Errorf("guard: status %d", rec.Code)
 	}
 }
@@ -425,7 +521,7 @@ func TestFavicon(t *testing.T) {
 	if icon.Code != 200 || icon.Body.String() != rec.Body.String() {
 		t.Errorf("icon asset differs from the favicon")
 	}
-	for _, target := range []string{"/", "/runs/noplan"} {
+	for _, target := range []string{"/", repoBase + "/runs/noplan"} {
 		if body := get(h, "localhost", target).Body.String(); !strings.Contains(body, `<link rel="icon" href="`+links.Icon+`" type="image/svg+xml">`) {
 			t.Errorf("%s lacks the icon link", target)
 		}
@@ -435,7 +531,7 @@ func TestFavicon(t *testing.T) {
 func TestRegionMissingLogged(t *testing.T) {
 	var logs bytes.Buffer
 	srv, _ := newServer(t, &logs)
-	if rec := get(srv.Handler(), "localhost", "/runs/20261113-a/regions/nope"); rec.Code != 404 {
+	if rec := get(srv.Handler(), "localhost", repoBase+"/runs/20261113-a/regions/nope"); rec.Code != 404 {
 		t.Fatalf("status %d", rec.Code)
 	}
 	out := logs.String()
@@ -465,7 +561,7 @@ func TestBoardLive(t *testing.T) {
 		`hx-trigger="sse:runs-changed, every 5s [!window.harnessLive]"`,
 		`<span class="live-dot"`, links.Live, links.Sse, links.Icon,
 		`<span class="rid" title="20261113-133205-r3-panel">20261113-133205</span>`,
-		`<h3><a href="/runs/20261113-133205-r3-panel" title="R3 panel live
+		`<h3><a href="` + repoBase + `/runs/20261113-133205-r3-panel" title="R3 panel live
 second line">R3 panel live</a></h3>`,
 		`<span class="age">12m</span>`,
 	} {

@@ -1,8 +1,9 @@
-{{define "region"}}<div class="app" id="board" hx-get="/regions/board" hx-trigger="sse:runs-changed, every 5s [!window.harnessLive]" hx-swap="morph:outerHTML" data-v="{{.Board.Version}}">
+{{define "region"}}{{$filter := .Board.Filter}}<div class="app" id="board" hx-get="/regions/board{{with $filter}}?repo={{.}}{{end}}" hx-trigger="sse:runs-changed, every 5s [!window.harnessLive]" hx-swap="morph:outerHTML" data-v="{{.Board.Version}}">
 <aside class="side" aria-label="Board">
 <div class="ws"><span class="ws-logo" aria-hidden="true"></span>harness</div>
-<nav class="nav" aria-label="Columns"><ol>
-{{range .Board.Columns}}<li><a href="#col-{{.Key}}">{{.Name}}<span class="n{{if .NeedsYou}} bad{{end}}">{{len .Cards}}</span></a></li>
+<nav class="nav" aria-label="Repos"><ol>
+<li><a href="/"{{if not $filter}} aria-current="page"{{end}}>All repos<span class="n{{if .Board.NeedsYou}} bad{{end}}">{{.Board.Total}}</span></a></li>
+{{range .Board.Repos}}<li><a href="/?repo={{.Key}}"{{with .Path}} title="{{.}}"{{end}}{{if eq .Key $filter}} aria-current="page"{{end}}>{{.Name}}<span class="n{{if .NeedsYou}} bad{{end}}">{{.Count}}</span></a></li>
 {{end}}</ol></nav>
 <div class="side-foot">
 <button class="theme" type="button" data-theme-toggle data-morph-keep aria-label="Switch the color theme">Theme: <span>auto</span></button>
@@ -13,12 +14,20 @@
 <div class="crumbs"><span>Runs</span><span class="sep">/</span><b>Board</b><span class="live-dot" role="img" aria-label="Live updates" title="Live updates"></span></div>
 </header>
 <main>
-<div class="strip">
+<nav class="repo-chips" aria-label="Repos">
+<a href="/"{{if not $filter}} aria-current="page"{{end}}>All repos<span class="n{{if .Board.NeedsYou}} bad{{end}}">{{.Board.Total}}</span></a>
+{{range .Board.Repos}}<a href="/?repo={{.Key}}"{{with .Path}} title="{{.}}"{{end}}{{if eq .Key $filter}} aria-current="page"{{end}}>{{.Name}}<span class="n{{if .NeedsYou}} bad{{end}}">{{.Count}}</span></a>
+{{end}}</nav>
+{{if .Board.Problems}}<ul class="board-problems">
+{{range .Board.Problems}}<li>{{.Line}}</li>
+{{end}}</ul>
+{{end}}<div class="strip">
 {{range .Board.Columns}}<div class="col" id="col-{{.Key}}">
 <div class="col-h">{{.Name}}<span class="n">{{len .Cards}}</span></div>
 {{range .Cards}}<article class="task">
-<div class="tid"><span class="rid" title="{{.ID}}">{{if .ShortID}}{{.ShortID}}{{else}}{{.ID}}{{end}}</span><span class="spacer"></span>{{with $.Age .}}<span class="age">{{.}}</span>{{end}}{{if .Blocked}}<span class="st st-fail">blocked</span>{{end}}</div>
-<h3><a href="/runs/{{.ID}}" title="{{.Title}}">{{.ShortTitle}}</a></h3>
+{{if not $filter}}<div class="chips"><span class="chip repo-chip" title="{{.RepoName}}"><span class="chip-t">{{.RepoName}}</span></span></div>
+{{end}}<div class="tid"><span class="rid" title="{{.ID}}">{{if .ShortID}}{{.ShortID}}{{else}}{{.ID}}{{end}}</span><span class="spacer"></span>{{with $.Age .}}<span class="age">{{.}}</span>{{end}}{{if .Blocked}}<span class="st st-fail">blocked</span>{{end}}</div>
+<h3><a href="/repos/{{.Repo}}/runs/{{.ID}}" title="{{.Title}}">{{.ShortTitle}}</a></h3>
 {{if or .Branch .PRURL}}<div class="chips">{{with .Branch}}<span class="chip" title="{{.}}"><span class="chip-t">{{.}}</span></span>{{end}}{{if .PRURL}}<a class="chip pr" href="{{.PRURL}}" title="{{.PRURL}}" target="_blank" rel="noopener noreferrer"><span class="chip-t">PR{{with .PRNumber}} #{{.}}{{end}}</span></a>{{end}}</div>{{end}}
 </article>
 {{end}}</div>

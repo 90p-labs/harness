@@ -15,8 +15,12 @@ type runs struct {
 	err   error
 }
 
-func (r runs) List(context.Context) ([]domain.Card, error) { return r.cards, r.err }
-func (r runs) Get(context.Context, string) (domain.Card, error) {
+const repo = "aaaaaaaaaaaa"
+
+func (r runs) List(context.Context) (domain.Listing, error) {
+	return domain.Listing{Repos: []domain.Repo{{Key: repo, Name: "harness"}}, Cards: r.cards}, r.err
+}
+func (r runs) Get(context.Context, domain.RunRef) (domain.Card, error) {
 	return domain.Card{}, domain.ErrNotFound
 }
 
@@ -29,6 +33,22 @@ func TestListErrorReturnsZeroResult(t *testing.T) {
 	}
 	if !reflect.DeepEqual(res, board.Result{}) {
 		t.Errorf("result = %+v, want zero Result", res)
+	}
+}
+
+func TestUnknownRepoBeatsUnchanged(t *testing.T) {
+	source := runs{cards: []domain.Card{{Repo: repo, ID: "r1", Phase: "working"}}}
+	h := board.NewHandler(source)
+	listing, _ := source.List(context.Background())
+	const missing = "eeeeeeeeeeee"
+	v := domain.NewBoard(listing, missing).Version
+	res, err := h.Handle(context.Background(), board.Query{Repo: missing, Version: v})
+	if err != nil || !res.UnknownRepo || res.Unchanged || len(res.Board.Columns) != 0 {
+		t.Fatalf("res = %+v, %v, want UnknownRepo only", res, err)
+	}
+	known, err := h.Handle(context.Background(), board.Query{Repo: repo})
+	if err != nil || known.UnknownRepo || known.Board.Filter != repo {
+		t.Fatalf("known = %+v, %v", known, err)
 	}
 }
 

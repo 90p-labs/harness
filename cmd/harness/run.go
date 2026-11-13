@@ -21,6 +21,7 @@ import (
 	"github.com/90p-labs/harness/internal/host/infrastructure/install"
 	livemodule "github.com/90p-labs/harness/internal/live"
 	livecli "github.com/90p-labs/harness/internal/live/ui/cli"
+	paneldomain "github.com/90p-labs/harness/internal/panel/domain"
 	planmodule "github.com/90p-labs/harness/internal/plan"
 	"github.com/90p-labs/harness/internal/plan/application/command/submitplan"
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
@@ -155,7 +156,7 @@ func newEnvironment(ctx context.Context, flags *pflag.FlagSet) (environment, err
 	planView := planmodule.NewViewPlugin(worktree, proofs, defaultBranch, func(ctx context.Context) (int, error) {
 		current, _, err := activeRun(ctx, flags)
 		return current.LiveRound, err
-	}, panelOpener(cfg, lazyLifecycle(flags), os.Stderr))
+	}, panelOpener(cfg, lazyLifecycle(flags), os.Stderr, paneldomain.RepoKey(commonDir)))
 	var bus eventbus.Bus
 	session := livemodule.NewSessionPlugin(func(ctx context.Context) ([]string, error) {
 		results, err := runLiveCheck(ctx, environment{key: key, commonDir: commonDir, cfg: cfg, bus: bus, state: state})

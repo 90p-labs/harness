@@ -392,7 +392,7 @@ func TestPanelRunsGetReadsOneRun(t *testing.T) {
 	}}
 	runs := newPanelRuns(status.NewHandler(repo), "repo")
 
-	card, err := runs.Get(context.Background(), "a")
+	card, err := runs.Get(context.Background(), paneldomain.RunRef{ID: "a"})
 	if err != nil || card.ID != "a" || card.Title != "first" {
 		t.Fatalf("Get a = %+v, %v", card, err)
 	}
@@ -400,9 +400,12 @@ func TestPanelRunsGetReadsOneRun(t *testing.T) {
 		t.Errorf("Get listed the runs %d times, want one single read", repo.lists)
 	}
 	for _, id := range []string{"missing", "other"} {
-		if _, err := runs.Get(context.Background(), id); !errors.Is(err, paneldomain.ErrNotFound) {
+		if _, err := runs.Get(context.Background(), paneldomain.RunRef{ID: id}); !errors.Is(err, paneldomain.ErrNotFound) {
 			t.Errorf("Get %s: err = %v, want ErrNotFound", id, err)
 		}
+	}
+	if _, err := runs.Get(context.Background(), paneldomain.RunRef{Repo: "bbbbbbbbbbbb", ID: "a"}); !errors.Is(err, paneldomain.ErrNotFound) {
+		t.Errorf("Get of another repo: err = %v, want ErrNotFound", err)
 	}
 	if repo.lists != 0 {
 		t.Errorf("Get listed the runs %d times, want none", repo.lists)
@@ -436,16 +439,16 @@ func TestPanelRunsReadsPlanOnlyWhenItChanges(t *testing.T) {
 
 	var first paneldomain.Card
 	for range 2 {
-		cards, err := runs.List(ctx)
-		if err != nil || len(cards) != 1 {
-			t.Fatalf("List = %+v, %v", cards, err)
+		listing, err := runs.List(ctx)
+		if err != nil || len(listing.Cards) != 1 {
+			t.Fatalf("List = %+v, %v", listing, err)
 		}
-		first = cards[0]
+		first = listing.Cards[0]
 	}
 	if first.Branch != "feat/ping-query" {
 		t.Fatalf("branch = %q, want feat/ping-query", first.Branch)
 	}
-	if _, err := runs.Get(ctx, id); err != nil {
+	if _, err := runs.Get(ctx, paneldomain.RunRef{ID: id}); err != nil {
 		t.Fatal(err)
 	}
 	if got := reads.Load(); got != 1 {
@@ -460,10 +463,11 @@ func TestPanelRunsReadsPlanOnlyWhenItChanges(t *testing.T) {
 	if err := os.Chtimes(path, later, later); err != nil {
 		t.Fatal(err)
 	}
-	cards, err := runs.List(ctx)
-	if err != nil || len(cards) != 1 {
-		t.Fatalf("List = %+v, %v", cards, err)
+	listing, err := runs.List(ctx)
+	if err != nil || len(listing.Cards) != 1 {
+		t.Fatalf("List = %+v, %v", listing, err)
 	}
+	cards := listing.Cards
 	if cards[0].Branch != "feat/pong-query-longer" {
 		t.Errorf("branch = %q after the change, want feat/pong-query-longer", cards[0].Branch)
 	}
@@ -512,7 +516,7 @@ func TestPanelRunVersion(t *testing.T) {
 	ctx := context.Background()
 	runPart := func(id string) string {
 		t.Helper()
-		card, err := runs.Get(ctx, id)
+		card, err := runs.Get(ctx, paneldomain.RunRef{ID: id})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -558,14 +562,14 @@ func TestPanelRunVersion(t *testing.T) {
 
 	// List skips the cache, the head and the proofs.
 	calls = proofs.calls
-	cards, err := runs.List(ctx)
-	if err != nil || len(cards) != 1 {
-		t.Fatalf("List = %+v, %v", cards, err)
+	listing, err := runs.List(ctx)
+	if err != nil || len(listing.Cards) != 1 {
+		t.Fatalf("List = %+v, %v", listing, err)
 	}
 	if proofs.calls != calls {
 		t.Errorf("List read the proofs")
 	}
-	if cards[0].Version.Run == afterProof {
+	if listing.Cards[0].Version.Run == afterProof {
 		t.Errorf("List run part carries the head and the proofs, want the status version only")
 	}
 }
@@ -591,7 +595,7 @@ func TestPanelLiveCacheErrors(t *testing.T) {
 	ctx := context.Background()
 	run := func(t *testing.T, runs panelRuns, id string) string {
 		t.Helper()
-		card, err := runs.Get(ctx, id)
+		card, err := runs.Get(ctx, paneldomain.RunRef{ID: id})
 		if err != nil {
 			t.Error(err)
 		}

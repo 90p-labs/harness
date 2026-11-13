@@ -231,8 +231,10 @@ func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
 // repository: it has no repo to read until the multi-repo adapter lands.
 type emptyRuns struct{}
 
-func (emptyRuns) List(context.Context) ([]paneldomain.Card, error) { return nil, nil }
-func (emptyRuns) Get(context.Context, string) (paneldomain.Card, error) {
+func (emptyRuns) List(context.Context) (paneldomain.Listing, error) {
+	return paneldomain.Listing{}, nil
+}
+func (emptyRuns) Get(context.Context, paneldomain.RunRef) (paneldomain.Card, error) {
 	return paneldomain.Card{}, paneldomain.ErrNotFound
 }
 
@@ -268,7 +270,7 @@ func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		runs := newPanelRuns(handlers.Status, env.key.Repo).withLive(env.key, env.proofs, time.Now)
+		runs := newPanelRuns(handlers.Status, env.key.Repo).forRepo(*panel.repo).withLive(env.key, env.proofs, time.Now)
 		pages := newPanelPages(handlers.Status, env.key, planmodule.NewPages(env.proofs, env.defaultBranch))
 		return panelmodule.NewServe(version, runs, pages, panel.proc)(ctx, port, ready)
 	}, lazyLifecycle(flags))
@@ -278,7 +280,9 @@ func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
 
 // panelRuns lists the runs of the repo as cards. It reads the state and the run folders, and writes nothing.
 type panelRuns struct {
-	status   status.Handler
+	status status.Handler
+	// info is the panel repo, the only lane of the board until the multi-repo adapter lands.
+	info     paneldomain.Repo
 	repo     string
 	branches *branchCache
 	live     *liveCache
@@ -286,6 +290,12 @@ type panelRuns struct {
 
 func newPanelRuns(statuses status.Handler, repo string) panelRuns {
 	return panelRuns{status: statuses, repo: repo, branches: &branchCache{read: os.ReadFile}}
+}
+
+// forRepo names the panel repo, whose key goes on each card.
+func (r panelRuns) forRepo(info paneldomain.Repo) panelRuns {
+	r.info = info
+	return r
 }
 
 // withLive adds the branch head and the proofs of the active run to the run part that Get returns.
@@ -474,23 +484,30 @@ func readBranch(read func(string) ([]byte, error), path string) string {
 	return doc.RunPR().Branch
 }
 
-func (r panelRuns) List(ctx context.Context) ([]paneldomain.Card, error) {
+// List returns the listing of the one repo this panel reads, with its key on each card.
+func (r panelRuns) List(ctx context.Context) (paneldomain.Listing, error) {
 	phases := make([]domain.Phase, len(shareddomain.Phases))
 	for i, p := range shareddomain.Phases {
 		phases[i] = domain.Phase(p)
 	}
 	statuses, err := r.status.ByPhase(ctx, r.repo, phases)
 	if err != nil {
-		return nil, err
+		return paneldomain.Listing{}, err
 	}
 	cards := make([]paneldomain.Card, len(statuses))
 	for i, s := range statuses {
 		cards[i] = buildCard(s, r.branches)
+		cards[i].Repo = r.info.Key
 	}
-	return cards, nil
+	return paneldomain.Listing{Repos: []paneldomain.Repo{r.info}, Cards: cards}, nil
 }
 
-func (r panelRuns) Get(ctx context.Context, id string) (paneldomain.Card, error) {
+// Get reads one run. A ref of another repo is not found.
+func (r panelRuns) Get(ctx context.Context, ref paneldomain.RunRef) (paneldomain.Card, error) {
+	if ref.Repo != r.info.Key {
+		return paneldomain.Card{}, paneldomain.ErrNotFound
+	}
+	id := ref.ID
 	s, err := r.status.Handle(ctx, status.Query{Key: domain.RunKey{Repo: r.repo}, RunID: id})
 	if errors.Is(err, domain.ErrRunNotFound) {
 		return paneldomain.Card{}, paneldomain.ErrNotFound
@@ -502,6 +519,7 @@ func (r panelRuns) Get(ctx context.Context, id string) (paneldomain.Card, error)
 		return paneldomain.Card{}, paneldomain.ErrNotFound
 	}
 	card := buildCard(s, r.branches)
+	card.Repo = r.info.Key
 	if r.live != nil {
 		parts := append([]string{strconv.Itoa(s.Version)}, r.live.parts(ctx, r.status, s)...)
 		card.Version.Run = paneldomain.Fingerprint(parts...)

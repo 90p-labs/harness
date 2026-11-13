@@ -19,18 +19,18 @@ type group struct {
 }
 
 // Watcher polls the fingerprint of each key that has a subscriber. The board
-// key is the empty string, and a run key is the run id.
+// key is the zero RunRef, and a run key is the repo and the run id.
 type Watcher struct {
 	runs  domain.Runs
 	every time.Duration
 
 	mu     sync.Mutex
-	groups map[string]*group
+	groups map[domain.RunRef]*group
 }
 
 // NewWatcher returns a watcher that ticks every interval once Run starts.
 func NewWatcher(runs domain.Runs, every time.Duration) *Watcher {
-	return &Watcher{runs: runs, every: every, groups: map[string]*group{}}
+	return &Watcher{runs: runs, every: every, groups: map[domain.RunRef]*group{}}
 }
 
 // Run ticks until ctx ends. A tick with no subscriber reads nothing.
@@ -49,7 +49,7 @@ func (w *Watcher) Run(ctx context.Context) {
 
 // Subscribe records the current fingerprint of the key, so the first tick
 // signals only a real change. An unknown run returns the Runs error.
-func (w *Watcher) Subscribe(ctx context.Context, run string) (<-chan string, func(), error) {
+func (w *Watcher) Subscribe(ctx context.Context, run domain.RunRef) (<-chan string, func(), error) {
 	ch := make(chan string, 1)
 	// The check of the group and its create or join share one lock, so a cancel
 	// cannot remove the group between them. A group is created only with a
@@ -99,7 +99,7 @@ func (w *Watcher) Subscribe(ctx context.Context, run string) (<-chan string, fun
 // the fingerprint changed. A send on a full buffer is dropped.
 func (w *Watcher) tick(ctx context.Context) {
 	w.mu.Lock()
-	keys := make([]string, 0, len(w.groups))
+	keys := make([]domain.RunRef, 0, len(w.groups))
 	for k := range w.groups {
 		keys = append(keys, k)
 	}
@@ -114,7 +114,7 @@ func (w *Watcher) tick(ctx context.Context) {
 		if g := w.groups[key]; g != nil && g.fp != fp {
 			g.fp = fp
 			name := domain.SignalRunUpdated
-			if key == "" {
+			if key == (domain.RunRef{}) {
 				name = domain.SignalRunsChanged
 			}
 			for ch := range g.subs {
@@ -128,13 +128,13 @@ func (w *Watcher) tick(ctx context.Context) {
 	}
 }
 
-func (w *Watcher) read(ctx context.Context, key string) (string, error) {
-	if key == "" {
-		cards, err := w.runs.List(ctx)
+func (w *Watcher) read(ctx context.Context, key domain.RunRef) (string, error) {
+	if key == (domain.RunRef{}) {
+		listing, err := w.runs.List(ctx)
 		if err != nil {
 			return "", err
 		}
-		return domain.NewBoard(cards).Version, nil
+		return domain.NewBoard(listing, "").Version, nil
 	}
 	card, err := w.runs.Get(ctx, key)
 	if err != nil {

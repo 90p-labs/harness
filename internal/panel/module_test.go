@@ -17,7 +17,10 @@ import (
 	"github.com/90p-labs/harness/internal/panel/infrastructure/process"
 )
 
-const liveRun = "20261113-133205-live"
+const (
+	liveRun  = "20261113-133205-live"
+	liveRepo = "0123456789ab"
+)
 
 // liveRuns is a Runs port whose run changes phase on demand.
 type liveRuns struct {
@@ -34,13 +37,15 @@ func (r *liveRuns) set(phase string) {
 func (r *liveRuns) card() domain.Card {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return domain.Card{ID: liveRun, Title: "live", Phase: r.phase, Version: domain.Version{Plan: "p1", Run: "run-" + r.phase}}
+	return domain.Card{Repo: liveRepo, ID: liveRun, Title: "live", Phase: r.phase, Version: domain.Version{Plan: "p1", Run: "run-" + r.phase}}
 }
 
-func (r *liveRuns) List(context.Context) ([]domain.Card, error) { return []domain.Card{r.card()}, nil }
+func (r *liveRuns) List(context.Context) (domain.Listing, error) {
+	return domain.Listing{Repos: []domain.Repo{{Key: liveRepo, Name: "live"}}, Cards: []domain.Card{r.card()}}, nil
+}
 
-func (r *liveRuns) Get(_ context.Context, id string) (domain.Card, error) {
-	if id != liveRun {
+func (r *liveRuns) Get(_ context.Context, ref domain.RunRef) (domain.Card, error) {
+	if ref != (domain.RunRef{Repo: liveRepo, ID: liveRun}) {
 		return domain.Card{}, domain.ErrNotFound
 	}
 	return r.card(), nil
@@ -83,7 +88,7 @@ func TestLivePhaseChange(t *testing.T) {
 		t.Fatal("serve did not listen")
 	}
 
-	res, err := http.Get(base + "events?run=" + liveRun)
+	res, err := http.Get(base + "events?repo=" + liveRepo + "&run=" + liveRun)
 	if err != nil {
 		t.Fatal(err)
 	}

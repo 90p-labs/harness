@@ -20,13 +20,43 @@ import (
 	"github.com/90p-labs/harness/internal/shared/infrastructure/webkit"
 )
 
-type fakeRuns struct{ cards []domain.Card }
+const (
+	testRepo  = "aaaaaaaaaaaa"
+	otherRepo = "bbbbbbbbbbbb"
+	// repoBase is the route prefix of the run routes of testRepo.
+	repoBase = "/repos/" + testRepo
+)
 
-func (f fakeRuns) List(context.Context) ([]domain.Card, error) { return f.cards, nil }
+// fakeRuns holds cards of one or more repos. A card with no Repo belongs to
+// testRepo, and no repos means the one repo testRepo.
+type fakeRuns struct {
+	cards    []domain.Card
+	repos    []domain.Repo
+	problems map[string]string
+}
 
-func (f fakeRuns) Get(_ context.Context, id string) (domain.Card, error) {
-	for _, c := range f.cards {
-		if c.ID == id {
+func (f fakeRuns) stamped() []domain.Card {
+	out := make([]domain.Card, len(f.cards))
+	for i, c := range f.cards {
+		if c.Repo == "" {
+			c.Repo = testRepo
+		}
+		out[i] = c
+	}
+	return out
+}
+
+func (f fakeRuns) List(context.Context) (domain.Listing, error) {
+	repos := f.repos
+	if repos == nil {
+		repos = []domain.Repo{{Key: testRepo, Name: "harness", Worktree: "/work/harness"}}
+	}
+	return domain.Listing{Repos: repos, Cards: f.stamped(), Problems: f.problems}, nil
+}
+
+func (f fakeRuns) Get(_ context.Context, ref domain.RunRef) (domain.Card, error) {
+	for _, c := range f.stamped() {
+		if c.ID == ref.ID && c.Repo == ref.Repo {
 			return c, nil
 		}
 	}
@@ -91,11 +121,51 @@ func get(h nethttp.Handler, host, target string) *httptest.ResponseRecorder {
 	return rec
 }
 
+// recordingRuns counts every call that reaches the run store.
+type recordingRuns struct {
+	fakeRuns
+	calls *int
+}
+
+func (r recordingRuns) List(ctx context.Context) (domain.Listing, error) {
+	*r.calls++
+	return r.fakeRuns.List(ctx)
+}
+
+func (r recordingRuns) Get(ctx context.Context, ref domain.RunRef) (domain.Card, error) {
+	*r.calls++
+	return r.fakeRuns.Get(ctx, ref)
+}
+
+func TestBadRepoKeyReachesNoStore(t *testing.T) {
+	for _, key := range []string{"NOTHEX", "abc", "ABCDEF012345", "zzzzzzzzzzzz", "0123456789abcd"} {
+		calls := 0
+		runs := recordingRuns{fakeRuns: fakeRuns{cards: cards}, calls: &calls}
+		srv := New(Config{
+			Version: "9.9.9",
+			Board:   board.NewHandler(runs),
+			Page:    page.NewHandler(runs, &fakePages{}),
+			Logger:  slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		})
+		for _, target := range []string{
+			"/repos/" + key + "/runs/20261113-a",
+			"/repos/" + key + "/runs/20261113-a/regions/criteria",
+		} {
+			if rec := get(srv.Handler(), "localhost", target); rec.Code != 404 {
+				t.Errorf("%s: status %d, want 404", target, rec.Code)
+			}
+		}
+		if calls != 0 {
+			t.Errorf("key %q: %d store calls, want 0", key, calls)
+		}
+	}
+}
+
 func TestRegionMissingLogOnlyForKnownRun(t *testing.T) {
 	t.Run("an unknown run answers 404 with no missing-region log", func(t *testing.T) {
 		var logs bytes.Buffer
 		srv, _ := newServer(t, &logs)
-		if rec := get(srv.Handler(), "localhost", "/runs/gone/regions/criteria"); rec.Code != 404 {
+		if rec := get(srv.Handler(), "localhost", repoBase+"/runs/gone/regions/criteria"); rec.Code != 404 {
 			t.Fatalf("status %d", rec.Code)
 		}
 		if strings.Contains(logs.String(), "panel region missing") {
@@ -105,7 +175,7 @@ func TestRegionMissingLogOnlyForKnownRun(t *testing.T) {
 	t.Run("a known run with an unknown region logs it", func(t *testing.T) {
 		var logs bytes.Buffer
 		srv, _ := newServer(t, &logs)
-		if rec := get(srv.Handler(), "localhost", "/runs/20261113-a/regions/nope"); rec.Code != 404 {
+		if rec := get(srv.Handler(), "localhost", repoBase+"/runs/20261113-a/regions/nope"); rec.Code != 404 {
 			t.Fatalf("status %d", rec.Code)
 		}
 		if !strings.Contains(logs.String(), "panel region missing") {
@@ -130,7 +200,7 @@ func TestRoutes(t *testing.T) {
 			t.Fatalf("status %d type %q", rec.Code, rec.Header().Get("Content-Type"))
 		}
 		for _, want := range []string{`hx-get="/regions/board"`, `every 5s`, `hx-ext="morph,sse"`, `sse-connect="/events"`,
-			`sse:runs-changed, every 5s [!window.harnessLive]`, links.Sse, links.Live, links.Icon, "panel serve", `href="/runs/20261113-a"`,
+			`sse:runs-changed, every 5s [!window.harnessLive]`, links.Sse, links.Live, links.Icon, "panel serve", `href="` + repoBase + `/runs/20261113-a"`,
 			"Planning", "Approval", "Working", "Reviewing", "Shipping", "Done", links.Htmx, links.Panel, "no plan &lt;b&gt;"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("board page lacks %q", want)
@@ -173,7 +243,7 @@ func TestRoutes(t *testing.T) {
 		if rec.Code != 200 || strings.Contains(rec.Body.String(), "<html") {
 			t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
 		}
-		version := domain.NewBoard(cards).Version
+		version := boardVersion(t, fakeRuns{cards: cards})
 		root := regexp.MustCompile(`^<div([^>]*)>`).FindStringSubmatch(rec.Body.String())
 		if root == nil {
 			t.Fatalf("region root is no div: %q", rec.Body.String())
@@ -199,25 +269,25 @@ func TestRoutes(t *testing.T) {
 	})
 
 	t.Run("run page", func(t *testing.T) {
-		rec := get(h, "localhost", "/runs/20261113-a")
+		rec := get(h, "localhost", repoBase+"/runs/20261113-a")
 		if rec.Code != 200 || rec.Body.String() != "<html>page 20261113-a</html>" {
 			t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
 		}
-		if rec := get(h, "localhost", "/runs/missing"); rec.Code != 404 {
+		if rec := get(h, "localhost", repoBase+"/runs/missing"); rec.Code != 404 {
 			t.Fatalf("unknown run: status %d", rec.Code)
 		}
 	})
 
 	t.Run("run with no plan gets the styled page", func(t *testing.T) {
-		rec := get(h, "localhost", "/runs/noplan")
+		rec := get(h, "localhost", repoBase+"/runs/noplan")
 		body := rec.Body.String()
-		if rec.Code != 200 || !strings.Contains(body, `sse-connect="/events?run=noplan"`) || strings.Contains(body, "http-equiv") {
+		if rec.Code != 200 || !strings.Contains(body, `sse-connect="/events?repo=`+testRepo+`&amp;run=noplan"`) || strings.Contains(body, "http-equiv") {
 			t.Fatalf("status %d body %q", rec.Code, body)
 		}
 	})
 
 	t.Run("region versions", func(t *testing.T) {
-		base := "/runs/20261113-a/regions/criteria"
+		base := repoBase + "/runs/20261113-a/regions/criteria"
 		unchanged := get(h, "localhost", base+"?v=p1.r1")
 		if unchanged.Code != 204 || unchanged.Body.Len() != 0 {
 			t.Fatalf("unchanged: status %d", unchanged.Code)
@@ -236,8 +306,8 @@ func TestRoutes(t *testing.T) {
 	})
 
 	t.Run("unknown names answer 404", func(t *testing.T) {
-		for _, target := range []string{"/runs/missing/regions/criteria", "/runs/20261113-a/regions/nope?v=p1.r0",
-			"/runs/20261113-a/regions/nope", "/runs/20261113-a/regions/nope?v=p1.r1", "/nowhere"} {
+		for _, target := range []string{repoBase + "/runs/missing/regions/criteria", repoBase + "/runs/20261113-a/regions/nope?v=p1.r0",
+			repoBase + "/runs/20261113-a/regions/nope", repoBase + "/runs/20261113-a/regions/nope?v=p1.r1", "/nowhere"} {
 			if rec := get(h, "localhost", target); rec.Code != 404 {
 				t.Errorf("%s: status %d", target, rec.Code)
 			}
@@ -275,14 +345,150 @@ func TestRoutes(t *testing.T) {
 
 	t.Run("5xx is logged and no CORS header", func(t *testing.T) {
 		logs.Reset()
-		rec := get(h, "localhost", "/runs/broken")
+		rec := get(h, "localhost", repoBase+"/runs/broken")
 		if rec.Code != 500 || !strings.Contains(logs.String(), "reason=") {
 			t.Fatalf("status %d log %q", rec.Code, logs.String())
 		}
-		for _, target := range []string{"/", "/healthz", "/runs/20261113-a", "/regions/board", "/runs/broken"} {
+		for _, target := range []string{"/", "/healthz", repoBase + "/runs/20261113-a", "/regions/board", repoBase + "/runs/broken"} {
 			if v := get(h, "localhost", target).Header().Get("Access-Control-Allow-Origin"); v != "" {
 				t.Errorf("%s sets Access-Control-Allow-Origin %q", target, v)
 			}
+		}
+	})
+}
+
+func boardVersion(t *testing.T, runs domain.Runs) string {
+	t.Helper()
+	res, err := board.NewHandler(runs).Handle(context.Background(), board.Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.Board.Version
+}
+
+// twoRepos holds a run of each repo, and one id that both repos have.
+func twoRepos(t *testing.T) nethttp.Handler {
+	t.Helper()
+	runs := fakeRuns{
+		repos: []domain.Repo{{Key: testRepo, Name: "harness", Worktree: "/work/harness"}, {Key: otherRepo, Name: "api", Worktree: "/work/api"}},
+		cards: []domain.Card{
+			{Repo: testRepo, ID: "20261113-a", Phase: "working", Version: domain.Version{Plan: "p1", Run: "r1"}},
+			{Repo: otherRepo, ID: "20261113-b", Phase: "working", Version: domain.Version{Plan: "p2", Run: "r2"}},
+			{Repo: testRepo, ID: "20261113-same", Phase: "working", Version: domain.Version{Plan: "p3", Run: "r3"}},
+			{Repo: otherRepo, ID: "20261113-same", Phase: "working", Version: domain.Version{Plan: "p4", Run: "r4"}},
+			{Repo: testRepo, ID: "noplan", Phase: "planning", Version: domain.Version{Plan: "p5", Run: "r5"}},
+		},
+	}
+	logs := &bytes.Buffer{}
+	return New(Config{
+		Version: "9.9.9",
+		Board:   board.NewHandler(runs),
+		Page:    page.NewHandler(runs, &fakePages{}),
+		Logger:  slog.New(slog.NewTextHandler(logs, nil)),
+	}).Handler()
+}
+
+func TestRepoRoutes(t *testing.T) {
+	h := twoRepos(t)
+	const a, b = "/repos/" + testRepo, "/repos/" + otherRepo
+
+	for _, tc := range []struct {
+		name, host, target string
+		code               int
+		body               string
+	}{
+		{"run page of its repo", "localhost", a + "/runs/20261113-a", 200, "<html>page 20261113-a</html>"},
+		{"run page of the second repo", "localhost", b + "/runs/20261113-b", 200, "<html>page 20261113-b</html>"},
+		{"region of its repo", "localhost", a + "/runs/20261113-a/regions/criteria?v=p1.old", 200, "<section>criteria 20261113-a</section>"},
+		{"same id, second repo", "localhost", b + "/runs/20261113-same", 200, "<html>page 20261113-same</html>"},
+		{"a run of another repo", "localhost", b + "/runs/20261113-a", 404, ""},
+		{"a region of a run of another repo", "localhost", b + "/runs/20261113-a/regions/criteria", 404, ""},
+		{"an unknown repo", "localhost", "/repos/cccccccccccc/runs/20261113-a", 404, ""},
+		{"an unknown repo region", "localhost", "/repos/cccccccccccc/runs/20261113-a/regions/criteria", 404, ""},
+		{"an uppercase key", "localhost", "/repos/AAAAAAAAAAAA/runs/20261113-a", 404, ""},
+		{"a short key", "localhost", "/repos/aaaa/runs/20261113-a", 404, ""},
+		{"a key that is no hex", "localhost", "/repos/zzzzzzzzzzzz/runs/20261113-a", 404, ""},
+		{"an unknown run", "localhost", a + "/runs/gone", 404, ""},
+		{"an unknown region", "localhost", a + "/runs/20261113-a/regions/nope", 404, ""},
+		{"a foreign host on a page", "evil.com", a + "/runs/20261113-a", 403, ""},
+		{"a foreign host on a region", "evil.com:80", a + "/runs/20261113-a/regions/criteria", 403, ""},
+		{"a foreign host on an unknown key", "localhost.evil.com", "/repos/cccccccccccc/runs/x", 403, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := get(h, tc.host, tc.target)
+			if rec.Code != tc.code {
+				t.Fatalf("status %d, want %d", rec.Code, tc.code)
+			}
+			if tc.body != "" && rec.Body.String() != tc.body {
+				t.Errorf("body %q, want %q", rec.Body.String(), tc.body)
+			}
+		})
+	}
+
+	t.Run("the no-plan page names the repo route", func(t *testing.T) {
+		body := get(h, "localhost", a+"/runs/noplan").Body.String()
+		for _, want := range []string{
+			`sse-connect="/events?repo=` + testRepo + `&amp;run=noplan"`,
+			`hx-get="` + a + `/runs/noplan/regions/summary"`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("no-plan page lacks %q", want)
+			}
+		}
+	})
+
+	t.Run("the board links each card to its own repo", func(t *testing.T) {
+		body := get(h, "localhost", "/").Body.String()
+		for _, want := range []string{`href="` + a + `/runs/20261113-a"`, `href="` + b + `/runs/20261113-b"`,
+			`<span class="chip repo-chip" title="harness">`, `<span class="chip repo-chip" title="api">`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("board lacks %q", want)
+			}
+		}
+		if n := strings.Count(body, `<div class="col" id="col-working">`); n != 1 {
+			t.Errorf("the board has %d working columns, want one for every repo", n)
+		}
+	})
+}
+
+func TestLegacyRunRoute(t *testing.T) {
+	h := twoRepos(t)
+
+	for _, tc := range []struct {
+		name, host, target string
+		code               int
+		location           string
+	}{
+		{"one repo has the run", "localhost", "/runs/20261113-a", 301, "/repos/" + testRepo + "/runs/20261113-a"},
+		{"the other repo has the run", "localhost", "/runs/20261113-b", 301, "/repos/" + otherRepo + "/runs/20261113-b"},
+		{"a trailing slash redirects once", "localhost", "/runs/20261113-a/", 301, "/repos/" + testRepo + "/runs/20261113-a"},
+		{"two repos have the run", "localhost", "/runs/20261113-same", 404, ""},
+		{"no repo has the run", "localhost", "/runs/gone", 404, ""},
+		{"a foreign host", "evil.com", "/runs/20261113-a", 403, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := get(h, tc.host, tc.target)
+			if rec.Code != tc.code || rec.Header().Get("Location") != tc.location {
+				t.Fatalf("status %d location %q, want %d %q", rec.Code, rec.Header().Get("Location"), tc.code, tc.location)
+			}
+		})
+	}
+
+	t.Run("a repo failed to load, so a matching id still answers 404", func(t *testing.T) {
+		runs := fakeRuns{
+			repos:    []domain.Repo{{Key: testRepo, Name: "harness", Worktree: "/work/harness"}, {Key: otherRepo, Name: "api", Worktree: "/work/api"}},
+			cards:    []domain.Card{{Repo: testRepo, ID: "20261113-a", Phase: "working", Version: domain.Version{Plan: "p1", Run: "r1"}}},
+			problems: map[string]string{otherRepo: "state.db not found"},
+		}
+		h := New(Config{
+			Version: "9.9.9",
+			Board:   board.NewHandler(runs),
+			Page:    page.NewHandler(runs, &fakePages{}),
+			Logger:  slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		}).Handler()
+		rec := get(h, "localhost", "/runs/20261113-a")
+		if rec.Code != 404 || rec.Header().Get("Location") != "" {
+			t.Fatalf("status %d location %q, want 404 and no location", rec.Code, rec.Header().Get("Location"))
 		}
 	})
 }
@@ -294,7 +500,8 @@ func TestHostGuard(t *testing.T) {
 	allowed := []string{"127.0.0.1", "127.0.0.1:8080", "localhost", "localhost:3000", "LOCALHOST:80", "LocalHost"}
 	denied := []string{"", "localhost.", "localhost.:80", "127.0.0.1.", "localhost.evil.com", "127.0.0.1.evil.com",
 		"[::1]", "[::1]:80", "[localhost]:80", "[127.0.0.1]:8080", "evil.com", "evil.com:80", "localhost:80:90", "localhost:abc", "localhost:", "127.0.0.1:", "0.0.0.0:80", "foo.localhost"}
-	routes := []string{"/", "/regions/board", "/runs/20261113-a", "/runs/20261113-a/regions/criteria", "/assets/x/y", "/healthz", "/nowhere"}
+	routes := []string{"/", "/regions/board", repoBase + "/runs/20261113-a", repoBase + "/runs/20261113-a/regions/criteria",
+		"/runs/20261113-a", "/assets/x/y", "/healthz", "/nowhere"}
 
 	for _, host := range allowed {
 		if rec := get(h, host, "/healthz"); rec.Code != 200 {
@@ -390,12 +597,13 @@ func themeKey(t *testing.T, src string) string {
 func TestBoardShell(t *testing.T) {
 	body := boardBody(t, shellCards)
 	for _, want := range []string{
-		`<div class="app" id="board"`, `<aside class="side" aria-label="Board"`, `<nav class="nav" aria-label="Columns"`, `class="ws"`,
+		`<div class="app" id="board"`, `<aside class="side" aria-label="Board"`, `class="ws"`,
 		`<span>Runs</span><span class="sep">/</span><b>Board</b>`,
 		`<main>`, `class="strip"`, `data-theme-toggle data-morph-keep`,
-		`<a href="#col-planning">Planning<span class="n">0</span></a>`,
-		`<a href="#col-approval">Approval<span class="n bad">1</span></a>`,
-		`<a href="#col-working">Working<span class="n">2</span></a>`,
+		`<nav class="nav" aria-label="Repos">`,
+		`<a href="/" aria-current="page">All repos<span class="n bad">3</span></a>`,
+		`<a href="/?repo=` + testRepo + `" title="/work/harness">harness<span class="n bad">3</span></a>`,
+		`<nav class="repo-chips" aria-label="Repos">`,
 		string(webkit.Stylesheet()), boardCSS,
 	} {
 		if !strings.Contains(body, want) {
@@ -439,10 +647,10 @@ func TestBoardCard(t *testing.T) {
 	for _, want := range []string{
 		`<article class="task">`,
 		`<span class="rid" title="20261113-a">20261113-a</span>`,
-		`<h3><a href="/runs/20261113-a" title="panel serve">panel serve</a></h3>`,
+		`<h3><a href="` + repoBase + `/runs/20261113-a" title="panel serve">panel serve</a></h3>`,
 		`<span class="chip" title="feat/x"><span class="chip-t">feat/x</span></span>`,
 		`<a class="chip pr" href="https://example.test/pr/1" title="https://example.test/pr/1" target="_blank" rel="noopener noreferrer"><span class="chip-t">PR #1</span></a>`,
-		`<h3><a href="/runs/20261113-c" title="` + longToken + `">` + longToken[:79] + `…</a></h3>`,
+		`<h3><a href="` + repoBase + `/runs/20261113-c" title="` + longToken + `">` + longToken[:79] + `…</a></h3>`,
 		`<span class="st st-fail">blocked</span>`,
 	} {
 		if !strings.Contains(body, want) {
@@ -498,12 +706,33 @@ func TestBoardCardWholeClick(t *testing.T) {
 
 type rules map[string]map[string]string
 
-// parseRules reads a flat stylesheet into selector and declaration pairs.
-// The file has no at-rules, so a brace pair is one rule.
+const phoneMedia = "@media(max-width:860px) "
+
+var mediaBlock = regexp.MustCompile(`(?s)@media\s*\(\s*max-width:\s*860px\s*\)\s*\{(.*?\})\s*\}`)
+
+// parseRules reads a stylesheet into selector and declaration pairs. Apart
+// from one `@media (max-width: 860px)` block, the file has no at-rules, so a
+// brace pair is one rule. A rule of the media block sits under its selector
+// with the prefix phoneMedia.
 func parseRules(t *testing.T, css string) rules {
 	t.Helper()
 	css = regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(css, "")
 	out := rules{}
+	media := mediaBlock.FindAllStringSubmatch(css, -1)
+	if len(media) > 1 {
+		t.Fatalf("board.css holds %d @media (max-width: 860px) blocks, want at most one", len(media))
+	}
+	css = mediaBlock.ReplaceAllString(css, "")
+	if len(media) == 1 {
+		readRules(t, media[0][1], phoneMedia, out)
+	}
+	readRules(t, css, "", out)
+	return out
+}
+
+// readRules reads flat rules into out, each selector under prefix.
+func readRules(t *testing.T, css, prefix string, out rules) {
+	t.Helper()
 	for _, block := range strings.Split(css, "}") {
 		if strings.TrimSpace(block) == "" {
 			continue
@@ -513,7 +742,7 @@ func parseRules(t *testing.T, css string) rules {
 			t.Fatalf("board.css holds a nested or at-rule block: %q", block)
 		}
 		for _, sel := range strings.Split(head, ",") {
-			sel = strings.Join(strings.Fields(sel), " ")
+			sel = prefix + strings.Join(strings.Fields(sel), " ")
 			if out[sel] == nil {
 				out[sel] = map[string]string{}
 			}
@@ -526,7 +755,249 @@ func parseRules(t *testing.T, css string) rules {
 			}
 		}
 	}
-	return out
+}
+
+const (
+	brokenRepo  = "cccccccccccc"
+	missingRepo = "eeeeeeeeeeee"
+)
+
+// filterRuns holds three repos: harness with a working run, api with a run that
+// needs approval, and a broken one with a problem line.
+func filterRuns(calls *int) domain.Runs {
+	runs := fakeRuns{
+		repos: []domain.Repo{
+			{Key: testRepo, Name: "harness", Worktree: "/work/harness"},
+			{Key: otherRepo, Name: "api", Worktree: "/work/api"},
+			{Key: brokenRepo, Name: "broken", Worktree: "/work/broken"},
+		},
+		cards: []domain.Card{
+			{Repo: testRepo, ID: "20261113-a", Title: "alpha work", Phase: "working", Version: domain.Version{Plan: "p1", Run: "r1"}},
+			{Repo: otherRepo, ID: "20261113-b", Title: "bravo approval", Phase: "awaiting_approval", Version: domain.Version{Plan: "p2", Run: "r2"}},
+		},
+		problems: map[string]string{brokenRepo: "state.db not found"},
+	}
+	if calls == nil {
+		return runs
+	}
+	return recordingRuns{fakeRuns: runs, calls: calls}
+}
+
+func filterHandler(runs domain.Runs) nethttp.Handler {
+	return New(Config{
+		Version: "9.9.9",
+		Board:   board.NewHandler(runs),
+		Page:    page.NewHandler(runs, &fakePages{}),
+		Logger:  slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+	}).Handler()
+}
+
+// markup drops the head of a page, which holds the stylesheet.
+func markup(body string) string {
+	_, rest, ok := strings.Cut(body, "<body")
+	if !ok {
+		return body
+	}
+	return rest
+}
+
+func TestBoardRepoFilter(t *testing.T) {
+	h := filterHandler(filterRuns(nil))
+	const (
+		harnessCard = `href="/repos/` + testRepo + `/runs/20261113-a"`
+		apiCard     = `href="/repos/` + otherRepo + `/runs/20261113-b"`
+		repoChip    = `<span class="chip repo-chip"`
+		problems    = `class="board-problems"`
+		brokenLine  = `<li>broken: state.db not found</li>`
+	)
+
+	t.Run("no filter shows every repo, its chip and every problem", func(t *testing.T) {
+		for _, target := range []string{"/", "/?repo=", "/regions/board", "/regions/board?repo="} {
+			rec := get(h, "localhost", target)
+			body := rec.Body.String()
+			if rec.Code != 200 {
+				t.Fatalf("%s: status %d", target, rec.Code)
+			}
+			for _, want := range []string{harnessCard, apiCard, problems, brokenLine, `hx-get="/regions/board"`,
+				`<span class="chip repo-chip" title="harness">`, `<span class="chip repo-chip" title="api">`,
+				`<a href="/" aria-current="page">All repos<span class="n bad">2</span></a>`,
+				`<a href="/?repo=` + testRepo + `" title="/work/harness">harness<span class="n">1</span></a>`,
+				`<a href="/?repo=` + otherRepo + `" title="/work/api">api<span class="n bad">1</span></a>`,
+				`<a href="/?repo=` + brokenRepo + `" title="/work/broken">broken<span class="n">0</span></a>`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s lacks %q", target, want)
+				}
+			}
+			// The side nav and the chip row each carry the path as a title.
+			if n := strings.Count(body, `title="/work/api"`); n != 2 {
+				t.Errorf("%s: %d path titles for api, want 2", target, n)
+			}
+			// The repo chip is the first thing of its card, above the run id.
+			for _, card := range strings.Split(body, `<article class="task">`)[1:] {
+				chip, rid := strings.Index(card, repoChip), strings.Index(card, `class="rid"`)
+				if chip < 0 || rid < 0 || chip > rid {
+					t.Errorf("%s: repo chip at %d, run id at %d, want the chip first", target, chip, rid)
+				}
+			}
+			// The side nav and the chip row each mark All repos.
+			if n := strings.Count(markup(body), `aria-current="page"`); n != 2 {
+				t.Errorf("%s: %d aria-current marks, want 2", target, n)
+			}
+		}
+	})
+
+	t.Run("a filter keeps one repo, on the page and on the region", func(t *testing.T) {
+		for _, tc := range []struct {
+			key         string
+			card        string
+			other       string
+			wantProblem bool
+		}{
+			{testRepo, harnessCard, apiCard, false},
+			{otherRepo, apiCard, harnessCard, false},
+			{brokenRepo, "", harnessCard, true},
+		} {
+			for _, path := range []string{"/", "/regions/board"} {
+				target := path + "?repo=" + tc.key
+				rec := get(h, "localhost", target)
+				body := rec.Body.String()
+				if rec.Code != 200 {
+					t.Fatalf("%s: status %d", target, rec.Code)
+				}
+				if tc.card != "" && !strings.Contains(body, tc.card) {
+					t.Errorf("%s lacks its own card", target)
+				}
+				if strings.Contains(body, tc.other) {
+					t.Errorf("%s leaks a card of another repo", target)
+				}
+				if tc.key == testRepo && strings.Contains(body, "bravo approval") || tc.key == otherRepo && strings.Contains(body, "alpha work") ||
+					tc.key == brokenRepo && (strings.Contains(body, "alpha work") || strings.Contains(body, "bravo approval")) {
+					t.Errorf("%s leaks a card title of another repo", target)
+				}
+				if strings.Contains(body, problems) != tc.wantProblem || strings.Contains(body, brokenLine) != tc.wantProblem {
+					t.Errorf("%s: problem notice present = %v, want %v", target, strings.Contains(body, problems), tc.wantProblem)
+				}
+				if strings.Contains(body, repoChip) {
+					t.Errorf("%s shows the repo chip while filtered", target)
+				}
+				// The refresh and the live signals keep the filter.
+				if want := `hx-get="/regions/board?repo=` + tc.key + `"`; !strings.Contains(body, want) {
+					t.Errorf("%s lacks %s", target, want)
+				}
+				// The repo list ignores the filter: every repo, its unfiltered count and mark.
+				for _, want := range []string{`<span class="n bad">2</span></a>`, `>harness<span class="n">1</span></a>`,
+					`>api<span class="n bad">1</span></a>`, `>broken<span class="n">0</span></a>`} {
+					if !strings.Contains(body, want) {
+						t.Errorf("%s lacks %q in the repo list", target, want)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("the active item has aria-current and no other does", func(t *testing.T) {
+		body := get(h, "localhost", "/?repo="+otherRepo).Body.String()
+		for _, want := range []string{`<a href="/">All repos<span class="n bad">2</span></a>`,
+			`<a href="/?repo=` + otherRepo + `" title="/work/api" aria-current="page">api<span class="n bad">1</span></a>`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("page lacks %q", want)
+			}
+		}
+		// One mark in the side nav and one in the chip row, both on the active item.
+		if n := strings.Count(markup(body), `aria-current="page"`); n != 2 {
+			t.Errorf("%d aria-current marks, want 2", n)
+		}
+		if n := strings.Count(body, `href="/?repo=`+otherRepo+`" title="/work/api" aria-current="page"`); n != 2 {
+			t.Errorf("%d active repo links, want 2", n)
+		}
+	})
+
+	t.Run("a malformed key answers 404 before any store call", func(t *testing.T) {
+		for _, key := range []string{"NOTHEX", "abc", "AAAAAAAAAAAA", "zzzzzzzzzzzz", "0123456789abcd", "%20"} {
+			calls := 0
+			bad := filterHandler(filterRuns(&calls))
+			for _, path := range []string{"/", "/regions/board"} {
+				target := path + "?repo=" + key
+				if rec := get(bad, "localhost", target); rec.Code != 404 {
+					t.Errorf("%s: status %d, want 404", target, rec.Code)
+				}
+			}
+			if calls != 0 {
+				t.Errorf("key %q: %d store calls, want 0", key, calls)
+			}
+		}
+	})
+
+	t.Run("a key with no repo sends the page to the board", func(t *testing.T) {
+		rec := get(h, "localhost", "/?repo="+missingRepo)
+		if rec.Code != 303 || rec.Header().Get("Location") != "/" {
+			t.Fatalf("status %d location %q, want 303 to /", rec.Code, rec.Header().Get("Location"))
+		}
+	})
+
+	t.Run("a key with no repo sends the region to the board, whatever the version", func(t *testing.T) {
+		listing, err := filterRuns(nil).List(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range []string{"", "old", domain.NewBoard(listing, missingRepo).Version, domain.NewBoard(listing, "").Version} {
+			target := "/regions/board?repo=" + missingRepo
+			if v != "" {
+				target += "&v=" + v
+			}
+			rec := get(h, "localhost", target)
+			if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+				t.Errorf("%s: X-Content-Type-Options %q, want nosniff", target, got)
+			}
+			if rec.Code != 200 || rec.Header().Get("HX-Redirect") != "/" || rec.Body.Len() != 0 {
+				t.Errorf("%s: status %d HX-Redirect %q body %q, want 200, / and no body", target, rec.Code, rec.Header().Get("HX-Redirect"), rec.Body.String())
+			}
+		}
+	})
+
+	t.Run("a matching version of a filter answers 204", func(t *testing.T) {
+		listing, _ := filterRuns(nil).List(context.Background())
+		v := domain.NewBoard(listing, testRepo).Version
+		rec := get(h, "localhost", "/regions/board?repo="+testRepo+"&v="+v)
+		if rec.Code != 204 || rec.Body.Len() != 0 {
+			t.Errorf("status %d body %q, want 204", rec.Code, rec.Body.String())
+		}
+		// The version of the full board does not match the filtered one.
+		if rec := get(h, "localhost", "/regions/board?repo="+testRepo+"&v="+domain.NewBoard(listing, "").Version); rec.Code != 200 {
+			t.Errorf("full version on a filter: status %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("a foreign host stays refused", func(t *testing.T) {
+		for _, target := range []string{"/?repo=" + testRepo, "/regions/board?repo=" + missingRepo} {
+			if rec := get(h, "evil.com", target); rec.Code != 403 {
+				t.Errorf("%s: status %d, want 403", target, rec.Code)
+			}
+		}
+	})
+
+	t.Run("the chip row shows only on a phone", func(t *testing.T) {
+		body := get(h, "localhost", "/").Body.String()
+		if !strings.Contains(body, `<nav class="repo-chips" aria-label="Repos">`) {
+			t.Fatal("the page has no chip row")
+		}
+		r := parseRules(t, boardCSS)
+		for _, w := range []struct{ sel, prop, value string }{
+			{".repo-chips", "display", "none"},
+			{phoneMedia + ".repo-chips", "display", "flex"},
+			{phoneMedia + ".repo-chips", "flex-wrap", "wrap"},
+		} {
+			if got := r[w.sel][w.prop]; got != w.value {
+				t.Errorf("%s { %s } = %q, want %q", w.sel, w.prop, got, w.value)
+			}
+		}
+		// The media rule comes after the base rule, so it wins at 860px and below.
+		css := regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(boardCSS, "")
+		base, media := strings.Index(css, ".repo-chips{"), strings.Index(css, "@media (max-width: 860px)")
+		if base < 0 || media < 0 || base > media {
+			t.Errorf("base rule at %d, media block at %d: the media block must follow", base, media)
+		}
+	})
 }
 
 func TestBoardNoPageOverflow(t *testing.T) {

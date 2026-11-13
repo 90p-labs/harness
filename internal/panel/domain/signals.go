@@ -11,7 +11,7 @@ const (
 
 // Signals delivers change signals to the open pages.
 type Signals interface {
-	// Subscribe returns a channel of signal names and a cancel func. An empty run
+	// Subscribe returns a channel of signal names and a cancel func. An empty ref
 	// subscribes to the board. An unknown run returns ErrNotFound.
-	Subscribe(ctx context.Context, run string) (<-chan string, func(), error)
+	Subscribe(ctx context.Context, run RunRef) (<-chan string, func(), error)
 }

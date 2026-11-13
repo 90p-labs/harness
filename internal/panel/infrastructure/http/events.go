@@ -22,8 +22,19 @@ func (s *Server) events(w nethttp.ResponseWriter, r *nethttp.Request) {
 		nethttp.NotFound(w, r)
 		return
 	}
-	run := r.URL.Query().Get("run")
-	ch, cancel, err := s.cfg.Signals.Subscribe(r.Context(), run)
+	// An empty run is the board stream, and it takes no repo. A run needs the
+	// repo that holds it.
+	var ref domain.RunRef
+	if run := r.URL.Query().Get("run"); run != "" {
+		repo := r.URL.Query().Get("repo")
+		if _, err := domain.ParseRepoKey(repo); err != nil {
+			nethttp.NotFound(w, r)
+			return
+		}
+		ref = domain.RunRef{Repo: repo, ID: run}
+	}
+	run, repo := ref.ID, ref.Repo
+	ch, cancel, err := s.cfg.Signals.Subscribe(r.Context(), ref)
 	if errors.Is(err, domain.ErrNotFound) {
 		nethttp.NotFound(w, r)
 		return
@@ -33,8 +44,10 @@ func (s *Server) events(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 	defer cancel()
-	s.logger.Info("panel stream", "event", "open", "open", s.open.Add(1), "run", run)
-	defer func() { s.logger.Info("panel stream", "event", "close", "open", s.open.Add(-1), "run", run) }()
+	s.logger.Info("panel stream", "event", "open", "open", s.open.Add(1), "repo", repo, "run", run)
+	defer func() {
+		s.logger.Info("panel stream", "event", "close", "open", s.open.Add(-1), "repo", repo, "run", run)
+	}()
 
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
