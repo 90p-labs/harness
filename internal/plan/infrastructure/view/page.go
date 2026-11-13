@@ -105,22 +105,40 @@ type page struct {
 	assets
 }
 
-func (Renderer) Render(in domain.ViewInput) ([]byte, error) {
+func pageAssets() (assets, error) {
 	kit, err := webkit.Inline()
 	if err != nil {
-		return nil, err
+		return assets{}, err
 	}
-	a := assets{
+	return assets{
 		Fonts:   kit.Fonts,
 		Tokens:  kit.Tokens,
 		CSS:     template.CSS(pageCSS),
 		JS:      template.JS(pageJS),
 		Mermaid: kit.Mermaid,
+	}, nil
+}
+
+func newPage(in domain.ViewInput) (page, error) {
+	a, err := pageAssets()
+	if err != nil {
+		return page{}, err
 	}
+	return page{model: newBuilder(in).model(), assets: a}, nil
+}
+
+func (Renderer) Render(in domain.ViewInput) ([]byte, error) {
 	if in.Program != nil {
+		a, err := pageAssets()
+		if err != nil {
+			return nil, err
+		}
 		return renderProgram(in, a)
 	}
-	p := page{model: newBuilder(in).model(), assets: a}
+	p, err := newPage(in)
+	if err != nil {
+		return nil, err
+	}
 	var buf bytes.Buffer
 	if err := pageTemplate.Execute(&buf, p); err != nil {
 		return nil, fmt.Errorf("render plan page: %w", err)
