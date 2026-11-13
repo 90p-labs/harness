@@ -178,7 +178,7 @@ plugins:
 
 - [`docs/setup.md`](docs/setup.md): the plugin binary, the lint tools, `harness init` and the step by step setup.
 - [`docs/configuration.md`](docs/configuration.md) and [`docs/configuration-full.md`](docs/configuration-full.md): every key of `.harness.yaml`, and one example for each case.
-- [`docs/runs.md`](docs/runs.md): a full run, the plan view, the multi-run plan and the run phases.
+- [`docs/runs.md`](docs/runs.md): a full run, the plan view, the multi-run plan and the run phases. The [panel guide](docs/panel.md) covers the background panel and the host open.
 - [`docs/plugins.md`](docs/plugins.md): the plugin contract and the five plugin kinds.
 - [`docs/go-live.md`](docs/go-live.md): follow a run from the merge to production.
 - [`examples/README.md`](examples/README.md): four example projects in Go, Next.js, Python and Symfony, with their gates and lint packs.

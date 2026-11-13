@@ -25,6 +25,9 @@ Accepted, 2026-11-13. It adds an optional served mode to the plan view. It does 
 10. Each region fetches its fragment with a version. The server answers 204 when nothing changed. The version has a plan part and a run part. The run part hashes the status version, the branch head and the proofs of the active run. It replaces `PRAGMA data_version`, which changes on any write to the state, also a guard call, and would refetch every region of every tab. The adapter caches the head and the proofs of each run for one second.
 11. Polling every 5 s is the fallback when the events stop.
 12. Approve and comments from the page are out of scope. They need their own ADR.
+13. The background panel is started with `harness panel start` and ended with `harness panel stop`. Start is idempotent, and a running panel is one whose lock is held and whose `/healthz` answers the repo and the pid of `panel.json`.
+14. The state files `panel.json`, `panel.lock` and `panel.log` sit in `<git common dir>/.harness/` with mode 0600. Stop signals only a verified pid, and removes a stale `panel.json` only when the lock is free.
+15. The `panel:` block turns on the autostart and the host open. `panel.enabled` is the master switch. The host open prints the run URL on stderr, and the browser opens only as a fallback.
 
 ## Consequences
 

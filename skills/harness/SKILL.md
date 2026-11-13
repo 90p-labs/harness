@@ -55,6 +55,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - On `advisor: off`, start no advisor. Decide each open point yourself and record each decision under `## Decisions` in `plan.md`.
    - Then run `harness run plan`.
 3. `awaiting_approval`: show the plan. `harness run plan` wrote the page `plan.html` in the run folder, and it follows the run. The run opens the page in the browser on entering `awaiting_approval`. After each edit of `plan.md`, run `harness plan view` and ask the user to reload the page. Grill the open questions in rounds with the question tool of the host: `references/grill.md`. When `## Open questions` holds only `- none`, ask the `Plan` question with the options `Approve` (first) and `Change the plan`, then stop until the user answers.
+   - When the run prints a `panel:` URL on stderr, open that URL in the host preview instead of a browser. The run opens no browser then.
    - On `Approve`, the hook records the approval for the current `plan.md`. Run `harness run approve`.
    - On `Change the plan`, ask what to change, edit `plan.md`, run `harness plan view`, and ask the `Plan` question again.
    - `harness run approve` refuses with no record, after an edit of `plan.md`, on a plan check problem, and on an open question. Only when the user names a model for this run, run `harness run approve --by <model> --reason "<one line>"`.
