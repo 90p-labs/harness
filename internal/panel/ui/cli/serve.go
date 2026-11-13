@@ -17,8 +17,8 @@ const (
 // Serve runs the panel until the context ends. It calls ready with the URL once it listens.
 type Serve func(ctx context.Context, port int, ready func(url string)) error
 
-// NewCommand builds `harness panel` with its serve subcommand.
-func NewCommand(serve Serve) *cobra.Command {
+// NewCommand builds `harness panel` with its serve, start, stop and status subcommands.
+func NewCommand(serve Serve, life Lifecycle) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   commandPanel,
 		Short: "Show the runs of this repo in a local control panel",
@@ -42,6 +42,6 @@ func NewCommand(serve Serve) *cobra.Command {
 		},
 	}
 	serveCmd.Flags().Int(flagPort, 0, "loopback port to listen on, 0 picks a free one")
-	cmd.AddCommand(serveCmd)
+	cmd.AddCommand(serveCmd, startCommand(life), stopCommand(life), statusCommand(life))
 	return cmd
 }

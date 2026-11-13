@@ -18,6 +18,7 @@ import (
 
 	panelmodule "github.com/90p-labs/harness/internal/panel"
 	paneldomain "github.com/90p-labs/harness/internal/panel/domain"
+	panelprocess "github.com/90p-labs/harness/internal/panel/infrastructure/process"
 	panelcli "github.com/90p-labs/harness/internal/panel/ui/cli"
 	planmodule "github.com/90p-labs/harness/internal/plan"
 	"github.com/90p-labs/harness/internal/plan/application/query/viewpage"
@@ -26,13 +27,103 @@ import (
 	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/git"
 )
 
 const sketchSuffix = ".excalidraw"
 
+// panelStateDir is the folder of panel.json, panel.lock and panel.log.
+const panelStateDir = ".harness"
+
+// panelLifecycle wires the process adapter for the repo of the working folder,
+// and returns the configured panel port. It reads only git and the config, so
+// start, stop and status open no run state.
+func panelLifecycle(ctx context.Context, flags *pflag.FlagSet) (*panelprocess.Process, int, error) {
+	proc, cfg, err := panelSetup(ctx, flags)
+	if err != nil {
+		return nil, 0, err
+	}
+	return proc, cfg.Panel.Port, nil
+}
+
+// panelProcess wires the process adapter for the serve path, which takes its
+// port from the flag.
+func panelProcess(ctx context.Context, flags *pflag.FlagSet) (*panelprocess.Process, error) {
+	proc, _, err := panelSetup(ctx, flags)
+	return proc, err
+}
+
+func panelSetup(ctx context.Context, flags *pflag.FlagSet) (*panelprocess.Process, config.Config, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	repo, worktree, err := git.RepoKey(ctx, cwd)
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	commonDir, err := git.CommonDir(ctx, cwd)
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	cfg, err := config.Load(flags, worktree)
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	return panelmodule.NewProcess(panelprocess.Config{
+		Dir:     filepath.Join(commonDir, panelStateDir),
+		Command: []string{exe, "panel", "serve"},
+		WorkDir: worktree,
+		Repo:    repo,
+	}), cfg, nil
+}
+
+// lazyLifecycle builds the process adapter when a command runs, so the help of
+// a command needs no repo.
+func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
+	with := func(ctx context.Context) (panelcli.Lifecycle, error) {
+		proc, port, err := panelLifecycle(ctx, flags)
+		if err != nil {
+			return panelcli.Lifecycle{}, err
+		}
+		return panelmodule.NewLifecycle(proc, port), nil
+	}
+	return panelcli.Lifecycle{
+		Start: func(ctx context.Context, port int) error {
+			life, err := with(ctx)
+			if err != nil {
+				return err
+			}
+			return life.Start(ctx, port)
+		},
+		Stop: func(ctx context.Context) error {
+			life, err := with(ctx)
+			if err != nil {
+				return err
+			}
+			return life.Stop(ctx)
+		},
+		Status: func(ctx context.Context) (paneldomain.Instance, error) {
+			life, err := with(ctx)
+			if err != nil {
+				return paneldomain.Instance{}, err
+			}
+			return life.Status(ctx)
+		},
+	}
+}
+
 func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
 	cmd := panelcli.NewCommand(func(ctx context.Context, port int, ready func(url string)) (err error) {
+		proc, err := panelProcess(ctx, flags)
+		if err != nil {
+			return err
+		}
 		env, err := newEnvironment(ctx, flags)
 		if err != nil {
 			return err
@@ -44,8 +135,8 @@ func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
 		}
 		runs := newPanelRuns(handlers.Status, env.key.Repo).withLive(env.key, env.proofs, time.Now)
 		pages := newPanelPages(handlers.Status, env.key, planmodule.NewPages(env.proofs, env.defaultBranch))
-		return panelmodule.NewServe(version, env.key.Repo, runs, pages)(ctx, port, ready)
-	})
+		return panelmodule.NewServe(version, env.key.Repo, runs, pages, proc)(ctx, port, ready)
+	}, lazyLifecycle(flags))
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
 	return cmd
 }
