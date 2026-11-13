@@ -2,8 +2,7 @@ package view
 
 import (
 	"bytes"
-	"embed"
-	"encoding/base64"
+	_ "embed"
 	"fmt"
 	"html"
 	"html/template"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/90p-labs/harness/internal/plan/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+	"github.com/90p-labs/harness/internal/shared/infrastructure/webkit"
 )
 
 //go:embed page.html.tmpl
@@ -25,12 +25,6 @@ var pageCSS string
 
 //go:embed view.js
 var pageJS string
-
-//go:embed assets/mermaid.min.js
-var mermaidJS string
-
-//go:embed assets/*.woff2
-var fontFiles embed.FS
 
 const (
 	GroupOverview = "Overview"
@@ -81,26 +75,16 @@ const (
 	planPrefix     = "Plan: "
 	sketchSVG      = "<svg"
 	sentenceBreak  = ". "
-	fontFaceFormat = "@font-face{font-family:'%s';src:url(data:font/woff2;base64,%s) format('woff2');font-weight:%s;font-display:swap}"
-	tokensFormat   = ":root{--added:%s;--modified:%s;--deleted:%s}"
 )
 
 var (
 	pageTemplate = template.Must(template.New("page").Funcs(template.FuncMap{"cls": stateClass, "dict": dict}).Parse(pageSource))
 	codeSpan     = regexp.MustCompile("`([^`]+)`")
 	sketchLink   = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)`)
-	markColor    = regexp.MustCompile(`color:(#[0-9a-fA-F]{6})`)
 	nonAnchor    = regexp.MustCompile(`[^A-Za-z0-9]+`)
 )
 
 const headingLevel = 2
-
-var fontFaces = []struct{ file, family, weight string }{
-	{"InstrumentSerif.woff2", "Instrument Serif", "400"},
-	{"SourceSans3.woff2", "Source Sans 3", "200 900"},
-	{"IBMPlexMono.woff2", "IBM Plex Mono", "400"},
-	{"Excalifont.woff2", "Excalifont", "400"},
-}
 
 type Renderer struct{}
 
@@ -122,16 +106,16 @@ type page struct {
 }
 
 func (Renderer) Render(in domain.ViewInput) ([]byte, error) {
-	fonts, err := fontCSS()
+	kit, err := webkit.Inline()
 	if err != nil {
 		return nil, err
 	}
 	a := assets{
-		Fonts:   fonts,
-		Tokens:  tokenCSS(),
+		Fonts:   kit.Fonts,
+		Tokens:  kit.Tokens,
 		CSS:     template.CSS(pageCSS),
 		JS:      template.JS(pageJS),
-		Mermaid: template.JS(mermaidJS),
+		Mermaid: kit.Mermaid,
 	}
 	if in.Program != nil {
 		return renderProgram(in, a)
@@ -142,26 +126,6 @@ func (Renderer) Render(in domain.ViewInput) ([]byte, error) {
 		return nil, fmt.Errorf("render plan page: %w", err)
 	}
 	return buf.Bytes(), nil
-}
-
-func fontCSS() (template.CSS, error) {
-	var css strings.Builder
-	for _, f := range fontFaces {
-		raw, err := fontFiles.ReadFile("assets/" + f.file)
-		if err != nil {
-			return "", fmt.Errorf("read font %s: %w", f.file, err)
-		}
-		fmt.Fprintf(&css, fontFaceFormat, f.family, base64.StdEncoding.EncodeToString(raw), f.weight)
-	}
-	return template.CSS(css.String()), nil
-}
-
-func tokenCSS() template.CSS {
-	color := func(mark shareddomain.Mark) string {
-		return markColor.FindStringSubmatch(shareddomain.MarkStyles[mark])[1]
-	}
-	return template.CSS(fmt.Sprintf(tokensFormat,
-		color(shareddomain.MarkNew), color(shareddomain.MarkChanged), color(shareddomain.MarkRemoved)))
 }
 
 func stateClass(state string) string {
