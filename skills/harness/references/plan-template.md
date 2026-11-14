@@ -161,7 +161,7 @@ The `Test first` line of a task that names a test gives the seam with the label 
 
 Choose the highest seam that still proves the criterion. Prefer one seam for a task. A second seam needs a reason, such as a second entry point.
 
-The seam is a decision of the plan. The user approves it with the plan, and a change of the seam needs a new approval. The kept-structure amend refuses it.
+The seam is a decision of the plan. The user approves it with the plan. A change or a removal of a seam needs a new approval, and so does a seam added to a task that has one. The kept-structure amend refuses each of them. A task approved with no seam may gain seams with no new approval.
 
 The checker cannot judge whether the seam is the right one. The advisor judges it before the approval. The reviewer checks each test against it (Lens Spec of the reviewer brief).
 
@@ -183,11 +183,15 @@ Case (a) is a kept-structure amend. The run has a recorded approval, and the pla
 - A test path added or removed in an `Owned files` line.
 - The free text under `## Goal`. The `Track:` and `Cause:` lines are not free text.
 - Any line under `## Decisions`.
-- Under `## Tasks` only, the prose of `- Test first:` and of `- DoD:`. `Test first` keeps its backticked names, and `DoD` keeps its criterion numbers.
+- Under `## Tasks` only, the prose of `- Test first:` and of `- DoD:`. `Test first` keeps its backticked names other than the `Seam:` names, and `DoD` keeps its criterion numbers.
 
 Headings and fence lines are never free text.
 
-A sketch link anywhere counts as structure. The parsed `DoD` numbers must stay equal. The parsed test file and test name of each task must stay equal. The amend also keeps the `Seam:` names of each task.
+A sketch link anywhere counts as structure. The parsed `DoD` numbers must stay equal. The parsed test file and each test name of a task must stay equal. The amend also keeps the `Seam:` names of each task. A task approved with no seam may gain seams.
+
+The compare is against the approved plan, not against the last amend. A plan approved before 0.17 has no seam. It adds a `Seam:` to each `Test first` line that names a test on its next amend, and that amend needs no new approval. Append the seam at the end of the line and keep each other backticked name.
+
+Some forms still need a new approval. A `Seam:` name that is a whole test name, such as `TestB`, is one. A name that the checker reads as a test file, such as `b_test.go`, is one. So is a name with no letter, or with a space at its edge. So is a line with an unpaired backtick, when its task gains a seam. So is a name with a dot, such as `pkg.F`, on a line that names no file: it becomes the test file.
 
 A test path comes from a closed list:
 

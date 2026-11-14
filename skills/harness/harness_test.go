@@ -47,6 +47,13 @@ const (
 	changePlanStep     = "edit `plan.md`, run `harness plan view`"
 	grillRewriteStep   = "Run `harness plan check` and `harness plan view` after each change of `plan.md`"
 	panelPreviewPhrase = "host preview"
+	amendHead          = "## Kept-structure amend"
+	noSeamPhrase       = "approved with no seam"
+	oldPlanPhrase      = "approved before 0.17"
+	endOfLinePhrase    = "at the end of the line"
+	unpairedPhrase     = "unpaired backtick"
+	contextDoc         = "CONTEXT.md"
+	designDoc          = "DESIGN.md"
 )
 
 // The texts of the section Seam of the plan template.
@@ -228,13 +235,18 @@ func TestPlanTemplate(t *testing.T) {
 	}
 }
 
-func TestPlanTemplateSeam(t *testing.T) {
-	template := repository.Read(t, templateFile)
-	_, rest, found := strings.Cut(template, seamHead+"\n")
+func templateSection(t *testing.T, head string) string {
+	t.Helper()
+	_, rest, found := strings.Cut(repository.Read(t, templateFile), head+"\n")
 	if !found {
-		t.Fatalf("%s has no section %q", templateFile, seamHead)
+		t.Fatalf("%s has no section %q", templateFile, head)
 	}
 	section, _, _ := strings.Cut(rest, "\n## ")
+	return section
+}
+
+func TestPlanTemplateSeam(t *testing.T) {
+	section := templateSection(t, seamHead)
 	wants := []string{
 		plandomain.SeamLabel,
 		"`" + string(plandomain.RuleSeamMissing) + "`",
@@ -247,6 +259,26 @@ func TestPlanTemplateSeam(t *testing.T) {
 	for _, want := range wants {
 		if !strings.Contains(section, want) {
 			t.Errorf("the section %q of %s does not hold %q", seamHead, templateFile, want)
+		}
+	}
+}
+
+func TestPlanTemplateSeamAmend(t *testing.T) {
+	seam, amend := templateSection(t, seamHead), templateSection(t, amendHead)
+	texts := []struct{ name, text string }{
+		{seamHead, seam},
+		{amendHead, amend},
+		{contextDoc, repository.Read(t, contextDoc)},
+		{designDoc, repository.Read(t, designDoc)},
+	}
+	for _, part := range texts {
+		if !strings.Contains(part.text, noSeamPhrase) {
+			t.Errorf("%s does not hold %q", part.name, noSeamPhrase)
+		}
+	}
+	for _, want := range []string{plandomain.SeamLabel, oldPlanPhrase, endOfLinePhrase, unpairedPhrase} {
+		if !strings.Contains(amend, want) {
+			t.Errorf("the section %q of %s does not hold %q", amendHead, templateFile, want)
 		}
 	}
 }
@@ -405,7 +437,7 @@ func TestConventionReadPath(t *testing.T) {
 			t.Errorf("%s: the standards-rules row does not name %s", skillFile, want)
 		}
 	}
-	for _, want := range []string{"docs/adr/", "CONTEXT.md"} {
+	for _, want := range []string{"docs/adr/", contextDoc} {
 		if !strings.Contains(explorer, want) {
 			t.Errorf("%s does not name %q", explorerFile, want)
 		}
