@@ -103,6 +103,9 @@ const (
 	grillFile               = "skills/harness/references/grill.md"
 	evidenceBaselineTerm    = "**Evidence baseline**"
 	lintBaselineText        = "`harness lint baseline`"
+	selfCheckSeamRowText    = "| spec-seam | pass |"
+	selfCheckSeamLineText   = "\n   - `spec-seam`:"
+	selfCheckSeamLensText   = "test anti-pattern of Lens Spec"
 	grillRoundText          = "ambiguous items of the evidence baseline get one round before `plan.md` is written"
 	grillAnswersText        = "their answers go to `## Decisions`"
 	grillScopeText          = "except the one early round for the evidence baseline"
@@ -110,7 +113,7 @@ const (
 )
 
 var (
-	selfCheckIDs       = []string{"spec-proof", "spec-scope", "spec-text", "standards-rules", "standards-judgement"}
+	selfCheckIDs       = []string{"spec-proof", "spec-seam", "spec-scope", "spec-text", "standards-rules", "standards-judgement"}
 	roleAgents         = []string{"explorer", "advisor", "worker", "reviewer", "verifier"}
 	baselineClasses    = []string{"`intended`", "`bug`", "`accidental`", "`ambiguous`"}
 	crossReference     = regexp.MustCompile("`([a-z][a-z-]*)` (" + skillKind + "|" + agentKind + ")\\b")
@@ -238,6 +241,32 @@ func TestSkillSelfCheckStep(t *testing.T) {
 		if !strings.Contains(item, want) {
 			t.Errorf("the working item does not name %q", want)
 		}
+	}
+}
+
+func TestSkillSelfCheckSeamRow(t *testing.T) {
+	doc := repository.Read(t, skillFile)
+	start := strings.Index(doc, workingItemStart)
+	end := strings.Index(doc, reviewingItemStart)
+	if start < 0 || end < start {
+		t.Fatalf("%s has no phase working item before the phase reviewing item", skillFile)
+	}
+	item := doc[start:end]
+	for _, want := range []string{selfCheckSeamRowText, selfCheckSeamLineText} {
+		if !strings.Contains(item, want) {
+			t.Errorf("the working item does not name %q", want)
+		}
+	}
+	at := strings.Index(item, selfCheckSeamLineText)
+	if at < 0 {
+		return
+	}
+	row := item[at+1:]
+	if i := strings.Index(row, "\n"); i >= 0 {
+		row = row[:i]
+	}
+	if !strings.Contains(row, selfCheckSeamLensText) {
+		t.Errorf("the spec-seam line does not hold %q: %q", selfCheckSeamLensText, row)
 	}
 }
 
