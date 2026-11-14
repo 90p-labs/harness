@@ -44,7 +44,7 @@ A run moves through phases. The transition table is deterministic: a row is `(fr
 
 `Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver. A waiver means every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` skips the approval only as a kept-structure amend or as a docs-only amend, and only the docs-only amend is a waiver. The run must start in `working` and have no live round. A kept-structure amend needs a recorded approval, and a docs-only amend needs none.
 
-A kept-structure amend keeps the structure of `approved-plan.md`. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names of `Test first` and the `DoD` numbers. A sketch link anywhere counts as structure. A docs-only amend needs the plan to keep only `docs` commits and no open question.
+A kept-structure amend keeps the structure of `approved-plan.md`. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names and the `Seam:` names of `Test first`, and the `DoD` numbers. A sketch link anywhere counts as structure. A docs-only amend needs the plan to keep only `docs` commits and no open question.
 
 The approve step keeps a copy of the plan, `approved-plan.md`, in the run folder. The copy counts only when its sha256 is the hash of the latest `plan_approvals` row of the run. An amend that skips the approval does not replace the copy. The plan domain holds the closed test path list. A path that is not in clean form, or that has a `..` segment, is never a test path. A path is a test path when it has one of these forms:
 
@@ -711,6 +711,8 @@ The `ui` layer: a `ui` package imports its own `application` and `domain` packag
 A plan has the heading `## Open questions`. It holds `- none` alone, or one question bullet on each line. A non-bullet line, an empty section or `- none` beside a question gives the problem `open-questions`. The lead grills each question with the user and moves each answer to `## Decisions`.
 
 A plan has the heading `## Review risks`. It is required. It holds `- none`, or one risk on each line. Each risk has `Test:` and a backticked test name, or `Decision:` and text. The test must be in a criterion proof or in a `Test first` line. A bad line gives the problem `risk-unanchored`.
+
+A task that names a test gives its seam in the `Test first` line with the label `Seam:`. A task with a test and no seam gives the problem `seam-missing`. The check reads only the form, and the advisor and the reviewer judge the choice.
 
 A plan needs the heading `## Threat model` when a path of the code tree or the test tree has a `guard` or `security` folder. It holds the bullets `Attacker`, `Input forms` and `Fail closed`. A missing heading or bullet gives the problem `threat-model`. ADR 0019 states the attacker.
 

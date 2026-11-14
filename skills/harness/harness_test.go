@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
@@ -45,6 +46,16 @@ const (
 	changePlanStep     = "edit `plan.md`, run `harness plan view`"
 	grillRewriteStep   = "Run `harness plan check` and `harness plan view` after each change of `plan.md`"
 	panelPreviewPhrase = "host preview"
+)
+
+// The texts of the section Seam of the plan template.
+const (
+	seamHead      = "## Seam"
+	seamHighest   = "highest seam"
+	seamOne       = "one seam"
+	seamLicense   = "MIT license"
+	seamTddURL    = "<https://github.com/mattpocock/skills/blob/main/skills/engineering/tdd/SKILL.md>"
+	seamToSpecURL = "<https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md>"
 )
 
 // The handoff phrases of SKILL.md.
@@ -199,6 +210,29 @@ func TestPlanTemplate(t *testing.T) {
 	for _, want := range []string{threatModelADR, reviewRisksHead} {
 		if !strings.Contains(template, want) {
 			t.Errorf("%s does not name %q", templateFile, want)
+		}
+	}
+}
+
+func TestPlanTemplateSeam(t *testing.T) {
+	template := repository.Read(t, templateFile)
+	_, rest, found := strings.Cut(template, seamHead+"\n")
+	if !found {
+		t.Fatalf("%s has no section %q", templateFile, seamHead)
+	}
+	section, _, _ := strings.Cut(rest, "\n## ")
+	wants := []string{
+		plandomain.SeamLabel,
+		"`" + string(plandomain.RuleSeamMissing) + "`",
+		seamHighest,
+		seamOne,
+		seamLicense,
+		seamTddURL,
+		seamToSpecURL,
+	}
+	for _, want := range wants {
+		if !strings.Contains(section, want) {
+			t.Errorf("the section %q of %s does not hold %q", seamHead, templateFile, want)
 		}
 	}
 }

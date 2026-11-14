@@ -51,6 +51,8 @@ Before the plan, the `explorer` agent reads `docs/adr/index.md` first, then `CON
 
 The plan also needs `## Review risks`. Write `- none`, or one risk on each line with `Test:` and a backticked test name, or `Decision:` and text. The rule `risk-unanchored` checks it. A tree path with a `guard` or `security` folder needs `## Threat model` with the bullets `Attacker`, `Input forms` and `Fail closed`. The rule `threat-model` checks it.
 
+A task that names a test also gives its seam in the `Test first` line, with the label `Seam:` and a backticked name. A task with a test and no seam gives the problem `seam-missing`. The rule checks only the form, and the advisor and the reviewer judge the choice.
+
 A single-run plan has 6 tasks at most, and the rule `plan-size` checks it. Split a larger change into a multi-run plan. The template `skills/harness/references/plan-template.md` lists every plan check rule.
 
 When no question is open, the agent asks the `Plan` question with the options `Approve` and `Change the plan`. On `Approve`, the `post-tool-use` hook records the approval for the hash of the current `plan.md`. A plain reply in the chat records nothing.

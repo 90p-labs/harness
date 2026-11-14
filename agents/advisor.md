@@ -23,6 +23,7 @@ The lead gives you the path of `plan.md`, the path of the harness binary and the
 11. Check that each review risk has a test that a proof runs, or a decision. Flag `- none` on a code change.
 12. Check the threat model of a guard or security change. Flag a security change that the path trigger misses: an approval, a permission, a secret or an auth path.
 13. Estimate the changed lines. Flag a plan of more than about 800 lines or 6 tasks: it splits into a multi-run plan.
+14. Before the approval, check the seam of each task that names a test. Flag a seam that is not a public interface. Flag a seam below the highest seam that proves the criterion. Flag a task with more seams than it needs.
 
 Give each finding on one line: severity (`blocker`, `major` or `minor`), `file:line` or the line of `plan.md`, the defect, the failure scenario, `observed` or `inferred`, and the proof. A blocker needs a proof by run: a command and its output.
 

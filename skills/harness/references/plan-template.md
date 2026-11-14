@@ -139,6 +139,20 @@ A `go test -run TestNew` proof passes on the base when the test is missing. Go p
 
 The test-first commit gate proves that the new test fails on the parent. Use `go test -list` to check that the test exists.
 
+## Seam
+
+A seam is the public interface where a test observes the behaviour: an exported function, a command, an endpoint or a document. The test calls the seam and checks the result there.
+
+The `Test first` line of a task that names a test gives the seam with the label `Seam:` and a name in backticks. The label may repeat, with one name for each label. The rule `seam-missing` checks only this form.
+
+Choose the highest seam that still proves the criterion. Prefer one seam for a task. A second seam needs a reason, such as a second entry point.
+
+The seam is a decision of the plan. The user approves it with the plan, and a change of the seam needs a new approval. The kept-structure amend refuses it.
+
+The checker cannot judge whether the seam is the right one. The advisor judges it before the approval. The reviewer checks each test against it (Lens Spec of the reviewer brief).
+
+This section adapts the tdd and to-spec skills of Matt Pocock (MIT license): <https://github.com/mattpocock/skills/blob/main/skills/engineering/tdd/SKILL.md> and <https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md>. The idea of a seam agreed before the work, and of the highest seam, comes from those skills. The text here is new.
+
 ## Size
 
 A single-run plan has 6 tasks at most (rule `plan-size`). Split a change of more than 6 tasks into a multi-run plan with `## Runs`.
@@ -159,7 +173,7 @@ Case (a) is a kept-structure amend. The run has a recorded approval, and the pla
 
 Headings and fence lines are never free text.
 
-A sketch link anywhere counts as structure. The parsed `DoD` numbers must stay equal. The parsed test file and test name of each task must stay equal.
+A sketch link anywhere counts as structure. The parsed `DoD` numbers must stay equal. The parsed test file and test name of each task must stay equal. The amend also keeps the `Seam:` names of each task.
 
 A test path comes from a closed list:
 
@@ -188,10 +202,10 @@ The lead audited 50 rework reasons of past runs. Each reason counts once for eac
 |---|---|---|
 | A doc sentence drifts from the code or from another doc | 29 | List each doc that repeats the fact in a risk, with a test that reads both. |
 | A prose rule fails: sentence length, ASD wording, spelling | 20 | Run the prose gate on each changed doc, and keep one idea in each sentence. |
-| A proof or a test cannot fail or misses a case | 15 | Give each risk a test that fails on the base, and one case for each branch. |
+| A proof or a test cannot fail or misses a case | 15 | Give each risk a test that fails on the base, and one case for each branch. Name the seam of the test in the plan. |
 | Guidance conflicts with a checker | 10 | Read the checker code, and record each conflict as a decision with options. |
 | Dead code, duplication or speculative surface | 10 | Add no code without a caller in the plan, and name the one owner of each rule. |
 | A bare literal or a naming rule fails | 9 | Decide the named constants and the naming pattern before the code. |
 | An input form that the code does not handle | 8 | List the input forms in a risk, with one test for each form. |
-| A test does not exercise the production path | 6 | Run the production entry point in the test, with the real setup. |
+| A test does not exercise the production path | 6 | Run the production entry point in the test, with the real setup. Name the seam of the test in the plan. |
 | A documented step fails in the real world | 3 | Run each read-only command of the docs, and check that each download target exists. |
