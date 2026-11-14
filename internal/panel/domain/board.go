@@ -12,6 +12,10 @@ import (
 const doneLimit = 20
 
 type Card struct {
+	// Repo is the key of the repo that holds the run.
+	Repo string
+	// RepoName is the name of the repo, filled by NewBoard from the listing.
+	RepoName    string
 	ID          string
 	Title       string
 	Phase       string
@@ -21,6 +25,9 @@ type Card struct {
 	Worktree    string
 	Version     Version
 }
+
+// Ref names the run of the card.
+func (c Card) Ref() RunRef { return RunRef{Repo: c.Repo, ID: c.ID} }
 
 // Blocked reports whether the card is blocked.
 func (c Card) Blocked() bool {
@@ -99,14 +106,38 @@ type Column struct {
 	Cards  []Card
 }
 
-// NeedsYou reports whether the column is the approval column and holds a card.
-func (c Column) NeedsYou() bool {
-	return c.Key == "approval" && len(c.Cards) > 0
+// RepoItem is one entry of the repo list. Count is the number of cards the
+// full board shows for the repo, with Done capped. NeedsYou marks a repo with
+// a card in the approval column. Both ignore the filter.
+type RepoItem struct {
+	Key      string
+	Name     string
+	Path     string
+	Count    int
+	NeedsYou bool
 }
 
+// Problem is the notice of one repo that failed to load.
+type Problem struct {
+	Repo string
+	Name string
+	Text string
+}
+
+// Line returns the notice as "<repo name>: <problem>".
+func (p Problem) Line() string { return p.Name + ": " + p.Text }
+
+// Board is one set of six columns that holds the cards of every repo, or of
+// the filtered repo. The repo list, the total and the marks ignore the filter.
 type Board struct {
-	Columns []Column
-	Version string
+	// Filter is the key of the repo the columns show, or "" for every repo.
+	Filter   string
+	Repos    []RepoItem
+	Total    int
+	NeedsYou bool
+	Problems []Problem
+	Columns  []Column
+	Version  string
 }
 
 func columns() []Column {
@@ -120,33 +151,98 @@ func columns() []Column {
 	}
 }
 
-// NewBoard groups the cards in six columns. A blocked card sits in the column
-// of its BlockedFrom phase. Done keeps the 20 most recent cards by id.
-func NewBoard(cards []Card) Board {
-	cols := columns()
-	for _, card := range cards {
-		phase := card.Phase
-		if card.Blocked() {
-			phase = card.BlockedFrom
-		}
-		for i := range cols {
-			if slices.Contains(cols[i].Phases, phase) {
-				cols[i].Cards = append(cols[i].Cards, card)
-				break
-			}
-		}
+// columnIndex returns the index of the column that holds the card, or -1. A
+// blocked card sits in the column of its BlockedFrom phase.
+func columnIndex(cols []Column, card Card) int {
+	phase := card.Phase
+	if card.Blocked() {
+		phase = card.BlockedFrom
 	}
-	done := &cols[len(cols)-1]
-	slices.SortStableFunc(done.Cards, func(a, b Card) int { return strings.Compare(b.ID, a.ID) })
-	if len(done.Cards) > doneLimit {
-		done.Cards = done.Cards[:doneLimit]
+	return slices.IndexFunc(cols, func(c Column) bool { return slices.Contains(c.Phases, phase) })
+}
+
+// newestFirst orders cards by run id, newest first, then by repo key.
+func newestFirst(a, b Card) int {
+	if c := strings.Compare(b.ID, a.ID); c != 0 {
+		return c
+	}
+	return strings.Compare(a.Repo, b.Repo)
+}
+
+// NewBoard builds the board of the listing. An empty filter shows the cards of
+// every repo, and a repo key shows only the cards and the problem of that repo.
+// A card of a repo that is not in the listing shows nowhere. Done keeps the 20
+// most recent cards of each repo, so the full board is the union of the
+// filtered boards. The repo list sorts by the newest run, and a repo with no
+// run sorts last, in listing order. Its counts and marks ignore the filter.
+// The version hashes the filter, the repo list, the problems and the cards,
+// with the repo key of each card.
+func NewBoard(listing Listing, filter string) Board {
+	names := make(map[string]string, len(listing.Repos))
+	for _, repo := range listing.Repos {
+		names[repo.Key] = repo.Name
+	}
+	byRepo := map[string][]Card{}
+	for _, card := range listing.Cards {
+		if name, ok := names[card.Repo]; ok {
+			card.RepoName = name
+			byRepo[card.Repo] = append(byRepo[card.Repo], card)
+		}
 	}
 
+	type ranked struct {
+		item   RepoItem
+		newest string
+	}
+	board := Board{Filter: filter, Columns: columns()}
+	done := slices.IndexFunc(board.Columns, func(c Column) bool { return c.Key == "done" })
+	all := make([]ranked, 0, len(listing.Repos))
+	for _, repo := range listing.Repos {
+		cards := byRepo[repo.Key]
+		slices.SortStableFunc(cards, newestFirst)
+		r := ranked{item: RepoItem{Key: repo.Key, Name: repo.Name, Path: repo.Worktree}}
+		kept := 0
+		for _, card := range cards {
+			r.newest = max(r.newest, card.ID)
+			i := columnIndex(board.Columns, card)
+			if i < 0 || (i == done && kept >= doneLimit) {
+				continue
+			}
+			if i == done {
+				kept++
+			}
+			r.item.Count++
+			if board.Columns[i].Key == "approval" {
+				r.item.NeedsYou = true
+			}
+			if filter == "" || filter == repo.Key {
+				board.Columns[i].Cards = append(board.Columns[i].Cards, card)
+			}
+		}
+		all = append(all, r)
+	}
+	for i := range board.Columns {
+		slices.SortStableFunc(board.Columns[i].Cards, newestFirst)
+	}
+	slices.SortStableFunc(all, func(a, b ranked) int { return strings.Compare(b.newest, a.newest) })
+
 	var parts []string
-	for _, col := range cols {
-		for _, card := range col.Cards {
-			parts = append(parts, card.ID, card.Phase, card.Version.String())
+	parts = append(parts, "filter", filter)
+	for _, r := range all {
+		board.Repos = append(board.Repos, r.item)
+		board.Total += r.item.Count
+		board.NeedsYou = board.NeedsYou || r.item.NeedsYou
+		parts = append(parts, "repo", r.item.Key, r.item.Name, r.item.Path, fmt.Sprint(r.item.Count), fmt.Sprint(r.item.NeedsYou))
+		if text := listing.Problems[r.item.Key]; text != "" && (filter == "" || filter == r.item.Key) {
+			board.Problems = append(board.Problems, Problem{Repo: r.item.Key, Name: r.item.Name, Text: text})
+			parts = append(parts, "problem", r.item.Key, text)
 		}
 	}
-	return Board{Columns: cols, Version: Fingerprint(parts...)}
+	for _, col := range board.Columns {
+		for _, card := range col.Cards {
+			parts = append(parts, "card", card.Repo, card.ID, card.Phase, card.Version.String())
+		}
+	}
+	board.Version = Fingerprint(parts...)
+	return board
 }

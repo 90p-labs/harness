@@ -13,7 +13,7 @@ import (
 )
 
 func newProcess(dir string) *process.Process {
-	p := process.New(process.Config{Dir: dir, Repo: "repo-a"})
+	p := process.New(process.Config{Dir: dir})
 	p.ClaimWait = 150 * time.Millisecond
 	return p
 }
@@ -69,7 +69,7 @@ func TestClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		inst := domain.Instance{PID: os.Getpid(), Port: 4321, Repo: "repo-a", Version: "v1"}
+		inst := domain.Instance{PID: os.Getpid(), Port: 4321, Version: "v1"}
 		if err := claim.Publish(inst); err != nil {
 			t.Fatalf("publish: %v", err)
 		}
@@ -86,7 +86,7 @@ func TestClaim(t *testing.T) {
 		if err := json.Unmarshal(raw, &got); err != nil {
 			t.Fatalf("panel.json is not json: %v", err)
 		}
-		if got["pid"] != float64(os.Getpid()) || got["port"] != float64(4321) || got["repo"] != "repo-a" {
+		if got["pid"] != float64(os.Getpid()) || got["port"] != float64(4321) || got["repo"] != nil {
 			t.Errorf("panel.json = %s", raw)
 		}
 		entries, _ := os.ReadDir(dir)

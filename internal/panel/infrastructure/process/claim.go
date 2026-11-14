@@ -15,23 +15,26 @@ import (
 	"github.com/90p-labs/harness/internal/panel/domain"
 )
 
+// The names of the files in a panel state folder.
 const (
-	stateFile = "panel.json"
-	lockFile  = "panel.lock"
-	logFile   = "panel.log"
-	fileMode  = 0o600
-	dirMode   = 0o700
+	StateFile = "panel.json"
+	LockFile  = "panel.lock"
+	LogFile   = "panel.log"
+)
+
+const (
+	fileMode = 0o600
+	dirMode  = 0o700
 )
 
 // ErrClaimed marks a panel lock that another process holds.
 var ErrClaimed = errors.New("panel already runs")
 
 // state is the content of panel.json. It carries no URL: the URL is built
-// from the port.
+// from the port. It carries no repo: one panel serves every repo.
 type state struct {
 	PID     int    `json:"pid"`
 	Port    int    `json:"port"`
-	Repo    string `json:"repo"`
 	Version string `json:"version"`
 }
 
@@ -51,7 +54,7 @@ func (p *Process) Claim() (*Claim, error) {
 	}
 	deadline := time.Now().Add(p.ClaimWait)
 	for {
-		f, err := tryLock(filepath.Join(p.dir, lockFile))
+		f, err := tryLock(filepath.Join(p.dir, LockFile))
 		if err == nil {
 			return &Claim{dir: p.dir, file: f}, nil
 		}
@@ -67,11 +70,11 @@ func (p *Process) Claim() (*Claim, error) {
 
 // Publish writes panel.json through a temp file and a rename.
 func (c *Claim) Publish(inst domain.Instance) error {
-	body, err := json.Marshal(state{PID: inst.PID, Port: inst.Port, Repo: inst.Repo, Version: inst.Version})
+	body, err := json.Marshal(state{PID: inst.PID, Port: inst.Port, Version: inst.Version})
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(c.dir, stateFile+".*.tmp")
+	tmp, err := os.CreateTemp(c.dir, StateFile+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("create panel.json temp file: %w", err)
 	}
@@ -89,7 +92,7 @@ func (c *Claim) Publish(inst domain.Instance) error {
 	if err := tmp.Close(); err != nil {
 		return cleanup(err)
 	}
-	if err := os.Rename(tmp.Name(), filepath.Join(c.dir, stateFile)); err != nil {
+	if err := os.Rename(tmp.Name(), filepath.Join(c.dir, StateFile)); err != nil {
 		return cleanup(err)
 	}
 	return nil
@@ -98,7 +101,7 @@ func (c *Claim) Publish(inst domain.Instance) error {
 // Release removes panel.json, then unlocks. It is safe to call twice.
 func (c *Claim) Release() error {
 	c.once.Do(func() {
-		if err := os.Remove(filepath.Join(c.dir, stateFile)); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(filepath.Join(c.dir, StateFile)); err != nil && !os.IsNotExist(err) {
 			c.err = err
 		}
 		// closing the file drops the flock too
@@ -132,7 +135,7 @@ func lockFree(dir string) (bool, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return true, nil
 	}
-	f, err := tryLock(filepath.Join(dir, lockFile))
+	f, err := tryLock(filepath.Join(dir, LockFile))
 	if errors.Is(err, ErrClaimed) {
 		return false, nil
 	}

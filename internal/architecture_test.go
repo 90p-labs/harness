@@ -46,6 +46,11 @@ func TestLayerImportsRules(t *testing.T) {
 		{"panel domain imports a plan domain", "internal/panel/domain", modulePath + "/internal/plan/domain", false},
 		{"panel application imports the panel domain", "internal/panel/application/query/board", modulePath + "/internal/panel/domain", true},
 		{"panel application imports infrastructure", "internal/panel/application/query/page", modulePath + "/internal/panel/infrastructure/http", false},
+		{"panel registry imports the panel domain", "internal/panel/infrastructure/registry", modulePath + "/internal/panel/domain", true},
+		{"panel registry imports the standard library", "internal/panel/infrastructure/registry", "syscall", true},
+		{"panel registry imports an application package", "internal/panel/infrastructure/registry", modulePath + "/internal/panel/application/query/board", true},
+		{"panel ui imports the registry", "internal/panel/ui/cli", modulePath + "/internal/panel/infrastructure/registry", false},
+		{"panel application imports the registry", "internal/panel/application/query/board", modulePath + "/internal/panel/infrastructure/registry", false},
 		{"panel ui imports the http server", "internal/panel/ui/cli", modulePath + "/internal/panel/infrastructure/http", false},
 		{"panel ui imports shared infrastructure", "internal/panel/ui/cli", modulePath + "/internal/shared/infrastructure/webkit", false},
 	}

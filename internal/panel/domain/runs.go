@@ -10,10 +10,11 @@ type Served struct {
 	Events string
 }
 
-// Runs lists the runs of the current repo.
+// Runs lists the runs of every repo, and reads one run of one repo. Get
+// returns ErrNotFound for an unknown repo or run.
 type Runs interface {
-	List(ctx context.Context) ([]Card, error)
-	Get(ctx context.Context, id string) (Card, error)
+	List(ctx context.Context) (Listing, error)
+	Get(ctx context.Context, ref RunRef) (Card, error)
 }
 
 // Pages renders the page of a run, or one region of it.

@@ -12,27 +12,42 @@ import (
 
 const tick = 10 * time.Millisecond
 
+const (
+	repoA = "aaaaaaaaaaaa"
+	repoB = "bbbbbbbbbbbb"
+)
+
+// ref names a run of the first repo.
+func ref(id string) domain.RunRef { return domain.RunRef{Repo: repoA, ID: id} }
+
 // fakeRuns is a Runs whose cards a test changes, and whose calls it counts.
 type fakeRuns struct {
 	mu    sync.Mutex
-	cards map[string]domain.Card
+	cards map[domain.RunRef]domain.Card
 	calls int
 }
 
+// newFakeRuns holds one card of the first repo for each id.
 func newFakeRuns(ids ...string) *fakeRuns {
-	f := &fakeRuns{cards: map[string]domain.Card{}}
+	f := &fakeRuns{cards: map[domain.RunRef]domain.Card{}}
 	for _, id := range ids {
-		f.cards[id] = domain.Card{ID: id, Phase: "planning", Version: domain.Version{Plan: "p1", Run: "r1"}}
+		f.add(ref(id))
 	}
 	return f
 }
 
-func (f *fakeRuns) setRun(id, run string) {
+func (f *fakeRuns) add(r domain.RunRef) {
+	f.cards[r] = domain.Card{Repo: r.Repo, ID: r.ID, Phase: "planning", Version: domain.Version{Plan: "p1", Run: "r1"}}
+}
+
+func (f *fakeRuns) setRun(id, run string) { f.setRunOf(ref(id), run) }
+
+func (f *fakeRuns) setRunOf(r domain.RunRef, run string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	c := f.cards[id]
+	c := f.cards[r]
 	c.Version.Run = run
-	f.cards[id] = c
+	f.cards[r] = c
 }
 
 func (f *fakeRuns) count() int {
@@ -41,22 +56,27 @@ func (f *fakeRuns) count() int {
 	return f.calls
 }
 
-func (f *fakeRuns) List(context.Context) ([]domain.Card, error) {
+func (f *fakeRuns) List(context.Context) (domain.Listing, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
-	out := make([]domain.Card, 0, len(f.cards))
-	for _, c := range f.cards {
-		out = append(out, c)
+	l := domain.Listing{}
+	seen := map[string]bool{}
+	for r, c := range f.cards {
+		l.Cards = append(l.Cards, c)
+		if !seen[r.Repo] {
+			seen[r.Repo] = true
+			l.Repos = append(l.Repos, domain.Repo{Key: r.Repo, Name: r.Repo})
+		}
 	}
-	return out, nil
+	return l, nil
 }
 
-func (f *fakeRuns) Get(_ context.Context, id string) (domain.Card, error) {
+func (f *fakeRuns) Get(_ context.Context, r domain.RunRef) (domain.Card, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
-	c, ok := f.cards[id]
+	c, ok := f.cards[r]
 	if !ok {
 		return domain.Card{}, domain.ErrNotFound
 	}
@@ -86,12 +106,74 @@ func expect(t *testing.T, ch <-chan string, want string) {
 	}
 }
 
+func TestWatcherByRepo(t *testing.T) {
+	const id = "20261113-same"
+	a, b := domain.RunRef{Repo: repoA, ID: id}, domain.RunRef{Repo: repoB, ID: id}
+	quiet := func(t *testing.T, ch <-chan string) {
+		t.Helper()
+		select {
+		case got := <-ch:
+			t.Fatalf("unexpected signal %q", got)
+		case <-time.After(15 * tick):
+		}
+	}
+
+	t.Run("one id in two repos is two keys", func(t *testing.T) {
+		runs := newFakeRuns()
+		runs.add(a)
+		runs.add(b)
+		w := NewWatcher(runs, tick)
+		start(t, w)
+		chA, cancelA, err := w.Subscribe(context.Background(), a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cancelA()
+		chB, cancelB, err := w.Subscribe(context.Background(), b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cancelB()
+
+		runs.setRunOf(b, "r2")
+		expect(t, chB, domain.SignalRunUpdated)
+		quiet(t, chA)
+
+		runs.setRunOf(a, "r2")
+		expect(t, chA, domain.SignalRunUpdated)
+	})
+
+	t.Run("the board signals a change in any repo", func(t *testing.T) {
+		runs := newFakeRuns()
+		runs.add(a)
+		runs.add(b)
+		w := NewWatcher(runs, tick)
+		start(t, w)
+		ch, cancel, err := w.Subscribe(context.Background(), domain.RunRef{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cancel()
+		runs.setRunOf(b, "r2")
+		expect(t, ch, domain.SignalRunsChanged)
+	})
+
+	t.Run("a run of another repo is unknown", func(t *testing.T) {
+		runs := newFakeRuns()
+		runs.add(a)
+		w := NewWatcher(runs, tick)
+		if _, _, err := w.Subscribe(context.Background(), b); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("err = %v, want ErrNotFound", err)
+		}
+	})
+}
+
 func TestWatcher(t *testing.T) {
 	t.Run("a change signals a run subscriber", func(t *testing.T) {
 		runs := newFakeRuns("a")
 		w := NewWatcher(runs, tick)
 		start(t, w)
-		ch, cancel, err := w.Subscribe(context.Background(), "a")
+		ch, cancel, err := w.Subscribe(context.Background(), ref("a"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -104,7 +186,7 @@ func TestWatcher(t *testing.T) {
 		runs := newFakeRuns("a")
 		w := NewWatcher(runs, tick)
 		start(t, w)
-		ch, cancel, err := w.Subscribe(context.Background(), "")
+		ch, cancel, err := w.Subscribe(context.Background(), domain.RunRef{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +199,7 @@ func TestWatcher(t *testing.T) {
 		runs := newFakeRuns("a")
 		w := NewWatcher(runs, tick)
 		start(t, w)
-		ch, cancel, err := w.Subscribe(context.Background(), "a")
+		ch, cancel, err := w.Subscribe(context.Background(), ref("a"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +219,7 @@ func TestWatcher(t *testing.T) {
 		if n := runs.count(); n != 0 {
 			t.Fatalf("Runs called %d times with no subscriber", n)
 		}
-		_, cancel, err := w.Subscribe(context.Background(), "a")
+		_, cancel, err := w.Subscribe(context.Background(), ref("a"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,12 +235,12 @@ func TestWatcher(t *testing.T) {
 		runs := newFakeRuns("a")
 		w := NewWatcher(runs, tick)
 		start(t, w)
-		_, cancelSlow, err := w.Subscribe(context.Background(), "a")
+		_, cancelSlow, err := w.Subscribe(context.Background(), ref("a"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer cancelSlow()
-		fast, cancelFast, err := w.Subscribe(context.Background(), "a")
+		fast, cancelFast, err := w.Subscribe(context.Background(), ref("a"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -172,7 +254,7 @@ func TestWatcher(t *testing.T) {
 	t.Run("cancel closes the channel once", func(t *testing.T) {
 		runs := newFakeRuns("a")
 		w := NewWatcher(runs, tick)
-		ch, cancel, err := w.Subscribe(context.Background(), "a")
+		ch, cancel, err := w.Subscribe(context.Background(), ref("a"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -203,7 +285,7 @@ func TestWatcher(t *testing.T) {
 
 	t.Run("an unknown run gives ErrNotFound", func(t *testing.T) {
 		w := NewWatcher(newFakeRuns("a"), tick)
-		ch, cancel, err := w.Subscribe(context.Background(), "nope")
+		ch, cancel, err := w.Subscribe(context.Background(), ref("nope"))
 		if !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("err = %v, want ErrNotFound", err)
 		}
@@ -216,7 +298,7 @@ func TestWatcher(t *testing.T) {
 		runs := newFakeRuns("a")
 		w := NewWatcher(runs, time.Hour)
 		for range 3 {
-			_, cancel, err := w.Subscribe(context.Background(), "a")
+			_, cancel, err := w.Subscribe(context.Background(), ref("a"))
 			if err != nil {
 				t.Fatal(err)
 			}

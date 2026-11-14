@@ -34,7 +34,8 @@ func TestMain(m *testing.M) {
 }
 
 // child is the spawned panel. Kinds: serve, stubborn (ignores SIGTERM),
-// fail (exits 1 with a log line) and lose (exits 1 after a while).
+// fail (exits 1 with a log line), lose (exits 1 after a while) and env (writes
+// its environment to env.txt, then serves).
 func child(kind string) {
 	switch kind {
 	case "fail":
@@ -45,9 +46,15 @@ func child(kind string) {
 		time.Sleep(300 * time.Millisecond)
 		fmt.Fprintln(os.Stderr, "panel already runs")
 		os.Exit(1)
+	case "env":
+		// Record the environment that arrived, then behave like serve.
+		out := filepath.Join(os.Getenv("PANEL_TEST_DIR"), "env.txt")
+		if err := os.WriteFile(out, []byte(strings.Join(os.Environ(), "\x00")), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
-	repo := os.Getenv("PANEL_TEST_REPO")
-	p := process.New(process.Config{Dir: os.Getenv("PANEL_TEST_DIR"), Repo: repo})
+	p := process.New(process.Config{Dir: os.Getenv("PANEL_TEST_DIR")})
 	claim, err := p.Claim()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -66,11 +73,11 @@ func child(kind string) {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"version": "test", "repo": repo, "pid": os.Getpid()})
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": "test", "pid": os.Getpid()})
 	})
 	go func() { _ = http.Serve(ln, mux) }()
 	port := ln.Addr().(*net.TCPAddr).Port
-	if err := claim.Publish(domain.Instance{PID: os.Getpid(), Port: port, Repo: repo, Version: "test"}); err != nil {
+	if err := claim.Publish(domain.Instance{PID: os.Getpid(), Port: port, Version: "test"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -89,10 +96,9 @@ func spawner(t *testing.T, dir, kind string) *process.Process {
 	t.Helper()
 	p := process.New(process.Config{
 		Dir:     dir,
-		Repo:    "repo-a",
 		WorkDir: t.TempDir(),
 		Command: []string{os.Args[0]},
-		Env:     []string{childEnv + "=" + kind, "PANEL_TEST_DIR=" + dir, "PANEL_TEST_REPO=repo-a"},
+		Env:     []string{childEnv + "=" + kind, "PANEL_TEST_DIR=" + dir},
 	})
 	p.ClaimWait = 150 * time.Millisecond
 	p.StartWait = 5 * time.Second
@@ -139,6 +145,76 @@ func writeFile(t *testing.T, dir, body string) {
 	}
 }
 
+// TestSpawnEnv checks that the spawned serve does not inherit the git location of the start shell.
+func TestSpawnEnv(t *testing.T) {
+	// The nine location names are literals here, so the test pins the list of the package.
+	location := []string{
+		"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+		"GIT_INDEX_FILE", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+	}
+	setup := func(t *testing.T) {
+		t.Helper()
+		for _, name := range location {
+			t.Setenv(name, "/some/repo/"+strings.ToLower(name))
+		}
+		t.Setenv("GIT_DIR_X", "keep")
+		t.Setenv("GIT_CONFIG_COUNT", "1")
+		t.Setenv("HARNESS_HOME", "/home/panel")
+	}
+	check := func(t *testing.T, got map[string]string, extra map[string]string) {
+		t.Helper()
+		for _, gone := range location {
+			if _, ok := got[gone]; ok {
+				t.Errorf("%s reached the child", gone)
+			}
+		}
+		want := map[string]string{"GIT_DIR_X": "keep", "GIT_CONFIG_COUNT": "1", "HARNESS_HOME": "/home/panel"}
+		for k, v := range extra {
+			want[k] = v
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("%s = %q, want %q", k, got[k], v)
+			}
+		}
+	}
+
+	t.Run("direct", func(t *testing.T) {
+		setup(t)
+		got := map[string]string{}
+		for _, kv := range process.SpawnEnv(os.Environ(), []string{"EXTRA=1"}) {
+			k, v, _ := strings.Cut(kv, "=")
+			got[k] = v
+		}
+		check(t, got, map[string]string{"EXTRA": "1"})
+	})
+
+	t.Run("real spawn", func(t *testing.T) {
+		setup(t)
+		dir := t.TempDir()
+		killPanel(t, dir)
+		p := spawner(t, dir, "env")
+		if err := p.Start(context.Background(), 0); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		defer func() {
+			if err := p.Stop(context.Background()); err != nil {
+				t.Errorf("stop: %v", err)
+			}
+		}()
+		raw, err := os.ReadFile(filepath.Join(dir, "env.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for _, kv := range strings.Split(string(raw), "\x00") {
+			k, v, _ := strings.Cut(kv, "=")
+			got[k] = v
+		}
+		check(t, got, map[string]string{"PANEL_TEST_DIR": dir})
+	})
+}
+
 func TestStatus(t *testing.T) {
 	ctx := context.Background()
 	ownPID := os.Getpid()
@@ -180,14 +256,13 @@ func TestStatus(t *testing.T) {
 			t.Fatalf("status: %v", err)
 		}
 		want := fmt.Sprintf("http://127.0.0.1:%d/", port)
-		if inst.URL != want || inst.PID != ownPID || inst.Port != port || inst.Repo != "repo-a" {
+		if inst.URL != want || inst.PID != ownPID || inst.Port != port {
 			t.Fatalf("instance = %+v, want url %s pid %d", inst, want, ownPID)
 		}
 	})
 
 	notRunning := map[string]health{
-		"pid mismatch":  {Repo: "repo-a", PID: ownPID + 1},
-		"repo mismatch": {Repo: "repo-b", PID: ownPID},
+		"pid mismatch": {PID: ownPID + 1},
 	}
 	for name, h := range notRunning {
 		t.Run(name+" is stopped", func(t *testing.T) {
@@ -198,7 +273,7 @@ func TestStatus(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer claim.Release()
-			if err := claim.Publish(domain.Instance{PID: ownPID, Port: port, Repo: "repo-a"}); err != nil {
+			if err := claim.Publish(domain.Instance{PID: ownPID, Port: port}); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := newProcess(dir).Status(ctx); !errors.Is(err, domain.ErrStopped) {
@@ -209,7 +284,10 @@ func TestStatus(t *testing.T) {
 
 	t.Run("no listener on the port is stopped", func(t *testing.T) {
 		dir := t.TempDir()
-		ln, _ := net.Listen("tcp", "127.0.0.1:0")
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
 		port := ln.Addr().(*net.TCPAddr).Port
 		_ = ln.Close()
 		claim, err := newProcess(dir).Claim()
@@ -217,7 +295,7 @@ func TestStatus(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer claim.Release()
-		_ = claim.Publish(domain.Instance{PID: ownPID, Port: port, Repo: "repo-a"})
+		_ = claim.Publish(domain.Instance{PID: ownPID, Port: port})
 		if _, err := newProcess(dir).Status(ctx); !errors.Is(err, domain.ErrStopped) {
 			t.Fatalf("err = %v, want ErrStopped", err)
 		}
@@ -231,6 +309,68 @@ func TestStatus(t *testing.T) {
 		}
 		defer claim.Release()
 		writeFile(t, dir, "{not json")
+		if _, err := newProcess(dir).Status(ctx); !errors.Is(err, domain.ErrStopped) {
+			t.Fatalf("err = %v, want ErrStopped", err)
+		}
+	})
+}
+
+// TestStatusAnyRepo: the panel is one per user, so the answer of /healthz
+// matches on the pid only, whatever repo asks and whatever repo the answer names.
+func TestStatusAnyRepo(t *testing.T) {
+	ctx := context.Background()
+	ownPID := os.Getpid()
+
+	t.Run("a held lock and a matching pid is running whatever the answer names", func(t *testing.T) {
+		dir := t.TempDir()
+		port := answer(t, health{Version: "v1", Repo: "repo-b", PID: ownPID})
+		claim, err := newProcess(dir).Claim()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer claim.Release()
+		writeFile(t, dir, fmt.Sprintf(`{"pid":%d,"port":%d,"repo":"repo-a","version":"v1"}`, ownPID, port))
+		inst, err := newProcess(dir).Status(ctx)
+		if err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		if inst.PID != ownPID || inst.Port != port || inst.Version != "v1" {
+			t.Fatalf("instance = %+v, want pid %d port %d version v1", inst, ownPID, port)
+		}
+	})
+
+	t.Run("a published panel carries no repo", func(t *testing.T) {
+		dir := t.TempDir()
+		claim, err := newProcess(dir).Claim()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer claim.Release()
+		if err := claim.Publish(domain.Instance{PID: ownPID, Port: 4711, Version: "v1"}); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, "panel.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if _, has := fields["repo"]; has {
+			t.Fatalf("panel.json = %s, want no repo field", raw)
+		}
+	})
+
+	t.Run("a pid that differs is stopped", func(t *testing.T) {
+		dir := t.TempDir()
+		port := answer(t, health{Version: "v1", PID: ownPID + 1})
+		claim, err := newProcess(dir).Claim()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer claim.Release()
+		writeFile(t, dir, fmt.Sprintf(`{"pid":%d,"port":%d,"version":"v1"}`, ownPID, port))
 		if _, err := newProcess(dir).Status(ctx); !errors.Is(err, domain.ErrStopped) {
 			t.Fatalf("err = %v, want ErrStopped", err)
 		}
@@ -346,7 +486,7 @@ func TestStart(t *testing.T) {
 
 	t.Run("an unknown command fails", func(t *testing.T) {
 		dir := t.TempDir()
-		p := process.New(process.Config{Dir: dir, Repo: "repo-a", WorkDir: dir, Command: []string{filepath.Join(dir, "missing")}})
+		p := process.New(process.Config{Dir: dir, WorkDir: dir, Command: []string{filepath.Join(dir, "missing")}})
 		if err := p.Start(ctx, 0); err == nil {
 			t.Fatal("start succeeded with a missing command")
 		}
@@ -425,8 +565,7 @@ func TestStop(t *testing.T) {
 
 	t.Run("an unverified pid is never signaled", func(t *testing.T) {
 		for name, h := range map[string]health{
-			"pid mismatch":  {Repo: "repo-a", PID: os.Getpid() + 1},
-			"repo mismatch": {Repo: "repo-b", PID: os.Getpid()},
+			"pid mismatch": {PID: os.Getpid() + 1},
 		} {
 			dir := t.TempDir()
 			port := answer(t, h)
@@ -434,7 +573,7 @@ func TestStop(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_ = claim.Publish(domain.Instance{PID: os.Getpid(), Port: port, Repo: "repo-a"})
+			_ = claim.Publish(domain.Instance{PID: os.Getpid(), Port: port})
 			p := newProcess(dir)
 			p.StopWait = 200 * time.Millisecond
 			if err := p.Stop(ctx); err == nil {

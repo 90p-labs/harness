@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,8 +21,8 @@ import (
 	panelmodule "github.com/90p-labs/harness/internal/panel"
 	paneldomain "github.com/90p-labs/harness/internal/panel/domain"
 	panelprocess "github.com/90p-labs/harness/internal/panel/infrastructure/process"
+	panelregistry "github.com/90p-labs/harness/internal/panel/infrastructure/registry"
 	panelcli "github.com/90p-labs/harness/internal/panel/ui/cli"
-	planmodule "github.com/90p-labs/harness/internal/plan"
 	"github.com/90p-labs/harness/internal/plan/application/query/viewpage"
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	planview "github.com/90p-labs/harness/internal/plan/infrastructure/view"
@@ -33,83 +35,229 @@ import (
 
 const sketchSuffix = ".excalidraw"
 
-// panelStateDir is the folder of panel.json, panel.lock and panel.log.
-const panelStateDir = ".harness"
+// legacyStateDir is the folder under the git common dir that held panel.json,
+// panel.lock and panel.log before the panel went user-wide.
+const legacyStateDir = ".harness"
 
-// panelLifecycle wires the process adapter for the repo of the working folder,
-// and returns the configured panel port. It reads only git and the config, so
-// start, stop and status open no run state.
-func panelLifecycle(ctx context.Context, flags *pflag.FlagSet) (*panelprocess.Process, int, error) {
-	proc, cfg, err := panelSetup(ctx, flags)
+// panelEnv is what a panel command needs: the process adapter in the user
+// folder, the config, and the repo of the working folder when it is in git.
+type panelEnv struct {
+	proc *panelprocess.Process
+	cfg  config.Config
+	dir  string
+	// repo is nil outside a git repository.
+	repo *paneldomain.Repo
+	// legacy is the old state folder of that repo, empty when repo is nil.
+	legacy string
+}
+
+// panelSetup reads git and the config, and builds the process adapter in the
+// user folder. It registers nothing and opens no run state, so status and the
+// help of a command have no side effect. A working folder outside git is fine.
+func panelSetup(ctx context.Context, flags *pflag.FlagSet) (panelEnv, error) {
+	dir, err := panelprocess.UserDir()
 	if err != nil {
-		return nil, 0, err
+		return panelEnv{}, err
 	}
-	return proc, cfg.Panel.Port, nil
-}
-
-// panelProcess wires the process adapter for the serve path, which takes its
-// port from the flag.
-func panelProcess(ctx context.Context, flags *pflag.FlagSet) (*panelprocess.Process, error) {
-	proc, _, err := panelSetup(ctx, flags)
-	return proc, err
-}
-
-func panelSetup(ctx context.Context, flags *pflag.FlagSet) (*panelprocess.Process, config.Config, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, config.Config{}, err
+		return panelEnv{}, err
 	}
-	repo, worktree, err := git.RepoKey(ctx, cwd)
-	if err != nil {
-		return nil, config.Config{}, err
-	}
+	env := panelEnv{dir: dir}
+	worktree := cwd
 	commonDir, err := git.CommonDir(ctx, cwd)
-	if err != nil {
-		return nil, config.Config{}, err
+	switch {
+	case err == nil:
+		_, top, err := git.RepoKey(ctx, cwd)
+		if err != nil {
+			return panelEnv{}, err
+		}
+		worktree = top
+		env.legacy = filepath.Join(commonDir, legacyStateDir)
+		env.repo = &paneldomain.Repo{
+			Key: paneldomain.RepoKey(commonDir), Name: filepath.Base(top), CommonDir: commonDir, Worktree: top,
+		}
+	case !errors.Is(err, git.ErrNotRepository):
+		return panelEnv{}, err
 	}
-	cfg, err := config.Load(flags, worktree)
-	if err != nil {
-		return nil, config.Config{}, err
+	if env.cfg, err = config.Load(flags, worktree); err != nil {
+		return panelEnv{}, err
+	}
+	if env.repo != nil {
+		env.repo.StateDB = existingStateDB(env.cfg.State.DSN, commonDir)
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return nil, config.Config{}, err
+		return panelEnv{}, err
 	}
-	return panelmodule.NewProcess(panelprocess.Config{
-		Dir:     filepath.Join(commonDir, panelStateDir),
+	env.proc = panelmodule.NewProcess(panelprocess.Config{
+		Dir:     dir,
 		Command: []string{exe, "panel", "serve"},
-		WorkDir: worktree,
-		Repo:    repo,
-	}), cfg, nil
+		WorkDir: dir,
+	})
+	return env, nil
+}
+
+// existingStateDB returns the file of a sqlite state DSN when it exists, and
+// "" otherwise: the registry drops a repo whose recorded state file is gone,
+// so a file that is not there yet must not be recorded.
+func existingStateDB(dsn, commonDir string) string {
+	scheme, path, _ := strings.Cut(dsn, ":")
+	if scheme != "sqlite" || path == "" {
+		return ""
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(commonDir, path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
+// register records the repo of the working folder in the registry of the user
+// folder. A working folder outside git registers nothing.
+func (e panelEnv) register(ctx context.Context) error {
+	if e.repo == nil {
+		return nil
+	}
+	repo := *e.repo
+	repo.UsedAt = time.Now().UTC()
+	return panelregistry.New(e.dir, os.Stderr).Register(ctx, repo)
+}
+
+// registerServe registers the repo of the serve process and returns its key.
+// The panel serves every registered repo, and the serve flags apply to the repo
+// it started in, if any.
+func (e panelEnv) registerServe(ctx context.Context) (string, error) {
+	// The spawned serve runs in the user folder, which is never a repo of the
+	// panel, even when a repo (dotfiles at ~) holds it.
+	if e.repo == nil || workInUserDir(e.dir) {
+		return "", nil
+	}
+	if err := e.register(ctx); err != nil {
+		return "", err
+	}
+	return e.repo.Key, nil
+}
+
+// workInUserDir reports whether the working folder is the user folder,
+// comparing absolute paths with symlinks resolved.
+func workInUserDir(userDir string) bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	resolve := func(p string) string {
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
+		if resolved, err := filepath.EvalSymlinks(p); err == nil {
+			p = resolved
+		}
+		return filepath.Clean(p)
+	}
+	rel, err := filepath.Rel(resolve(userDir), resolve(cwd))
+	return err == nil && rel == "."
+}
+
+// stopLegacy stops a panel of the old layout in <common dir>/.harness and
+// removes its panel.json, panel.lock and panel.log. It does nothing when the
+// repo has none of them, and it never touches the state database there. It
+// removes no file when the stop failed.
+func (e panelEnv) stopLegacy(ctx context.Context) error {
+	if e.legacy == "" {
+		return nil
+	}
+	names := []string{panelprocess.StateFile, panelprocess.LockFile, panelprocess.LogFile}
+	found := false
+	for _, name := range names {
+		if _, err := os.Stat(filepath.Join(e.legacy, name)); err == nil {
+			found = true
+		}
+	}
+	if !found {
+		return nil
+	}
+	if err := panelprocess.New(panelprocess.Config{Dir: e.legacy}).Stop(ctx); err != nil {
+		// The files stay: the next start tries again.
+		return err
+	}
+	for _, name := range names {
+		if err := os.Remove(filepath.Join(e.legacy, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // lazyLifecycle builds the process adapter when a command runs, so the help of
-// a command needs no repo.
-func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
-	with := func(ctx context.Context) (panelcli.Lifecycle, error) {
-		proc, port, err := panelLifecycle(ctx, flags)
+// a command needs no setup. Start and stop also end a legacy panel, and start
+// registers the repo. A failed stop of a legacy panel on start writes one line
+// to warn.
+func lazyLifecycle(flags *pflag.FlagSet, warn io.Writer) panelcli.Lifecycle {
+	with := func(ctx context.Context) (panelEnv, panelcli.Lifecycle, error) {
+		env, err := panelSetup(ctx, flags)
+		if err != nil {
+			return panelEnv{}, panelcli.Lifecycle{}, err
+		}
+		return env, panelmodule.NewLifecycle(env.proc, env.cfg.Panel.Port, version), nil
+	}
+	// prepared holds the lifecycle that Prepare built in this process, so Start
+	// reuses it. Status builds its own lifecycle on each call.
+	var (
+		mu       sync.Mutex
+		prepared *panelcli.Lifecycle
+	)
+	prepare := func(ctx context.Context) (panelcli.Lifecycle, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if prepared != nil {
+			return *prepared, nil
+		}
+		env, life, err := with(ctx)
 		if err != nil {
 			return panelcli.Lifecycle{}, err
 		}
-		return panelmodule.NewLifecycle(proc, port), nil
+		// A failed stop of the old panel never blocks the user-wide panel.
+		if err := env.stopLegacy(ctx); err != nil {
+			fmt.Fprintf(warn, "panel: could not stop the old panel in %s: %v\n", env.legacy, err)
+		}
+		if err := env.register(ctx); err != nil {
+			return panelcli.Lifecycle{}, err
+		}
+		prepared = &life
+		return life, nil
 	}
 	return panelcli.Lifecycle{
+		Version: version,
+		// The start command runs Prepare before its version check, so a start
+		// that reuses a panel of another version still registers the repo.
+		Prepare: func(ctx context.Context) error {
+			_, err := prepare(ctx)
+			return err
+		},
+		// The host open and the autostart call Start alone, so Start prepares
+		// the repo itself when Prepare did not run.
 		Start: func(ctx context.Context, port int) error {
-			life, err := with(ctx)
+			life, err := prepare(ctx)
 			if err != nil {
 				return err
 			}
 			return life.Start(ctx, port)
 		},
 		Stop: func(ctx context.Context) error {
-			life, err := with(ctx)
+			env, life, err := with(ctx)
 			if err != nil {
 				return err
+			}
+			if err := env.stopLegacy(ctx); err != nil {
+				return fmt.Errorf("stop the panel of %s: %w", env.legacy, err)
 			}
 			return life.Stop(ctx)
 		},
 		Status: func(ctx context.Context) (paneldomain.Instance, error) {
-			life, err := with(ctx)
+			_, life, err := with(ctx)
 			if err != nil {
 				return paneldomain.Instance{}, err
 			}
@@ -118,32 +266,38 @@ func lazyLifecycle(flags *pflag.FlagSet) panelcli.Lifecycle {
 	}
 }
 
+// writerFunc makes a function an io.Writer.
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
 func newPanelCommand(flags *pflag.FlagSet) *cobra.Command {
-	cmd := panelcli.NewCommand(func(ctx context.Context, port int, ready func(url string)) (err error) {
-		proc, err := panelProcess(ctx, flags)
+	var cmd *cobra.Command
+	// The command exists when the lifecycle runs, so warn reaches the stderr
+	// that the command writes to.
+	warn := writerFunc(func(p []byte) (int, error) { return cmd.ErrOrStderr().Write(p) })
+	cmd = panelcli.NewCommand(func(ctx context.Context, port int, ready func(url string)) (err error) {
+		panel, err := panelSetup(ctx, flags)
 		if err != nil {
 			return err
 		}
-		env, err := newEnvironment(ctx, flags)
+		serveKey, err := panel.registerServe(ctx)
 		if err != nil {
 			return err
 		}
-		defer func() { err = errors.Join(err, env.state.Close()) }()
-		handlers, _, err := openRun(ctx, env)
-		if err != nil {
-			return err
-		}
-		runs := newPanelRuns(handlers.Status, env.key.Repo).withLive(env.key, env.proofs, time.Now)
-		pages := newPanelPages(handlers.Status, env.key, planmodule.NewPages(env.proofs, env.defaultBranch))
-		return panelmodule.NewServe(version, env.key.Repo, runs, pages, proc)(ctx, port, ready)
-	}, lazyLifecycle(flags))
+		repos := newPanelRepos(panelregistry.New(panel.dir, os.Stderr), flags, serveKey, os.Stderr)
+		defer func() { err = errors.Join(err, repos.Close()) }()
+		return panelmodule.NewServe(version, repos, repos, panel.proc)(ctx, port, ready)
+	}, lazyLifecycle(flags, warn))
 	cmd.RunE = func(*cobra.Command, []string) error { return usageError{errNoCommand} }
 	return cmd
 }
 
 // panelRuns lists the runs of the repo as cards. It reads the state and the run folders, and writes nothing.
 type panelRuns struct {
-	status   status.Handler
+	status status.Handler
+	// info is the registry entry of the repo, whose key goes on each card.
+	info     paneldomain.Repo
 	repo     string
 	branches *branchCache
 	live     *liveCache
@@ -151,6 +305,12 @@ type panelRuns struct {
 
 func newPanelRuns(statuses status.Handler, repo string) panelRuns {
 	return panelRuns{status: statuses, repo: repo, branches: &branchCache{read: os.ReadFile}}
+}
+
+// forRepo names the panel repo, whose key goes on each card.
+func (r panelRuns) forRepo(info paneldomain.Repo) panelRuns {
+	r.info = info
+	return r
 }
 
 // withLive adds the branch head and the proofs of the active run to the run part that Get returns.
@@ -339,23 +499,30 @@ func readBranch(read func(string) ([]byte, error), path string) string {
 	return doc.RunPR().Branch
 }
 
-func (r panelRuns) List(ctx context.Context) ([]paneldomain.Card, error) {
+// List returns the listing of the one repo this value reads, with its key on each card.
+func (r panelRuns) List(ctx context.Context) (paneldomain.Listing, error) {
 	phases := make([]domain.Phase, len(shareddomain.Phases))
 	for i, p := range shareddomain.Phases {
 		phases[i] = domain.Phase(p)
 	}
 	statuses, err := r.status.ByPhase(ctx, r.repo, phases)
 	if err != nil {
-		return nil, err
+		return paneldomain.Listing{}, err
 	}
 	cards := make([]paneldomain.Card, len(statuses))
 	for i, s := range statuses {
 		cards[i] = buildCard(s, r.branches)
+		cards[i].Repo = r.info.Key
 	}
-	return cards, nil
+	return paneldomain.Listing{Repos: []paneldomain.Repo{r.info}, Cards: cards}, nil
 }
 
-func (r panelRuns) Get(ctx context.Context, id string) (paneldomain.Card, error) {
+// Get reads one run. A ref of another repo is not found.
+func (r panelRuns) Get(ctx context.Context, ref paneldomain.RunRef) (paneldomain.Card, error) {
+	if ref.Repo != r.info.Key {
+		return paneldomain.Card{}, paneldomain.ErrNotFound
+	}
+	id := ref.ID
 	s, err := r.status.Handle(ctx, status.Query{Key: domain.RunKey{Repo: r.repo}, RunID: id})
 	if errors.Is(err, domain.ErrRunNotFound) {
 		return paneldomain.Card{}, paneldomain.ErrNotFound
@@ -367,15 +534,12 @@ func (r panelRuns) Get(ctx context.Context, id string) (paneldomain.Card, error)
 		return paneldomain.Card{}, paneldomain.ErrNotFound
 	}
 	card := buildCard(s, r.branches)
+	card.Repo = r.info.Key
 	if r.live != nil {
 		parts := append([]string{strconv.Itoa(s.Version)}, r.live.parts(ctx, r.status, s)...)
 		card.Version.Run = paneldomain.Fingerprint(parts...)
 	}
 	return card, nil
-}
-
-func panelCard(s status.Status) paneldomain.Card {
-	return buildCard(s, nil)
 }
 
 func buildCard(s status.Status, branches *branchCache) paneldomain.Card {

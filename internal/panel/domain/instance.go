@@ -13,7 +13,6 @@ type Instance struct {
 	PID     int
 	Port    int
 	URL     string
-	Repo    string
 	Version string
 }
 

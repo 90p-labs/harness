@@ -39,6 +39,7 @@ func panelConfig(enabled bool, open string, autostart bool) config.Config {
 
 func TestPanelOpener(t *testing.T) {
 	const runID = "20261113-201204-r4"
+	const repoKey = "0123456789ab"
 	instance := paneldomain.Instance{PID: 7, Port: 4100, URL: "http://127.0.0.1:4100/"}
 
 	cases := []struct {
@@ -56,7 +57,7 @@ func TestPanelOpener(t *testing.T) {
 			fake := &fakeLifecycle{instance: instance}
 			var stderr bytes.Buffer
 
-			open := panelOpener(tc.cfg, fake.lifecycle(), &stderr)
+			open := panelOpener(tc.cfg, fake.lifecycle(), &stderr, repoKey)
 
 			if (open != nil) != tc.wantSet {
 				t.Fatalf("opener set = %v, want %v", open != nil, tc.wantSet)
@@ -70,7 +71,7 @@ func TestPanelOpener(t *testing.T) {
 			if len(fake.starts) != 1 || fake.starts[0] >= 0 {
 				t.Errorf("starts = %v, want one start with the configured port", fake.starts)
 			}
-			if want := "panel: http://127.0.0.1:4100/runs/" + runID + "\n"; stderr.String() != want {
+			if want := "panel: http://127.0.0.1:4100/repos/" + repoKey + "/runs/" + runID + "\n"; stderr.String() != want {
 				t.Errorf("stderr = %q, want %q", stderr.String(), want)
 			}
 		})
@@ -81,7 +82,7 @@ func TestPanelOpener(t *testing.T) {
 		fake := &fakeLifecycle{startErr: boom}
 		var stderr bytes.Buffer
 
-		err := panelOpener(panelConfig(true, "host", false), fake.lifecycle(), &stderr)(t.Context(), runID)
+		err := panelOpener(panelConfig(true, "host", false), fake.lifecycle(), &stderr, repoKey)(t.Context(), runID)
 
 		if !errors.Is(err, boom) {
 			t.Fatalf("err = %v, want %v", err, boom)
@@ -100,12 +101,29 @@ func TestPanelOpener(t *testing.T) {
 		fake := &fakeLifecycle{statErr: paneldomain.ErrStopped}
 		var stderr bytes.Buffer
 
-		err := panelOpener(panelConfig(true, "host", false), fake.lifecycle(), &stderr)(t.Context(), runID)
+		err := panelOpener(panelConfig(true, "host", false), fake.lifecycle(), &stderr, repoKey)(t.Context(), runID)
 
 		if !errors.Is(err, paneldomain.ErrStopped) || !strings.Contains(stderr.String(), "panel: opening the browser") {
 			t.Errorf("err = %v, stderr = %q, want the error and the browser notice", err, stderr.String())
 		}
 	})
+}
+
+func TestPanelOpenerRepoRoute(t *testing.T) {
+	t.Setenv("HARNESS_HOME", t.TempDir())
+	const runID = "20261113-201204-r4"
+	key := paneldomain.RepoKey("/work/harness/.git")
+	fake := &fakeLifecycle{instance: paneldomain.Instance{PID: 7, Port: 4100, URL: "http://127.0.0.1:4100/"}}
+	var stderr bytes.Buffer
+
+	if err := panelOpener(panelConfig(true, "host", false), fake.lifecycle(), &stderr, key)(t.Context(), runID); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "panel: http://127.0.0.1:4100/repos/" + key + "/runs/" + runID + "\n"
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
 }
 
 func TestPanelAutostart(t *testing.T) {

@@ -111,6 +111,43 @@ func TestLoadPrecedence(t *testing.T) {
 	}
 }
 
+func TestLoadFileOnly(t *testing.T) {
+	const content = "state:\n  dsn: file-dsn\n"
+	t.Setenv(envStateDSN, "env-dsn")
+	t.Setenv("HARNESS_RUN_MAX_REVIEW_ROUNDS", "9")
+
+	t.Run("file only ignores the env", func(t *testing.T) {
+		got, err := config.Load(config.FileOnly(), writeConfig(t, content))
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if got.State.DSN != "file-dsn" {
+			t.Errorf("state.dsn = %q, want file-dsn", got.State.DSN)
+		}
+		if got.Run.MaxReviewRounds != 3 {
+			t.Errorf("run.max_review_rounds = %d, want the default 3", got.Run.MaxReviewRounds)
+		}
+	})
+	t.Run("file only falls back to the default", func(t *testing.T) {
+		got, err := config.Load(config.FileOnly(), t.TempDir())
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if got.State.DSN != "sqlite:.harness/state.db" {
+			t.Errorf("state.dsn = %q, want the default", got.State.DSN)
+		}
+	})
+	t.Run("a plain flag set keeps the env", func(t *testing.T) {
+		got, err := config.Load(flagSet(t), writeConfig(t, content))
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if got.State.DSN != "env-dsn" || got.Run.MaxReviewRounds != 9 {
+			t.Errorf("state.dsn = %q, max_review_rounds = %d, want env-dsn and 9", got.State.DSN, got.Run.MaxReviewRounds)
+		}
+	})
+}
+
 func TestLoadEmptyStateDSN(t *testing.T) {
 	_, err := load(t, "state:\n  dsn: \"\"\n")
 	if err == nil {

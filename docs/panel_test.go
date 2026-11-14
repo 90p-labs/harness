@@ -32,8 +32,34 @@ var panelGuideTerms = []string{
 	"panel.enabled",
 	"panel.autostart",
 	"panel.open",
-	"panel: <url>runs/<id>",
+	"panel: <url>repos/<key>/runs/<id>",
 	"plan view --open",
+}
+
+// panelUserStateTerms are the user-wide terms that the guide must name: the
+// user state folder, the registry and the repo routes.
+var panelUserStateTerms = []string{
+	"~/.harness/",
+	"HARNESS_HOME",
+	"repos.json",
+	"repos.lock",
+	"0700",
+	"/repos/<key>/runs/<id>",
+	"panel: <url>repos/<key>/runs/<id>",
+	"?repo=",
+	"Done keeps the 20 most recent cards of each repo",
+}
+
+// panelCommonDirState is the old state folder, which the guide must not name.
+const panelCommonDirState = "<git common dir>/.harness/"
+
+// panelOneLanePhrase is the old board layout, which the guide and ADR 0027 must not name.
+const panelOneLanePhrase = "one lane for each repo"
+
+// panelOneLaneDocs are the docs that must describe the one board, not one lane per repo.
+var panelOneLaneDocs = []string{
+	panelGuideFile,
+	"docs/adr/0027-one-panel-per-user.md",
 }
 
 func TestReadmeLinksPanelGuide(t *testing.T) {
@@ -59,6 +85,23 @@ func TestPanelGuideNamesTheLifecycle(t *testing.T) {
 	for _, term := range panelGuideTerms {
 		if !strings.Contains(guide, term) {
 			t.Errorf("%s does not name %q", panelGuideFile, term)
+		}
+	}
+}
+
+func TestPanelGuideNamesTheUserState(t *testing.T) {
+	guide := repository.Read(t, panelGuideFile)
+	for _, term := range panelUserStateTerms {
+		if !strings.Contains(guide, term) {
+			t.Errorf("%s does not name %q", panelGuideFile, term)
+		}
+	}
+	if strings.Contains(guide, panelCommonDirState) {
+		t.Errorf("%s still names the common dir %q", panelGuideFile, panelCommonDirState)
+	}
+	for _, file := range panelOneLaneDocs {
+		if strings.Contains(repository.Read(t, file), panelOneLanePhrase) {
+			t.Errorf("%s still says %q", file, panelOneLanePhrase)
 		}
 	}
 }

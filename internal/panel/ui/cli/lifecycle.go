@@ -15,6 +15,13 @@ const noPort = -1
 
 // Lifecycle is what the lifecycle commands call. The module builds it from the handlers.
 type Lifecycle struct {
+	// Version is the version of this binary. A start that finds a panel of
+	// another version running leaves it and says how to switch.
+	Version string
+	// Prepare runs at the start of the start command, before the version check,
+	// so a start that reuses a panel of another version still prepares the repo.
+	// It may be nil.
+	Prepare func(ctx context.Context) error
 	// Start runs the panel in the background. A port below 0 uses the configured port.
 	Start func(ctx context.Context, port int) error
 	// Stop ends the panel.
@@ -33,6 +40,19 @@ func startCommand(life Lifecycle) *cobra.Command {
 			if cmd.Flags().Changed(flagPort) {
 				var err error
 				if port, err = cmd.Flags().GetInt(flagPort); err != nil {
+					return err
+				}
+			}
+			if life.Prepare != nil {
+				if err := life.Prepare(cmd.Context()); err != nil {
+					return err
+				}
+			}
+			if life.Version != "" {
+				if run, err := life.Status(cmd.Context()); err == nil && run.Version != life.Version {
+					_, err := fmt.Fprintf(cmd.OutOrStdout(),
+						"panel: running version %s, run harness panel stop to switch to %s\npanel: %s\n",
+						run.Version, life.Version, run.URL)
 					return err
 				}
 			}

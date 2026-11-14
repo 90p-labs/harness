@@ -39,10 +39,9 @@ const (
 )
 
 // Config holds what the server needs: the two queries, the signal source of
-// the event stream, the clock of the card age and the identity it reports.
+// the event stream, the clock of the card age and the version it reports.
 type Config struct {
 	Version string
-	Repo    string
 	Board   board.Handler
 	Page    page.Handler
 	Signals domain.Signals
@@ -98,9 +97,11 @@ func (s *Server) Handler() nethttp.Handler {
 	mux := nethttp.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.boardPage)
 	mux.HandleFunc("GET /regions/board", s.boardRegion)
-	mux.HandleFunc("GET /runs/{id}", s.runPage)
-	mux.HandleFunc("GET /runs/{id}/{$}", s.trailingSlash)
-	mux.HandleFunc("GET /runs/{id}/regions/{name}", s.runRegion)
+	mux.HandleFunc("GET /repos/{key}/runs/{id}", s.runPage)
+	mux.HandleFunc("GET /repos/{key}/runs/{id}/{$}", s.trailingSlash)
+	mux.HandleFunc("GET /repos/{key}/runs/{id}/regions/{name}", s.runRegion)
+	mux.HandleFunc("GET /runs/{id}", s.legacyRun)
+	mux.HandleFunc("GET /runs/{id}/{$}", s.legacyRun)
 	mux.HandleFunc("GET /events", s.events)
 	mux.HandleFunc("GET /favicon.ico", s.favicon)
 	mux.HandleFunc("GET /assets/{hash}/{file}", s.asset)
@@ -138,19 +139,54 @@ func (s *Server) renderBoard(w nethttp.ResponseWriter, name string, board domain
 	writeHTML(w, buf.Bytes())
 }
 
+// boardFilter reads the repo filter of the query. An absent or empty value
+// means no filter. Any other value must be a repo key: a malformed one answers
+// 404 and ends the request, before any store call.
+func boardFilter(w nethttp.ResponseWriter, r *nethttp.Request) (string, bool) {
+	value := r.URL.Query().Get("repo")
+	if value == "" {
+		return "", true
+	}
+	key, err := domain.ParseRepoKey(value)
+	if err != nil {
+		nethttp.NotFound(w, r)
+		return "", false
+	}
+	return key, true
+}
+
 func (s *Server) boardPage(w nethttp.ResponseWriter, r *nethttp.Request) {
-	res, err := s.cfg.Board.Handle(r.Context(), board.Query{})
+	repo, ok := boardFilter(w, r)
+	if !ok {
+		return
+	}
+	res, err := s.cfg.Board.Handle(r.Context(), board.Query{Repo: repo})
 	if err != nil {
 		s.fail(w, "board", err)
+		return
+	}
+	if res.UnknownRepo {
+		nethttp.Redirect(w, r, "/", nethttp.StatusSeeOther)
 		return
 	}
 	s.renderBoard(w, "page", res.Board)
 }
 
 func (s *Server) boardRegion(w nethttp.ResponseWriter, r *nethttp.Request) {
-	res, err := s.cfg.Board.Handle(r.Context(), board.Query{Version: r.URL.Query().Get("v")})
+	repo, ok := boardFilter(w, r)
+	if !ok {
+		return
+	}
+	res, err := s.cfg.Board.Handle(r.Context(), board.Query{Repo: repo, Version: r.URL.Query().Get("v")})
 	if err != nil {
 		s.fail(w, "board region", err)
+		return
+	}
+	if res.UnknownRepo {
+		w.Header().Set("HX-Redirect", "/")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(nethttp.StatusOK)
 		return
 	}
 	if res.Unchanged {
@@ -160,8 +196,37 @@ func (s *Server) boardRegion(w nethttp.ResponseWriter, r *nethttp.Request) {
 	s.renderBoard(w, "region", res.Board)
 }
 
+// repoKey reads the repo key of the route. A bad key answers 404 and ends the
+// request, as an unknown repo does.
+func repoKey(w nethttp.ResponseWriter, r *nethttp.Request) (string, bool) {
+	key, err := domain.ParseRepoKey(r.PathValue("key"))
+	if err != nil {
+		nethttp.NotFound(w, r)
+		return "", false
+	}
+	return key, true
+}
+
+// legacyRun sends /runs/{id} to the repo route when exactly one repo holds the
+// id. Any other count is a 404.
+func (s *Server) legacyRun(w nethttp.ResponseWriter, r *nethttp.Request) {
+	ref, err := s.cfg.Page.Resolve(r.Context(), r.PathValue("id"))
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		nethttp.NotFound(w, r)
+	case err != nil:
+		s.fail(w, "legacy run", err)
+	default:
+		nethttp.Redirect(w, r, "/repos/"+ref.Repo+"/runs/"+url.PathEscape(ref.ID), nethttp.StatusMovedPermanently)
+	}
+}
+
 func (s *Server) runPage(w nethttp.ResponseWriter, r *nethttp.Request) {
-	res, err := s.cfg.Page.Handle(r.Context(), page.Query{RunID: r.PathValue("id")})
+	key, ok := repoKey(w, r)
+	if !ok {
+		return
+	}
+	res, err := s.cfg.Page.Handle(r.Context(), page.Query{Repo: key, RunID: r.PathValue("id")})
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		nethttp.NotFound(w, r)
@@ -193,7 +258,7 @@ func (s *Server) renderNoPlan(w nethttp.ResponseWriter, res page.Result) {
 	view := noPlanView{
 		Card: res.Card, Version: res.Version, Links: links, Kit: webkit.Stylesheet(),
 		Events: res.Events,
-		Base:   "/runs/" + url.PathEscape(res.Card.ID) + "/regions/",
+		Base:   res.Base,
 	}
 	if err := templates.ExecuteTemplate(&buf, "noplan", view); err != nil {
 		s.fail(w, "render no-plan page", err)
@@ -202,9 +267,13 @@ func (s *Server) renderNoPlan(w nethttp.ResponseWriter, res page.Result) {
 	writeHTML(w, buf.Bytes())
 }
 
-// trailingSlash sends /runs/{id}/ to /runs/{id}.
+// trailingSlash sends /repos/{key}/runs/{id}/ to the same route with no slash.
 func (s *Server) trailingSlash(w nethttp.ResponseWriter, r *nethttp.Request) {
-	nethttp.Redirect(w, r, "/runs/"+url.PathEscape(r.PathValue("id")), nethttp.StatusMovedPermanently)
+	key, ok := repoKey(w, r)
+	if !ok {
+		return
+	}
+	nethttp.Redirect(w, r, "/repos/"+key+"/runs/"+url.PathEscape(r.PathValue("id")), nethttp.StatusMovedPermanently)
 }
 
 func (s *Server) favicon(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -225,7 +294,12 @@ func (s *Server) favicon(w nethttp.ResponseWriter, r *nethttp.Request) {
 }
 
 func (s *Server) runRegion(w nethttp.ResponseWriter, r *nethttp.Request) {
+	key, ok := repoKey(w, r)
+	if !ok {
+		return
+	}
 	res, err := s.cfg.Page.Handle(r.Context(), page.Query{
+		Repo:    key,
 		RunID:   r.PathValue("id"),
 		Region:  r.PathValue("name"),
 		Version: r.URL.Query().Get("v"),
@@ -234,7 +308,7 @@ func (s *Server) runRegion(w nethttp.ResponseWriter, r *nethttp.Request) {
 	case errors.Is(err, domain.ErrRegionNotFound):
 		// Only a known run with an unknown region name is the missing-region
 		// signal. An unknown or deleted run is a plain 404.
-		s.logger.Warn("panel region missing", "run", r.PathValue("id"), "region", r.PathValue("name"))
+		s.logger.Warn("panel region missing", "repo", key, "run", r.PathValue("id"), "region", r.PathValue("name"))
 		nethttp.NotFound(w, r)
 	case errors.Is(err, domain.ErrNotFound):
 		nethttp.NotFound(w, r)
@@ -265,7 +339,7 @@ func (s *Server) asset(w nethttp.ResponseWriter, r *nethttp.Request) {
 func (s *Server) healthz(w nethttp.ResponseWriter, _ *nethttp.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(map[string]any{"version": s.cfg.Version, "repo": s.cfg.Repo, "pid": os.Getpid()})
+	_ = json.NewEncoder(w).Encode(map[string]any{"version": s.cfg.Version, "pid": os.Getpid()})
 }
 
 func writeHTML(w nethttp.ResponseWriter, body []byte) {

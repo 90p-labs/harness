@@ -9,9 +9,13 @@ import (
 	"github.com/90p-labs/harness/internal/panel/domain"
 )
 
-const regionsBase = "/runs/"
+// runBase returns the route of a run of one repo, with no trailing slash.
+func runBase(ref domain.RunRef) string {
+	return "/repos/" + ref.Repo + "/runs/" + ref.ID
+}
 
 type Query struct {
+	Repo    string
 	RunID   string
 	Region  string
 	Version string
@@ -26,6 +30,7 @@ type Result struct {
 	NoPlan    bool
 	Card      domain.Card
 	Version   string
+	Base      string
 	Events    string
 }
 
@@ -38,21 +43,46 @@ func NewHandler(runs domain.Runs, pages domain.Pages) Handler {
 	return Handler{runs: runs, pages: pages}
 }
 
+// Resolve finds the repo of a run id for a legacy route. It returns the ref
+// when exactly one repo holds the id, else ErrNotFound.
+func (h Handler) Resolve(ctx context.Context, id string) (domain.RunRef, error) {
+	listing, err := h.runs.List(ctx)
+	if err != nil {
+		return domain.RunRef{}, err
+	}
+	var found []domain.RunRef
+	for _, card := range listing.Cards {
+		if card.ID == id {
+			found = append(found, card.Ref())
+		}
+	}
+	// A repo that failed to load may hold the id too, so the match cannot be
+	// known to be unique (ADR 0027 item 16).
+	if len(listing.Problems) > 0 {
+		return domain.RunRef{}, fmt.Errorf("run %q: %d repos failed to load: %w", id, len(listing.Problems), domain.ErrNotFound)
+	}
+	if len(found) != 1 {
+		return domain.RunRef{}, fmt.Errorf("run %q in %d repos: %w", id, len(found), domain.ErrNotFound)
+	}
+	return found[0], nil
+}
+
 func (h Handler) Handle(ctx context.Context, query Query) (Result, error) {
-	card, err := h.runs.Get(ctx, query.RunID)
+	ref := domain.RunRef{Repo: query.Repo, ID: query.RunID}
+	card, err := h.runs.Get(ctx, ref)
 	if err != nil {
 		return Result{}, err
 	}
 	current := card.Version
 	served := domain.Served{
 		Version: current.String(),
-		Base:    regionsBase + card.ID + "/regions/",
-		Events:  "/events?run=" + url.QueryEscape(card.ID),
+		Base:    runBase(ref) + "/regions/",
+		Events:  "/events?repo=" + url.QueryEscape(ref.Repo) + "&run=" + url.QueryEscape(ref.ID),
 	}
 	if query.Region == "" {
 		body, err := h.pages.Page(ctx, card, served)
 		if errors.Is(err, domain.ErrNoPlan) {
-			return Result{NoPlan: true, Card: card, Version: current.String(), Events: served.Events}, nil
+			return Result{NoPlan: true, Card: card, Version: current.String(), Base: served.Base, Events: served.Events}, nil
 		}
 		if err != nil {
 			return Result{}, err

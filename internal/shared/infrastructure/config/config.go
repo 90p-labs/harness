@@ -27,6 +27,8 @@ const (
 	fileFormat = "yaml"
 	envPrefix  = "HARNESS"
 
+	fileOnlyFlag = "file-only-marker"
+
 	keyFilterTransition = "transition"
 	keyFilterFrom       = "from"
 	keyFilterTo         = "to"
@@ -236,11 +238,24 @@ var (
 	knownHosts = []shareddomain.Host{shareddomain.HostClaude, shareddomain.HostCodex}
 )
 
+// FileOnly returns a flag set that tells Load to read the config file and the defaults only. It carries one private
+// marker flag, so Load sees no HARNESS_* variable and no serve flag. The panel gives it to every lane of a spawned
+// panel, and to every lane but the serve repo of a hand-run serve.
+func FileOnly() *pflag.FlagSet {
+	flags := pflag.NewFlagSet("file-only", pflag.ContinueOnError)
+	flags.Bool(fileOnlyFlag, true, "read the config file only")
+	return flags
+}
+
+// Load reads the config of the repo at topLevel. The order is flag, HARNESS_* variable, file, default. A flag set from
+// FileOnly drops the variables, so only the file and the defaults remain.
 func Load(flags *pflag.FlagSet, topLevel string) (Config, error) {
 	v := viper.New()
-	v.SetEnvPrefix(envPrefix)
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.AutomaticEnv()
+	if flags.Lookup(fileOnlyFlag) == nil {
+		v.SetEnvPrefix(envPrefix)
+		v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+		v.AutomaticEnv()
+	}
 	setDefaults(v)
 
 	if flag := flags.Lookup(FlagStateDSN); flag != nil {

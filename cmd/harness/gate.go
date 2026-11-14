@@ -30,6 +30,7 @@ import (
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
 	plancli "github.com/90p-labs/harness/internal/plan/ui/cli"
 	runmodule "github.com/90p-labs/harness/internal/run"
+	"github.com/90p-labs/harness/internal/run/application/query/status"
 	"github.com/90p-labs/harness/internal/run/domain"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/config"
 	"github.com/90p-labs/harness/internal/shared/infrastructure/dbal"
@@ -74,7 +75,7 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 	if err != nil {
 		return gatecli.Handlers{}, nil, err
 	}
-	verifier := gatemodule.NewVerify(db, env.bus, criterionSource{flags: flags}, time.Now)
+	verifier := gatemodule.NewVerify(db, env.bus, criterionSource{flags: flags, dir: env.key.Worktree}, time.Now)
 	commits := gatemodule.NewVerifyCommits(db, env.bus, time.Now)
 	initializer := gatemodule.NewInit(toolchain.Lint{Packs: env.cfg.Lint.Packs, Baseline: lintdomain.BaselinePath}, env.bus)
 	return gatecli.Handlers{
@@ -84,7 +85,7 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 			})
 		},
 		VerifyCriterion: func(ctx context.Context, number int) (verify.Result, error) {
-			criteria, err := activeCriteria(ctx, flags)
+			criteria, err := activeCriteria(ctx, flags, env.key.Worktree)
 			if err != nil {
 				return verify.Result{}, err
 			}
@@ -112,15 +113,20 @@ type criterionGate struct {
 	gate   gatedomain.Gate
 }
 
-func activeCriteria(ctx context.Context, flags *pflag.FlagSet) ([]criterionGate, error) {
-	query, err := activePlan(ctx, flags)
+func activeCriteria(ctx context.Context, flags *pflag.FlagSet, dir string) ([]criterionGate, error) {
+	query, err := activePlan(ctx, flags, dir)
 	if errors.Is(err, plancli.ErrNoPlanFile) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	text, err := os.ReadFile(query.Path)
+	return criteriaAt(query.Path)
+}
+
+// criteriaAt reads the criteria that have a proof from the plan file at path. A missing file has none.
+func criteriaAt(path string) ([]criterionGate, error) {
+	text, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -146,10 +152,13 @@ func activeCriteria(ctx context.Context, flags *pflag.FlagSet) ([]criterionGate,
 	return criteria, nil
 }
 
-type criterionSource struct{ flags *pflag.FlagSet }
+type criterionSource struct {
+	flags *pflag.FlagSet
+	dir   string
+}
 
 func (s criterionSource) Gates(ctx context.Context) ([]gatedomain.Gate, error) {
-	criteria, err := activeCriteria(ctx, s.flags)
+	criteria, err := activeCriteria(ctx, s.flags, s.dir)
 	gates := make([]gatedomain.Gate, len(criteria))
 	for i, c := range criteria {
 		gates[i] = c.gate
@@ -162,11 +171,17 @@ type proofAdapter struct {
 	cfg       config.Config
 	commonDir string
 	key       domain.RunKey
+	dir       string
+	// shared is the panel's open store of the repo. When set, Passed and Reproduction read it, and neither migrates nor closes it.
+	shared func(context.Context) (*dbal.DB, error)
 }
 
 // withEvidence reads the active criteria, opens the state and closes it after fn, joining the close error.
 func (p proofAdapter) withEvidence(ctx context.Context, fn func(criteria []criterionGate, status evidencestatus.Handler) error) (err error) {
-	criteria, err := activeCriteria(ctx, p.flags)
+	if p.shared != nil {
+		return p.withSharedEvidence(ctx, fn)
+	}
+	criteria, err := activeCriteria(ctx, p.flags, p.dir)
 	if err != nil {
 		return err
 	}
@@ -218,6 +233,26 @@ func (p proofAdapter) Reproduction(ctx context.Context, criterion int) (plandoma
 		return plandomain.ReproductionRecord{}, false, err
 	}
 	return record, found, nil
+}
+
+// withSharedEvidence is withEvidence on the shared store: it finds the active run there, so no second store is opened or migrated, and it leaves the store open.
+func (p proofAdapter) withSharedEvidence(ctx context.Context, fn func(criteria []criterionGate, status evidencestatus.Handler) error) error {
+	db, err := p.shared(ctx)
+	if err != nil {
+		return err
+	}
+	current, err := runmodule.NewStatus(db, time.Now).Handle(ctx, status.Query{Key: p.key})
+	if errors.Is(err, domain.ErrRunNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	criteria, err := criteriaAt(planPath(p.key.Worktree, current.ID))
+	if err != nil {
+		return err
+	}
+	return fn(criteria, gatemodule.NewEvidenceStatus(db))
 }
 
 // proofResults leaves out a criterion with no evidence for this tree, so the plan shows it as not run.

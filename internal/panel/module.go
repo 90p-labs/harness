@@ -28,11 +28,12 @@ func NewProcess(cfg process.Config) *process.Process {
 
 // NewLifecycle returns the lifecycle commands of the cli. A start with no port
 // uses the configured port.
-func NewLifecycle(proc *process.Process, port int) cli.Lifecycle {
+func NewLifecycle(proc *process.Process, port int, version string) cli.Lifecycle {
 	starter := start.NewHandler(proc, port)
 	stopper := stop.NewHandler(proc)
 	reader := status.NewHandler(proc)
 	return cli.Lifecycle{
+		Version: version,
 		Start: func(ctx context.Context, port int) error {
 			return starter.Handle(ctx, start.Command{Port: port})
 		},
@@ -55,7 +56,7 @@ var watcherDone = func() {}
 // import the http server, so this module starts it.
 // The server holds the panel lock from before it listens until it returns, and
 // publishes panel.json once the listener has its port.
-func NewServe(version, repo string, runs domain.Runs, pages domain.Pages, proc *process.Process) cli.Serve {
+func NewServe(version string, runs domain.Runs, pages domain.Pages, proc *process.Process) cli.Serve {
 	return func(ctx context.Context, port int, ready func(url string)) (err error) {
 		claim, err := proc.Claim()
 		if err != nil {
@@ -70,14 +71,13 @@ func NewServe(version, repo string, runs domain.Runs, pages domain.Pages, proc *
 		defer ln.Close()
 		listening := ln.Addr().(*net.TCPAddr)
 		if err := claim.Publish(domain.Instance{
-			PID: os.Getpid(), Port: listening.Port, Repo: repo, Version: version,
+			PID: os.Getpid(), Port: listening.Port, Version: version,
 		}); err != nil {
 			return err
 		}
 		watcher := fingerprint.NewWatcher(runs, watchEvery)
 		server := panelhttp.New(panelhttp.Config{
 			Version: version,
-			Repo:    repo,
 			Board:   board.NewHandler(runs),
 			Page:    page.NewHandler(runs, pages),
 			Signals: watcher,

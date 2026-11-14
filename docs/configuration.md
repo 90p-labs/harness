@@ -50,6 +50,7 @@ The env variable has limits:
 - A key with no default, such as `lint.packs`, `gates` or `setup`, ignores its env variable. You get no error.
 - A list takes comma separated values: `HARNESS_GUARD_DISABLED=pr-no-merge,pr-draft-only`. A space does not separate two values.
 - `HARNESS_PLUGINS` is an error. Set the plugins in the file.
+- The panel reads each repo from its `.harness.yaml` only. A spawned panel (`panel start`, autostart, host open) ignores the `HARNESS_*` variables for every repo. Only a hand-run `harness panel serve` keeps them, for its own repo. Set the key in `.harness.yaml` for the panel to see it.
 
 A duration, such as a gate or plugin `timeout`, is a string with a unit: `30s`, `750ms` or `2m`. The number `30` is an error.
 
@@ -494,7 +495,7 @@ live:
 
 ## `panel`
 
-The web panel, which shows the plans and the runs of the repository. `panel.enabled` is the master switch. It gates the autostart and the host open. The explicit `harness panel` commands work with any value.
+The web panel, which shows the runs of every registered repo on one board. Each card has a repo chip, and a repo list filters the board with `?repo=<key>`. On a phone the repo list shows as a chip row. `panel.enabled` is the master switch. It gates the autostart and the host open. The explicit `harness panel` commands work with any value.
 
 | Key | Type | Default | Env | Effect |
 |---|---|---|---|---|
