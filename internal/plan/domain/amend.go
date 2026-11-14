@@ -152,7 +152,7 @@ func amendSkeleton(text string) (string, bool) {
 func amendFreeText(section, line string) (string, bool) {
 	switch section {
 	case HeadingGoal:
-		return line, strings.HasPrefix(line, TrackPrefix)
+		return line, strings.HasPrefix(line, TrackPrefix) || strings.HasPrefix(line, CausePrefix)
 	case HeadingDecisions:
 		return "", false
 	case HeadingTasks:

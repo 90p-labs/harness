@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	plandomain "github.com/90p-labs/harness/internal/plan/domain"
+	rundomain "github.com/90p-labs/harness/internal/run/domain"
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
@@ -186,6 +187,19 @@ func TestHarnessSkillReviewRound(t *testing.T) {
 	}
 	if !strings.Contains(round, fixupFlag) {
 		t.Errorf("%s does not name %q", reviewingRef, fixupFlag)
+	}
+}
+
+func TestReproductionSurfaceTemplate(t *testing.T) {
+	template := repository.Read(t, templateFile)
+	for _, want := range []string{
+		plandomain.CausePrefix + " " + plandomain.CauseBug, "## " + plandomain.HeadingReproduction, "`" + string(plandomain.RuleReproduction) + "`",
+		"- " + plandomain.ReproCriterion + ":", "- " + plandomain.ReproSymptom + ":", "- " + plandomain.ReproRegression + ":",
+		"The `" + plandomain.TrackPrefix + "` and `" + plandomain.CausePrefix + "` lines are not free text.",
+	} {
+		if !strings.Contains(template, want) {
+			t.Errorf("%s does not hold %q", templateFile, want)
+		}
 	}
 }
 
@@ -417,6 +431,89 @@ func TestHarnessSkillAmend(t *testing.T) {
 	} {
 		if !strings.Contains(skill, want) {
 			t.Errorf("%s does not name %q", skillFile, want)
+		}
+	}
+}
+
+const (
+	reproductionRef    = "skills/harness/references/reproduction.md"
+	reproductionRefTxt = "references/reproduction.md"
+	reportSkillFile    = "skills/report/SKILL.md"
+	diagnosingSource   = "https://github.com/mattpocock/skills/tree/main/skills/engineering/diagnosing-bugs"
+	firstWorkerModel   = "with the `model` field set to the first model of the `worker` role"
+	verifyCriterion    = "harness verify --criterion <n>"
+	bugTriggerBroken   = "a prompt that reports broken behaviour"
+	bugTriggerBaseline = "an item of the evidence baseline with the class `bug` that the run fixes"
+	bugTriggerFix      = "a plan that will hold a `fix` commit"
+	phaseItemStart     = "## Phases"
+	phaseItemEnd       = "\nA plan with only `docs` commits"
+)
+
+var phaseItem = regexp.MustCompile(`(?m)^(\d+)\. `)
+
+func TestBugPathSkill(t *testing.T) {
+	skill, ref, report := repository.Read(t, skillFile), repository.Read(t, reproductionRef), repository.Read(t, reportSkillFile)
+
+	_, phases, _ := strings.Cut(skill, phaseItemStart)
+	phases, _, _ = strings.Cut(phases, phaseItemEnd)
+	if numbers := phaseItem.FindAllStringSubmatch(phases, -1); len(numbers) != 6 {
+		t.Errorf("%s has %d numbered phase items, want 6: the bug path is sub-bullets", skillFile, len(numbers))
+	}
+	_, first, _ := strings.Cut(phases, "1. `planning`")
+	first, second, _ := strings.Cut(first, planningItem)
+	second, _, _ = strings.Cut(second, approvalItem)
+	for _, want := range []string{plandomain.CausePrefix + " " + plandomain.CauseBug, reproductionRefTxt, "`worker` agent", firstWorkerModel, "raw command", "no plan", bugTriggerBroken, bugTriggerBaseline, bugTriggerFix} {
+		if !strings.Contains(first, want) {
+			t.Errorf("%s: item 1 does not name %q", skillFile, want)
+		}
+	}
+	for _, want := range []string{plandomain.CausePrefix + " " + plandomain.CauseBug, "## " + plandomain.HeadingReproduction, verifyCriterion, "`" + string(plandomain.RuleReproductionRed) + "`", plandomain.ReproHumanOnly} {
+		if !strings.Contains(second, want) {
+			t.Errorf("%s: item 2 does not name %q", skillFile, want)
+		}
+	}
+	verify, check := strings.Index(second, verifyCriterion), strings.LastIndex(second, runPlanCommand)
+	if verify < 0 || check < verify {
+		t.Errorf("%s: item 2 must run %s (at %d) before %s (at %d)", skillFile, verifyCriterion, verify, runPlanCommand, check)
+	}
+	_, ship, _ := strings.Cut(skill, shippingItem)
+	ship, _, _ = strings.Cut(ship, "\n\n")
+	if !strings.Contains(ship, "`"+string(rundomain.SourceNoSeam)+"`") {
+		t.Errorf("%s: the shipping item does not name the candidate %q", skillFile, rundomain.SourceNoSeam)
+	}
+
+	credit := regexp.MustCompile(`This step adapts the .?diagnosing-bugs.? skill of Matt Pocock \(MIT license\): <` + regexp.QuoteMeta(diagnosingSource) + `>\. .*The text here is new\.`)
+	if !credit.MatchString(ref) {
+		t.Errorf("%s has no credit line in the form of %s", reproductionRef, grillFile)
+	}
+	for _, want := range []string{
+		"reproduction gate", "hypotheses", "seam rule", reportSkillFile[len("skills/"):], "already run", "deterministic", "fast", "one variable at a time",
+		plandomain.ReproHumanOnly + ":", plandomain.ReproRegression + ": none:", plandomain.ReproSymptom + ":", plandomain.ReproCriterion + ":",
+		plandomain.ResultConfirmed, plandomain.ResultRefuted, plandomain.ResultUntested, "`" + string(plandomain.RuleReproduction) + "`", "`" + string(plandomain.RuleReproductionRed) + "`",
+		"short output", "`planning` again", "reproduction file", "reverts", string(rundomain.SourceNoSeam), verifyCriterion,
+	} {
+		if !strings.Contains(ref, want) {
+			t.Errorf("%s does not name %q", reproductionRef, want)
+		}
+	}
+	// The reference points to the report skill and repeats none of its steps.
+	for _, step := range []string{"git init", "echo $?", "empty folder"} {
+		if !strings.Contains(report, step) {
+			t.Fatalf("%s no longer holds %q: update this test", reportSkillFile, step)
+		}
+		if strings.Contains(ref, step) {
+			t.Errorf("%s repeats the report skill step %q", reproductionRef, step)
+		}
+	}
+	opening, _, _ := strings.Cut(ref, "\n## ")
+	for _, want := range []string{bugTriggerBroken, bugTriggerBaseline, bugTriggerFix} {
+		if !strings.Contains(opening, want) {
+			t.Errorf("the opening of %s does not state the trigger %q", reproductionRef, want)
+		}
+	}
+	for _, text := range []string{skill, ref} {
+		if strings.Contains(text, repository.EmDash) || strings.ContainsFunc(text, repository.IsEmoji) {
+			t.Errorf("the bug path text has an em dash or an emoji")
 		}
 	}
 }

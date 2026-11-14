@@ -287,3 +287,80 @@ func TestVerifyCommitsShortOutput(t *testing.T) {
 		}
 	})
 }
+
+func TestVerifyOneCriterionFlag(t *testing.T) {
+	t.Run("the flag passes its number to the handler", func(t *testing.T) {
+		var closed bool
+		got := 0
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+			VerifyCriterion: func(_ context.Context, n int) (verify.Result, error) {
+				got = n
+				return verify.Result{Lines: []verify.Line{{Gate: "criterion-2", Status: domain.StatusPass}}}, nil
+			},
+		}, &closed))
+
+		stdout, err := run(t, cmd, "--criterion", "2")
+
+		if err != nil || got != 2 || stdout != "PASS gates=1 cached=0\n" || !closed {
+			t.Fatalf("err = %v, n = %d, stdout = %q, closed = %v", err, got, stdout, closed)
+		}
+	})
+
+	t.Run("a failed proof prints its tail and the error", func(t *testing.T) {
+		var closed bool
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+			VerifyCriterion: func(context.Context, int) (verify.Result, error) {
+				return verify.Result{Failed: true, Lines: []verify.Line{
+					{Gate: "criterion-2", Status: domain.StatusFail, Duration: time.Second, Tail: failedTail},
+				}}, nil
+			},
+		}, &closed))
+
+		stdout, err := run(t, cmd, "--criterion", "2")
+
+		want := "FAIL criterion-2 1s\n\ncriterion-2:\n" + failedTail + "\nFAIL gates=1 failed=1\n"
+		if !errors.Is(err, cli.ErrGatesFailed) || stdout != want {
+			t.Fatalf("err = %v, stdout = %q, want ErrGatesFailed and %q", err, stdout, want)
+		}
+	})
+
+	t.Run("the flag with --commits is a flag error before any connection", func(t *testing.T) {
+		var closed bool
+		cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{}, &closed))
+		root := &cobra.Command{Use: "harness"}
+		var flagErr error
+		root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { flagErr = err; return err })
+		root.AddCommand(cmd)
+
+		_, err := run(t, root, "verify", "--criterion", "2", "--commits", commitsBase)
+
+		if err == nil || flagErr == nil || closed {
+			t.Fatalf("err = %v, flag error = %v, closed = %v, want a flag error before any connection", err, flagErr, closed)
+		}
+	})
+}
+
+func TestVerifyOneCriterionRunsOneGate(t *testing.T) {
+	var closed bool
+	var calls []string
+	cmd := cli.NewVerifyCommand(connectWith(cli.Handlers{
+		Verify: func(context.Context) (verify.Result, error) {
+			calls = append(calls, "verify")
+			return verify.Result{}, nil
+		},
+		VerifyCommits: func(context.Context, string) (verifycommits.Result, error) {
+			calls = append(calls, "commits")
+			return verifycommits.Result{}, nil
+		},
+		VerifyCriterion: func(context.Context, int) (verify.Result, error) {
+			calls = append(calls, "criterion")
+			return verify.Result{Lines: []verify.Line{{Gate: "criterion-1", Status: domain.StatusCached}}}, nil
+		},
+	}, &closed))
+
+	stdout, err := run(t, cmd, "--criterion", "1")
+
+	if err != nil || len(calls) != 1 || calls[0] != "criterion" || stdout != "PASS gates=1 cached=1\n" {
+		t.Fatalf("err = %v, calls = %v, stdout = %q, want only the criterion handler", err, calls, stdout)
+	}
+}

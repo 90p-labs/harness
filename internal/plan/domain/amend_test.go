@@ -285,6 +285,30 @@ func TestIsTestPath(t *testing.T) {
 	}
 }
 
+func TestReproductionSurfaceAmend(t *testing.T) {
+	base := strings.Replace(amendBase, "Track: full\n", "Track: full\n"+CausePrefix+" "+CauseBug+"\n", 1)
+	sum := sha256.Sum256([]byte(base))
+	hash := hex.EncodeToString(sum[:])
+
+	if !StructureKeptAmend(base, hash, strings.Replace(base, "Fix the thing.", "Fix the other thing.", 1)) {
+		t.Fatal("an edit of the free text must pass")
+	}
+	if StructureKeptAmend(base, hash, strings.Replace(base, CausePrefix+" "+CauseBug+"\n", "", 1)) {
+		t.Fatal("an amend that drops the Cause line must need the approval")
+	}
+	if StructureKeptAmend(base, hash, strings.Replace(base, CausePrefix+" "+CauseBug+"\n", CausePrefix+" other\n", 1)) {
+		t.Fatal("an amend that changes the Cause line must need the approval")
+	}
+	if StructureKeptAmend(amendBase, sumOf(amendBase), strings.Replace(amendBase, "Track: full\n", "Track: full\n"+CausePrefix+" "+CauseBug+"\n", 1)) {
+		t.Fatal("an amend that adds the Cause line must need the approval")
+	}
+}
+
+func sumOf(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
+}
+
 func TestStructureKeptAmend(t *testing.T) {
 	sum := sha256.Sum256([]byte(amendBase))
 	hash := hex.EncodeToString(sum[:])

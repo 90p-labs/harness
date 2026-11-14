@@ -110,3 +110,34 @@ func TestConventionCandidates(t *testing.T) {
 		})
 	}
 }
+
+func TestNoSeamCandidate(t *testing.T) {
+	if domain.SourceNoSeam != "no-seam" {
+		t.Fatalf("SourceNoSeam = %q", domain.SourceNoSeam)
+	}
+	for name, tc := range map[string]struct {
+		reason string
+		want   domain.Candidate
+		ok     bool
+	}{
+		"a reason": {
+			reason: "the cache has no seam",
+			want:   domain.Candidate{Source: domain.SourceNoSeam, ID: "reproduction", Location: "plan.md", Text: "the cache has no seam"},
+			ok:     true,
+		},
+		"a reason with spaces around": {
+			reason: "  no seam  ",
+			want:   domain.Candidate{Source: domain.SourceNoSeam, ID: "reproduction", Location: "plan.md", Text: "no seam"},
+			ok:     true,
+		},
+		"no reason":    {reason: ""},
+		"blank reason": {reason: "   "},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, ok := domain.NoSeamCandidate(tc.reason)
+			if ok != tc.ok || got != tc.want {
+				t.Fatalf("got %+v, %v, want %+v, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}

@@ -32,6 +32,13 @@ type Handler struct {
 	log      domain.TransitionLog
 	findings domain.FindingsReader
 	tracer   trace.Tracer
+	noSeam   domain.NoSeamReader
+}
+
+// WithNoSeam sets the port that reads the missing-seam reason of a run.
+func (h Handler) WithNoSeam(noSeam domain.NoSeamReader) Handler {
+	h.noSeam = noSeam
+	return h
 }
 
 func NewHandler(repo domain.RunRepository, log domain.TransitionLog, findings domain.FindingsReader, tracer trace.Tracer) Handler {
@@ -66,9 +73,19 @@ func (h Handler) Handle(ctx context.Context, query Query) (result Learn, err err
 	if err != nil && !errors.Is(err, domain.ErrNoFindingsFile) {
 		return Learn{}, err
 	}
+	candidates := domain.ConventionCandidates(found, rows)
+	if h.noSeam != nil {
+		var reason string
+		if reason, err = h.noSeam.NoSeam(ctx, run); err != nil {
+			return Learn{}, err
+		}
+		if first, ok := domain.NoSeamCandidate(reason); ok {
+			candidates = append([]domain.Candidate{first}, candidates...)
+		}
+	}
 	return Learn{
 		ID:         run.ID,
-		Candidates: domain.ConventionCandidates(found, rows),
+		Candidates: candidates,
 		Evidence:   domain.ListRunEvidence(run, rows),
 	}, nil
 }

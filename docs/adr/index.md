@@ -28,3 +28,4 @@ One line per ADR. Read this first, then only the ADRs that the change touches.
 | [0022](0022-setup-recipes.md) | 0022 Setup recipes |
 | [0023](0023-served-control-panel.md) | 0023 The served control panel |
 | [0024](0024-learn-conventions-at-ship.md) | 0024 Learn conventions at ship |
+| [0025](0025-reproduce-a-bug-before-the-plan.md) | 0025 Reproduce a bug before the plan |

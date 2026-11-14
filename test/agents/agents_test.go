@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/90p-labs/harness/internal/plan/domain"
 	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
@@ -29,7 +30,7 @@ const (
 	binaryName         = "harness"
 	helpFlag           = "--help"
 	workerFixLine      = "For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test."
-	workerIntro        = "You implement one task of a plan, one fix or one self-check. The lead gives you the path of the harness binary, the path of `plan.md` and one input."
+	workerIntro        = "You implement one task of a plan, one fix, one self-check or one reproduction. The lead gives you the path of the harness binary, the path of `plan.md` and one input."
 	workerCheck        = "For a self-check, the lead gives the self-check brief of the harness skill."
 	workerTask         = "For a task, the lead gives the number of the task."
 	workerRead         = "For a fix, read the file of each finding, its test and the values that `plan.md` sets for them."
@@ -216,6 +217,37 @@ func TestAgentBriefsTestAntiPatterns(t *testing.T) {
 			if !strings.Contains(raw, want) {
 				t.Errorf("%s does not hold %q", path, want)
 			}
+		}
+	}
+}
+
+const verifyCriterionFlag = "--criterion"
+
+var (
+	bugExplorerSteps = []string{"For a bug report", "likely command", "seam", "no seam exists", "review risks, bug command and seam, threat model", "`" + domain.CausePrefix + " " + domain.CauseBug + "`"}
+	bugWorkerSteps   = []string{
+		"For a reproduction, the lead gives", "the command", "red tail", "hypotheses", "`harness verify " + verifyCriterionFlag + " <n>`",
+		"the reproduction file", "revert",
+		"Run the raw command until it fails for the reported reason", "never run `harness verify " + verifyCriterionFlag + " <n>`",
+		"The lead runs `harness verify " + verifyCriterionFlag + " <n>` after the lead writes `plan.md`", "`" + domain.ReproSymptom + "`", domain.ResultConfirmed, domain.ResultRefuted, domain.ResultUntested,
+	}
+)
+
+func TestBugPathAgents(t *testing.T) {
+	checkBrief(t, explorerFile, bugExplorerSteps)
+	checkBrief(t, workerFile, bugWorkerSteps)
+	// The worker brief names a flag that the binary must have.
+	out, err := exec.Command(harnessBinary(t), "verify", helpFlag).CombinedOutput()
+	if err != nil {
+		t.Fatalf("harness verify %s: %v\n%s", helpFlag, err, out)
+	}
+	if !strings.Contains(string(out), verifyCriterionFlag) {
+		t.Errorf("harness verify %s does not list %s, which %s names", helpFlag, verifyCriterionFlag, workerFile)
+	}
+	for _, path := range []string{explorerFile, workerFile} {
+		raw := repository.Read(t, path)
+		if strings.Contains(raw, repository.EmDash) {
+			t.Errorf("%s has an em dash", path)
 		}
 	}
 }

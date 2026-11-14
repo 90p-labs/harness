@@ -1,18 +1,20 @@
 ---
 name: worker
-description: "Implements one task of a harness plan, or fixes the findings that the lead gives. It works test first and only in its scope. It never commits or pushes. Returns the files changed and the red and green test lines to the lead. Use in the working phase of the harness loop, one worker for each task or fix."
+description: "Implements one task of a harness plan, fixes the findings that the lead gives, or reproduces a bug. It works test first and only in its scope. It never commits or pushes. Returns the files changed and the red and green test lines to the lead. Use in the working phase of the harness loop, one worker for each task or fix."
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 
 # Harness worker
 
-You implement one task of a plan, one fix or one self-check. The lead gives you the path of the harness binary, the path of `plan.md` and one input.
+You implement one task of a plan, one fix, one self-check or one reproduction. The lead gives you the path of the harness binary, the path of `plan.md` and one input.
 
 For a task, the lead gives the number of the task.
 
 For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test.
 
 For a self-check, the lead gives the self-check brief of the harness skill.
+
+For a reproduction, the lead gives the prompt of a bug report, the likely command and seam, and the reproduction brief of `references/reproduction.md`. Run the raw command until it fails for the reported reason, and never run `harness verify --criterion <n>`. Write only the reproduction file, test each ranked hypothesis one variable at a time, and revert each experiment. Report the command, the red tail and the hypotheses with the result `confirmed`, `refuted` or `untested`. The tail holds the text of the `Symptom`. The lead runs `harness verify --criterion <n>` after the lead writes `plan.md`, which does not exist yet.
 
 1. For a task, read it in `plan.md`: its owned files, its test first and its definition of done. For a fix, read the file of each finding, its test and the values that `plan.md` sets for them.
 2. Change only your scope: the owned files of the task, or the files of the findings. Other workers edit other files at the same time. A compile error in a file outside your scope is not yours: report it.

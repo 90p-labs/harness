@@ -1,15 +1,40 @@
 package domain
 
-import shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+import (
+	"context"
+	"strings"
+
+	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
+)
 
 type CandidateSource string
 
 const (
 	SourceStandards     CandidateSource = "standards"
 	SourceGateCheckable CandidateSource = "gate-checkable"
+	SourceNoSeam        CandidateSource = "no-seam"
 )
 
-const lensStandards = "standards"
+const (
+	lensStandards  = "standards"
+	noSeamID       = "reproduction"
+	noSeamLocation = "plan.md"
+)
+
+// NoSeamReader gives the reason that a run's plan records for a missing regression-test seam.
+// It returns an empty reason when the plan records none or when the run has no plan file.
+type NoSeamReader interface {
+	NoSeam(ctx context.Context, run Run) (string, error)
+}
+
+// NoSeamCandidate turns the reason of a missing seam into the first learn candidate. A blank reason gives none.
+func NoSeamCandidate(reason string) (Candidate, bool) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return Candidate{}, false
+	}
+	return Candidate{Source: SourceNoSeam, ID: noSeamID, Location: noSeamLocation, Text: reason}, true
+}
 
 type Candidate struct {
 	Source   CandidateSource

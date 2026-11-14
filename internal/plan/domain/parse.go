@@ -112,6 +112,9 @@ func (p *parser) line(line string, n int) {
 func (p *parser) heading(level int, text string, n int) {
 	p.doc.Headings = append(p.doc.Headings, Heading{Level: level, Text: text, Line: n})
 	if level == 2 {
+		if text == HeadingReproduction {
+			p.reproductionHeading(n)
+		}
 		p.section, p.sub, p.task = text, "", -1
 		return
 	}
@@ -141,6 +144,11 @@ func (p *parser) content(line string, n int) {
 		if v, ok := strings.CutPrefix(line, TrackPrefix); ok {
 			p.doc.Track = strings.ToLower(strings.TrimSpace(v))
 		}
+		if v, ok := strings.CutPrefix(line, CausePrefix); ok {
+			p.doc.Cause, p.doc.CauseLine = strings.ToLower(strings.TrimSpace(v)), n
+		}
+	case HeadingReproduction:
+		p.reproductionLine(line, n)
 	case HeadingCriteria:
 		p.row(&p.doc.CriteriaTable, line, n, RuleCriteriaTable, criteriaCells, p.addCriterion)
 	case HeadingSignals:

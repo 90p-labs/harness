@@ -49,10 +49,17 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - `bug`: the criterion states the intent, not the broken case. Report each bug to the user. The outcome is that the intent is kept and the bug is reported.
    - `accidental`: write no criterion. The outcome is that the behaviour is not kept.
    - `ambiguous`: ask all of them in one round of the question tool of the host, before you write `plan.md`. Follow `references/grill.md`. The outcome is the answer of the user, and this record replaces the grill form `<question>: <answer>`.
+   - A bug cause is one of three things. The first is a prompt that reports broken behaviour. The second is an item of the evidence baseline with the class `bug` that the run fixes. The third is a plan that will hold a `fix` commit.
+   - The plan of a bug cause carries the line `Cause: bug`. Read `references/reproduction.md`. The rule: no plan until one command fails for the reported reason.
+   - For a bug cause, start one `worker` agent with the `model` field set to the first model of the `worker` role. Give it the prompt, the likely command and seam of the explorer, the harness binary path and the brief of that reference.
+   - The reproduction worker runs the raw command, because no criterion gate exists before `plan.md`. It writes only the reproduction file, tests the ranked hypotheses and reverts each experiment. It reports the command, the red tail and the hypotheses.
 2. `planning`: on Claude, compare the session model with the model of the `lead` role in the `models:` line. When they differ, tell the user to run `/model` to switch, and continue: it is guidance, not a deny. Then write `plan.md` in the run folder. `harness plan --help` gives the format. Put each open decision under `## Open questions`, or `- none`. Write each diagram through `harness diagram`.
    - Run `harness plan check`. It prints an advisor line from the plan complexity, then one line for each wave of tasks. The wave lines print only for a clean single-run plan.
    - On `advisor: on, model <m>`, with or without the text `(light track, risky path)`, start the `advisor` agent, with the `model` field set to `<m>`, the model that the line names. It reads `plan.md` and the code that the plan touches. Fix `plan.md` for each finding that you accept.
    - On `advisor: off`, start no advisor. Decide each open point yourself and record each decision under `## Decisions` in `plan.md`.
+   - For a bug, write `Cause: bug` under `## Goal` and the section `## Reproduction` in `plan.md`. Give `Criterion` and `Symptom`, or `Human only` with a reason. Give `Regression test`, or `Regression test: none: <reason>`, and 3 to 5 ranked hypotheses.
+   - Then run `harness verify --criterion <n>` and see the proof fail with the symptom. Only then run `harness run plan`. The rule `reproduction-red` refuses a plan with no failed record for the current files.
+   - With `Human only`, no red check runs. Name it in the `Plan` question.
    - Then run `harness run plan`.
 3. `awaiting_approval`: show the plan. `harness run plan` wrote the page `plan.html` in the run folder, and it follows the run. The run opens the page in the browser on entering `awaiting_approval`. After each edit of `plan.md`, run `harness plan view` and ask the user to reload the page. Grill the open questions in rounds with the question tool of the host: `references/grill.md`. When `## Open questions` holds only `- none`, ask the `Plan` question with the options `Approve` (first) and `Change the plan`, then stop until the user answers.
    - When the run prints a `panel:` URL on stderr, open that URL in the host preview instead of a browser. The run opens no browser then.
@@ -103,6 +110,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
 5. `reviewing`: on entering `reviewing`, and after `harness run rework`, read `references/reviewing.md` and follow it.
 6. `shipping`: run `harness run learn` and follow `references/learning.md`, then start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body of that skill. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run wait --pr <url>`, then `harness run report`, then `harness run done --pr <url>`.
+   - A `no-seam` candidate comes first: the plan says that no seam exists for a regression test.
    - The turn may stop while the run waits on the merge. After a `resume` into `shipping`, run the wait again.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.

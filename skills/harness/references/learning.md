@@ -6,7 +6,7 @@ This step adapts the retro skill of Matt Pocock (MIT license): <https://github.c
 
 ## Candidates
 
-1. Run `harness run learn`. It lists a `candidate:` line for each real Standards finding and each real finding that a `gate-checkable` rework names. It also lists an `evidence:` line for each item of the run evidence.
+1. Run `harness run learn`. It lists a `candidate:` line for each real Standards finding and each real finding that a `gate-checkable` rework names. A plan line `Regression test: none: <reason>` gives the first line, with the source `no-seam`. It also lists an `evidence:` line for each item of the run evidence.
 2. Add each correction of the user from the session and from `handoff.md`. Give it the source `user`.
 3. Drop the rest. A Spec finding, a bug of another class and a one-off bug of the diff are not conventions.
 
@@ -21,6 +21,8 @@ Pick the first home that fits the rule.
 1. A lint rule in the project lint pack, when a tool can check the rule. Do not write it in this run. Print a follow-up `harness run start` prompt for the rule and its canary. The rule gets its own run and review.
 2. An ADR under `docs/adr/`, plus a row in `docs/adr/index.md`, for a decision.
 3. A `CONTEXT.md` entry, for a domain term or a convention.
+
+A `no-seam` candidate has its own home. Print a follow-up `harness run start` prompt that builds the seam. For a deliberate gap, write an ADR instead.
 
 ## No duplicate
 

@@ -55,6 +55,10 @@ A task that names a test also gives its seam in the `Test first` line, with the 
 
 A single-run plan has 6 tasks at most, and the rule `plan-size` checks it. Split a larger change into a multi-run plan. The template `skills/harness/references/plan-template.md` lists every plan check rule.
 
+A bug has its own path. The plan carries the line `Cause: bug` under `## Goal` and the section `## Reproduction`. A `worker` agent runs the raw command before the plan exists. The lead writes the section with a criterion, a symptom, a regression test and 3 to 5 ranked hypotheses. The rule `reproduction` checks the form.
+
+Then `harness verify --criterion <n>` runs only that proof and saves the evidence. The rule `reproduction-red` makes `harness run plan` refuse the plan until the proof failed on the current files and printed the symptom. When no seam exists for a regression test, write `Regression test: none: <reason>`. Then `harness run learn` lists a `no-seam` candidate.
+
 When no question is open, the agent asks the `Plan` question with the options `Approve` and `Change the plan`. On `Approve`, the `post-tool-use` hook records the approval for the hash of the current `plan.md`. A plain reply in the chat records nothing.
 
 ```console

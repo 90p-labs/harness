@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,7 +38,10 @@ import (
 
 const proofQuote = "`"
 
-var errPlanProblems = errors.New("the plan has problems, run harness plan check")
+var (
+	errPlanProblems = errors.New("the plan has problems, run harness plan check")
+	errNoCriterion  = errors.New("the plan has no criterion with a proof")
+)
 
 func newVerifyCommand(flags *pflag.FlagSet) *cobra.Command {
 	return gatecli.NewVerifyCommand(func(ctx context.Context) (gatecli.Handlers, func() error, error) {
@@ -77,6 +81,19 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 		Verify: func(ctx context.Context) (verify.Result, error) {
 			return verifier.Handle(ctx, verify.Command{
 				Repo: env.key.Repo, Dir: env.key.Worktree, Setup: setup, Gates: gates, Parallel: env.cfg.Verify.Parallel,
+			})
+		},
+		VerifyCriterion: func(ctx context.Context, number int) (verify.Result, error) {
+			criteria, err := activeCriteria(ctx, flags)
+			if err != nil {
+				return verify.Result{}, err
+			}
+			i := slices.IndexFunc(criteria, func(c criterionGate) bool { return c.number == number })
+			if i < 0 {
+				return verify.Result{}, fmt.Errorf("%w: %d", errNoCriterion, number)
+			}
+			return verifier.HandleConfigured(ctx, verify.Command{
+				Repo: env.key.Repo, Dir: env.key.Worktree, Setup: setup, Gates: []gatedomain.Gate{criteria[i].gate}, Parallel: 1,
 			})
 		},
 		VerifyCommits: func(ctx context.Context, base string) (verifycommits.Result, error) {
@@ -147,25 +164,60 @@ type proofAdapter struct {
 	key       domain.RunKey
 }
 
-func (p proofAdapter) Passed(ctx context.Context) (passed map[int]bool, err error) {
+// withEvidence reads the active criteria, opens the state and closes it after fn, joining the close error.
+func (p proofAdapter) withEvidence(ctx context.Context, fn func(criteria []criterionGate, status evidencestatus.Handler) error) (err error) {
 	criteria, err := activeCriteria(ctx, p.flags)
 	if err != nil {
-		return nil, err
-	}
-	gates := make([]gatedomain.Gate, len(criteria))
-	for i, c := range criteria {
-		gates[i] = c.gate
+		return err
 	}
 	db, err := openState(ctx, p.cfg, p.commonDir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { err = errors.Join(err, db.Close()) }()
-	statuses, err := gatemodule.NewEvidenceStatus(db).Handle(ctx, evidencestatus.Query{Repo: p.key.Repo, Dir: p.key.Worktree, Gates: gates})
+	return fn(criteria, gatemodule.NewEvidenceStatus(db))
+}
+
+func (p proofAdapter) Passed(ctx context.Context) (map[int]bool, error) {
+	var passed map[int]bool
+	err := p.withEvidence(ctx, func(criteria []criterionGate, status evidencestatus.Handler) error {
+		gates := make([]gatedomain.Gate, len(criteria))
+		for i, c := range criteria {
+			gates[i] = c.gate
+		}
+		statuses, err := status.Handle(ctx, evidencestatus.Query{Repo: p.key.Repo, Dir: p.key.Worktree, Gates: gates})
+		if err != nil {
+			return err
+		}
+		passed = proofResults(criteria, statuses)
+		return nil
+	})
+	return passed, err
+}
+
+// Reproduction gives the record of the proof of one criterion for the current files.
+func (p proofAdapter) Reproduction(ctx context.Context, criterion int) (plandomain.ReproductionRecord, bool, error) {
+	var record plandomain.ReproductionRecord
+	found := false
+	err := p.withEvidence(ctx, func(criteria []criterionGate, status evidencestatus.Handler) error {
+		i := slices.IndexFunc(criteria, func(c criterionGate) bool { return c.number == criterion })
+		if i < 0 {
+			return nil
+		}
+		gate := criteria[i].gate
+		records, err := status.Records(ctx, evidencestatus.Query{Repo: p.key.Repo, Dir: p.key.Worktree, Gates: []gatedomain.Gate{gate}})
+		if err != nil {
+			return err
+		}
+		if kept, ok := records[gate.ID]; ok {
+			record, found = plandomain.ReproductionRecord{Passed: kept.Result == gatedomain.ResultPass, Tail: kept.Tail}, true
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, err
+		return plandomain.ReproductionRecord{}, false, err
 	}
-	return proofResults(criteria, statuses), nil
+	return record, found, nil
 }
 
 // proofResults leaves out a criterion with no evidence for this tree, so the plan shows it as not run.

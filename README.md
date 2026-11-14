@@ -121,7 +121,7 @@ A healthy hour closes the run. A breach sends the run back to `planning` with th
 | `harness run status`, `harness run report`, `harness run learn` | Print the phase, the rework rounds, the stop blocks and the trace ID, or the convention candidates and the run evidence |
 | `harness plan view` | Write the plan as an HTML page |
 | `harness verify` | Run the gates and the acceptance criteria |
-| `harness verify --commits main` | Check each commit of the branch |
+| `harness verify --commits main`, `harness verify --criterion 2` | Check each commit of the branch, or run only the proof of criterion 2 |
 | `harness pr body`, `harness pr check --body-file <path>`, `harness pr policy` | Print a PR body skeleton, every problem of a PR body, or the draft and merge policy |
 | `harness lint`, `harness config` | Run the lint packs, or print the effective config |
 | `/90p:report` | File a bug about the harness |

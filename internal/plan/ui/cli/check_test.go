@@ -23,7 +23,7 @@ const (
 	flagFile   = "--file"
 	subCommand = "check"
 
-	maxHelpLines = 45
+	maxHelpLines = 48
 )
 
 var errDefault = errors.New("no default plan")
@@ -87,6 +87,24 @@ func TestPlanHelpSeam(t *testing.T) {
 		t.Fatalf("help: %v", err)
 	}
 	for _, w := range []string{domain.FormSeam, string(domain.RuleSeamMissing)} {
+		if !strings.Contains(out, w) {
+			t.Errorf("help does not hold %q", w)
+		}
+	}
+}
+
+func TestReproductionSurfaceHelp(t *testing.T) {
+	var closed bool
+
+	out, err := execute(t, connect(nil, &closed), "--help")
+
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	for _, w := range []string{
+		domain.CausePrefix + " " + domain.CauseBug, "## " + domain.HeadingReproduction, string(domain.RuleReproduction), string(domain.RuleReproductionRed),
+		domain.ReproCriterion, domain.ReproSymptom, domain.ReproHumanOnly, domain.ReproRegression, domain.FormHypothesis,
+	} {
 		if !strings.Contains(out, w) {
 			t.Errorf("help does not hold %q", w)
 		}

@@ -203,3 +203,60 @@ func TestLearnHandler(t *testing.T) {
 		}
 	})
 }
+
+type fakeNoSeam struct {
+	reason string
+	err    error
+}
+
+func (f fakeNoSeam) NoSeam(context.Context, domain.Run) (string, error) {
+	return f.reason, f.err
+}
+
+func TestNoSeamLearn(t *testing.T) {
+	standards := shareddomain.ReviewFinding{ID: "S1", Verdict: shareddomain.FindingReal, Lens: "standards", Location: "a.go:3", Text: "name the constant"}
+	noSeam := domain.Candidate{Source: domain.SourceNoSeam, ID: "reproduction", Location: "plan.md", Text: "the cache has no seam"}
+
+	t.Run("the no-seam candidate comes first", func(t *testing.T) {
+		handler, _ := newHandler(fakeFindings{findings: []shareddomain.ReviewFinding{standards}}, fakeLog{})
+
+		got, err := handler.WithNoSeam(fakeNoSeam{reason: "the cache has no seam"}).Handle(context.Background(), learn.Query{Key: key})
+
+		want := []domain.Candidate{noSeam, {Source: domain.SourceStandards, ID: "S1", Location: "a.go:3", Text: "name the constant"}}
+		if err != nil || !reflect.DeepEqual(got.Candidates, want) {
+			t.Fatalf("got %+v, %v, want %+v", got.Candidates, err, want)
+		}
+	})
+
+	t.Run("no reason gives no candidate", func(t *testing.T) {
+		handler, _ := newHandler(fakeFindings{}, fakeLog{})
+
+		got, err := handler.WithNoSeam(fakeNoSeam{}).Handle(context.Background(), learn.Query{Key: key})
+
+		if err != nil || len(got.Candidates) != 0 {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	})
+
+	t.Run("a port error is returned and recorded on the span", func(t *testing.T) {
+		boom := errors.New("plan.md: permission denied")
+		handler, recorder := newHandler(fakeFindings{}, fakeLog{})
+
+		_, err := handler.WithNoSeam(fakeNoSeam{err: boom}).Handle(context.Background(), learn.Query{Key: key})
+
+		spans := recorder.Ended()
+		if !errors.Is(err, boom) || len(spans) != 1 || spans[0].Status().Code != codes.Error {
+			t.Fatalf("err = %v, spans = %+v", err, spans)
+		}
+	})
+
+	t.Run("a handler with no port gives no candidate", func(t *testing.T) {
+		handler, _ := newHandler(fakeFindings{}, fakeLog{})
+
+		got, err := handler.Handle(context.Background(), learn.Query{Key: key})
+
+		if err != nil || len(got.Candidates) != 0 {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	})
+}

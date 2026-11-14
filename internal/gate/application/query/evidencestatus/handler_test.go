@@ -161,3 +161,30 @@ func TestEvidenceStatusErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyOneCriterionEvidenceTail(t *testing.T) {
+	tracer := sdktrace.NewTracerProvider().Tracer("test")
+	failTail := "--- FAIL: TestLogin\nwant 1, got 2"
+	records := fakeEvidence{records: map[string]domain.Evidence{
+		testGate + "@tree-go-test-": {Result: domain.ResultPass, Tail: "ok"},
+		lintGate + "@tree-lint-src": {Result: domain.ResultFail, Tail: failTail},
+	}}
+	hasher := &fakeHasher{}
+	handler := evidencestatus.NewHandler(hasher, records, tracer)
+
+	got, err := handler.Records(context.Background(), evidencestatus.Query{Repo: repo, Dir: workDir, Gates: threeGates()})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]evidencestatus.Record{
+		testGate: {Result: domain.ResultPass, Tail: "ok"},
+		lintGate: {Result: domain.ResultFail, Tail: failTail},
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("records = %v, want %v", got, want)
+	}
+	if hasher.calls != 1 {
+		t.Fatalf("InputHashes calls = %d, want 1", hasher.calls)
+	}
+}

@@ -24,4 +24,6 @@ const (
 	RulePlanSize         RuleID = "plan-size"
 	RuleCommitSplit      RuleID = "commit-split"
 	RuleSeamMissing      RuleID = "seam-missing"
+	RuleReproduction     RuleID = "reproduction"
+	RuleReproductionRed  RuleID = "reproduction-red"
 )

@@ -206,8 +206,33 @@ func openRun(ctx context.Context, env environment) (cli.Handlers, *dbal.DB, erro
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
-	gate := planGate{submit: planmodule.NewModule(env.bus, env.key.Worktree, env.proofs, env.defaultBranch).Submit, worktree: env.key.Worktree}
-	return runmodule.NewModule(db, env.bus, gate, env.cfg.Run, env.key, time.Now), db, nil
+	gate := planGate{submit: planmodule.NewModule(env.bus, env.key.Worktree, env.proofs, env.defaultBranch).Submit.WithReproduction(env.proofs), worktree: env.key.Worktree}
+	handlers := runmodule.NewModule(db, env.bus, gate, env.cfg.Run, env.key, time.Now)
+	handlers.Learn = handlers.Learn.WithNoSeam(noSeamAdapter{})
+	return handlers, db, nil
+}
+
+var _ domain.NoSeamReader = noSeamAdapter{}
+
+// noSeamAdapter reads the missing-seam reason from the plan of a run, so the run context never imports the plan context.
+type noSeamAdapter struct{}
+
+// NoSeam returns the reason of `- Regression test: none: <reason>` in a bug plan, or "" when the plan records none.
+// The plan is in the worktree of the run, which is not always the current one.
+func (noSeamAdapter) NoSeam(_ context.Context, run domain.Run) (string, error) {
+	content, err := os.ReadFile(planPath(run.Key.Worktree, run.ID))
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	doc, _ := plandomain.Parse(string(content))
+	if doc.Cause != plandomain.CauseBug {
+		return "", nil
+	}
+	reason, _ := doc.Reproduction.NoSeamReason()
+	return reason, nil
 }
 
 type planGate struct {

@@ -113,6 +113,8 @@ A hook cannot see model time or a server tool call. A gap between hook spans sit
 
 `harness run learn [<run id>]` prints the convention candidates of the run, one `candidate:` line for each. A candidate is a real Standards finding, or a real finding that a `gate-checkable` rework names. Then it prints one `evidence:` line for each rework and each block, in log order, with the IDs `rework-<n>` and `block-<n>`. The `amends` and `stop-blocks` lines come last, and each one appears only when its count is above 0. A `next:` line ends the output. The command is read-only.
 
+A bug plan with the line `Regression test: none: <reason>` adds a first candidate with the source `no-seam`.
+
 To count the denies, the reworks, the amends, the stop blocks and the tool outcomes, read the trace from Jaeger. Use the jq program `docs/audit-trace.jq`:
 
 ```sh
@@ -412,6 +414,8 @@ The checks of `harness verify`. A gate passes on exit code 0. `harness verify --
 | `timeout` | duration | `10m` | none | The longest run. `0` gives `10m`. A negative value is an error |
 | `baseline` | path | empty | none | A findings report. The gate fails only on a finding that is not in this file. The `lint` gate uses `.harness-lint/baseline.json` |
 | `needs` | list of gate ids | empty | none | The gate starts only when each need is `PASS` or `CACHED`. Else it is `SKIPPED`. A need on itself or on an unknown id is an error |
+
+`harness verify --criterion <n>` runs the setup steps and only the proof of plan criterion `n`, with no configured gate. It saves the evidence like `harness verify`. A number with no criterion is an error. The flag cannot go with `--commits`.
 
 `harness gates init` detects the gates of the toolchain and writes this key. It refuses to change a `gates` key that holds a gate.
 

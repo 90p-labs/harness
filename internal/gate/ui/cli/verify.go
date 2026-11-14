@@ -18,6 +18,7 @@ import (
 const (
 	commandVerify = "verify"
 	flagCommits   = "commits"
+	flagCriterion = "criterion"
 
 	lineFormat        = "%s %s %s\n"
 	skipFormat        = "%s %s needs %s\n"
@@ -33,12 +34,16 @@ const (
 	shortSHALength    = 12
 )
 
-var ErrGatesFailed = errors.New("gates failed")
+var (
+	ErrGatesFailed          = errors.New("gates failed")
+	errCriterionWithCommits = errors.New("--criterion and --commits cannot be used together")
+)
 
 type Handlers struct {
-	Verify        func(ctx context.Context) (verify.Result, error)
-	VerifyCommits func(ctx context.Context, base string) (verifycommits.Result, error)
-	Init          func(ctx context.Context) (initgates.Result, error)
+	Verify          func(ctx context.Context) (verify.Result, error)
+	VerifyCriterion func(ctx context.Context, number int) (verify.Result, error)
+	VerifyCommits   func(ctx context.Context, base string) (verifycommits.Result, error)
+	Init            func(ctx context.Context) (initgates.Result, error)
 }
 
 type Connect func(ctx context.Context) (Handlers, func() error, error)
@@ -50,8 +55,16 @@ func NewVerifyCommand(connect Connect) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			base, _ := cmd.Flags().GetString(flagCommits)
+			criterion := cmd.Flags().Changed(flagCriterion)
+			if criterion && base != "" {
+				return cmd.FlagErrorFunc()(cmd, errCriterionWithCommits)
+			}
+			number, _ := cmd.Flags().GetInt(flagCriterion)
 			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
-				if base != "" {
+				switch {
+				case criterion:
+					return printGates(cmd.OutOrStdout(), func() (verify.Result, error) { return h.VerifyCriterion(ctx, number) })
+				case base != "":
 					return verifyCommits(ctx, cmd.OutOrStdout(), h, base)
 				}
 				return verifyGates(ctx, cmd.OutOrStdout(), h)
@@ -59,11 +72,16 @@ func NewVerifyCommand(connect Connect) *cobra.Command {
 		},
 	}
 	cmd.Flags().String(flagCommits, "", "check each commit from the merge base of BASE, or of origin/BASE when newer, to HEAD")
+	cmd.Flags().Int(flagCriterion, 0, "run only the proof of plan criterion N, with no configured gate")
 	return cmd
 }
 
 func verifyGates(ctx context.Context, out io.Writer, h Handlers) error {
-	result, err := h.Verify(ctx)
+	return printGates(out, func() (verify.Result, error) { return h.Verify(ctx) })
+}
+
+func printGates(out io.Writer, verifyFn func() (verify.Result, error)) error {
+	result, err := verifyFn()
 	if err != nil {
 		return err
 	}
