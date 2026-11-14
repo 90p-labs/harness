@@ -32,6 +32,7 @@ These terms have one meaning in the code, the docs and the plans.
 - **Evidence baseline**: the table of existing behaviour that the explorer builds when a change modifies, replaces or removes behaviour that is not fully pinned. Each item has one class: `intended`, `bug`, `accidental` or `ambiguous`. Otherwise the explorer writes the line `baseline: not needed`. It differs from the lint baseline of `harness lint baseline`.
 - **Run evidence**: the stored signs of what slowed a run. They are each review rework, each move to the phase `blocked`, the count of amends and the count of stops that the guard denied. `harness run learn` prints each one as an `evidence:` line. A count of 0 prints no line.
 - **Lesson**: a change of the agent environment that cites run evidence and has a home. A lesson with no evidence is dropped.
+- **Follow-up**: the `harness run start` prompt that the learn step prints for a lesson, a lint rule or a missing seam. Its entry in `docs/follow-ups.md` keeps it, with one `Cited by` line for each run that met the cause.
 - **Reproduction**: the section `## Reproduction` of a bug plan, marked by the line `Cause: bug`. It names one `Criterion` whose proof fails for the reported `Symptom`, or says `Human only`. It holds a `Regression test` and 3 to 5 ranked hypotheses. `harness run plan` refuses the plan until that proof failed on the current files.
 - **Threat model**: the section that names the attacker, the input forms and the fail-closed rule. A tree path with a `guard` or `security` folder needs it.
 

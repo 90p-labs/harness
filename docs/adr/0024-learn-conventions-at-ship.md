@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-13. It adds the `harness run learn` command and the `run.learn` span. It adds no phase and no event, so the state machine and the plugin events do not change. The amendment below adds the run evidence and the lessons.
+Accepted, 2026-11-13. It adds the `harness run learn` command and the `run.learn` span. It adds no phase and no event, so the state machine and the plugin events do not change. The amendment below adds the run evidence and the lessons. A second amendment adds the lesson trace: the follow-up entries of `docs/follow-ups.md` and the draft for the `report` skill.
 
 ## Context
 
@@ -66,3 +66,25 @@ The step asked which rule the code broke. It did not ask what slowed the agent d
 - The `Conventions` question keeps its header and options. It lists the lessons after the conventions, so one round covers both.
 - The step takes the idea from the retro skill of Matt Pocock (MIT license), at commit `5863806`. The text here is new.
 - The step leaves out two source categories. Coding standards is covered by decisions 3 and 6, and global agent files are covered by No-ops.
+
+## Amendment 2026-11-14, lesson trace
+
+A replay on 6 past runs found two runs with one follow-up prompt that nobody started. The prompt was printed once and then lost. The lesson for the harness plugin had the same loss, in one line of the last message.
+
+- Each follow-up prompt gets an entry in `docs/follow-ups.md`. The lint rule prompt of a convention gets one too, because it is the same printed prompt. The `no-seam` prompt of ADR 0025 gets an entry too.
+- An entry holds the cause in a heading, then a `Category` line, a `Cited by` line and a `Prompt` line.
+- A `Cited by` line holds the run id and one evidence ID or `file:line`, each in a code span. One line stands for one run.
+- On a repeat, the lead adds one `Cited by` line to the entry and writes no second entry. The count of lines shows the repeat.
+- The prompt asks the follow-up run to remove the entry. The file then lists only open follow-ups, and the git history keeps the closed ones.
+- The home is a file and not an issue. A file costs no network call and no login, and it works on any host.
+- The entry lands in the `docs:` commit, so the review of the run covers it. An issue is public before any review.
+- Known cost: the entry reaches the next run only after the merge. A run that started earlier sees it after its rebase.
+- Known cost: two runs that add an entry in parallel conflict at the rebase. The lead merges two entries of one cause there.
+- The no-duplicate search of decision 7 also reads the open causes of `docs/follow-ups.md`. One call for the whole step lists them, and the lead compares by cause.
+- This amendment replaces the last home of the first amendment. A lesson about the harness plugin becomes a draft for the `report` skill, and the confirmation of that skill decides the filing.
+- A plugin lesson is not in the `Conventions` question. Its draft changes no file of the repository, and the `report` skill asks its own question.
+- The lead keeps the draft before the `Conventions` question, as `report-<n>.md` in the run folder, and names it in `handoff.md`. It asks for the confirmation after `harness run wait --pr <url>`, because the stop rule allows a stop in `shipping` only when the run holds a pull request URL.
+- Unattended means that the user told the lead to ask nothing, or that the session has no user. The draft then stays in the run folder, and the last message lists its path.
+- A repeat of a plugin lesson becomes a comment on its issue, kept and confirmed like a report draft.
+- Git ignores `.harness/`, so the draft ends with the worktree. The last message and `handoff.md` give its path before that.
+- This amendment extends decisions 6 and 7. It replaces no numbered decision.

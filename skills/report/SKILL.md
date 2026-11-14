@@ -16,6 +16,11 @@ Is the problem in the harness?
 └── no: the problem is in the user repository or the host → tell the user, and stop
 ```
 
+```
+Is it a lesson of the learn step about the plugin?
+└── yes: continue, and read "From the learn step"
+```
+
 ## 1. Reproduce the bug
 
 1. Make an empty folder in the scratchpad, or in the temp dir on a host with none. Run `git init` in it.
@@ -23,7 +28,7 @@ Is the problem in the harness?
 3. Run the harness commands that show the bug. Feed a hook its payload on stdin, for example `harness hook --host claude pre-tool-use < payload.json`.
 4. Keep the exact commands, the output and the exit code (`echo $?`).
 
-If the bug does not show in the clean folder, find the missing part of the setup first. Do not file a bug that you cannot reproduce.
+If the bug does not show in the clean folder, find the missing part of the setup first. Do not file a bug that you cannot reproduce. One exception: a lesson of the learn step, in "From the learn step".
 
 ## 2. Collect the traces
 
@@ -35,7 +40,7 @@ Do not read `.env` files, keys or credentials.
 
 ## 3. Look for a duplicate
 
-Run `gh issue list -R 90p-labs/harness --state all --search "<two or three keywords>"`. On a match, show it to the user. Offer a comment on it (`gh issue comment <n> -R 90p-labs/harness --body-file <file>`) instead of a new issue. A comment is public too: show its text and wait for a yes before you post it.
+Run `gh issue list -R 90p-labs/harness --state all --search "<two or three keywords>"`. On a match, show it to the user. Offer a comment on it (`gh issue comment <n> -R 90p-labs/harness --body-file <file>`) instead of a new issue. A comment is public too: show its text and wait for a yes before you post it. During the learn step, read "From the learn step".
 
 ## 4. Write the draft
 
@@ -67,3 +72,22 @@ harness report --title "<title>" --body-file <draft>
 ```
 
 It files the issue with the label `bug` and prints its URL. Delete the draft file. Report the URL to the user in one line. Do not block or change an active run for the report.
+
+## From the learn step
+
+The learn step sends a lesson about the plugin to this skill. The argument holds the lesson and its evidence.
+
+- When a clean folder cannot show the lesson, the draft gives the commands and the evidence of the run. It says so.
+- After the dry run of step 5, the lead keeps the draft as `report-<n>.md` in the run folder. The number `<n>` counts the drafts of the run from 1.
+- After the filing, the lead deletes both copies of the draft: the file in the scratchpad and the one in the run folder.
+- During the learn step, the lead does not stop the turn at step 5, with a user or without one.
+- With a user, the confirmation of step 5 comes after `harness run wait --pr <url>`.
+- Unattended, the lead asks nothing. It gives the path of the draft in its last message.
+- The kept file holds only the body. The lead writes the title of the draft next to its path in `handoff.md`, and a later `/90p:report` with the path uses that title.
+- A later `/90p:report` with the path of the draft continues at step 5. With a comment draft, it continues at the yes for the comment.
+- A match at step 3 makes the draft a comment for that issue, not a new issue. The lead does not stop the turn at step 3 during the learn step.
+- The comment draft holds the number of the issue, the lesson, its evidence and the run id. The lead then skips steps 4 to 6.
+- A comment has no dry run, so nothing redacts it. The lead writes no home path, email or secret in it.
+- The lead keeps the comment draft as `report-<n>.md` in the run folder, like a report draft.
+- The yes for the comment takes the place of the confirmation of step 5, at the same moment. With a user, it comes after `harness run wait --pr <url>`. Unattended, the lead asks nothing and gives the path in its last message.
+- After the yes, the lead posts the comment with the `gh issue comment` command of step 3. Then it deletes each copy of the draft.
