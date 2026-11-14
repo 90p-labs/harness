@@ -20,6 +20,16 @@ Check the diff against `plan.md`.
 2. Check that each task changed only its owned files, and that each test came before its code.
 3. Look for a missing or partial requirement and for scope creep.
 4. Quote the line of `plan.md` for each finding.
+5. Check each new or changed test against the seam of its task in `plan.md` and against `## Test anti-patterns`. Each breach is a finding, and the finding names the anti-pattern. For `horizontal slicing`, `git log --stat` shows it only across commits, for example a commit that holds only the tests of several tasks, ahead of their code. Inside one commit the order does not show, so report it only with that evidence.
+
+## Test anti-patterns
+
+A test goes through the seam of its task. Report these three, and the breach of the mock rule.
+
+- `tautological`: the test computes the expected value the way the code computes it, so the test cannot fail.
+- `implementation-coupled`: the test mocks an internal part, or checks the result through a side channel in place of the seam.
+- `horizontal slicing`: all the tests come first and all the code comes after, in place of one behaviour at a time.
+- Mock only at a system boundary: a network service, the clock, randomness, and sometimes a database or the file system.
 
 ## Lens Standards
 

@@ -12,34 +12,39 @@ import (
 )
 
 const (
-	advisorFile     = "agents/advisor.md"
-	workerFile      = "agents/worker.md"
-	agentDocs       = "agents/*.md"
-	reviewerAgent   = "agents/reviewer.md"
-	verifierAgent   = "agents/verifier.md"
-	findingLine     = "`<id> | <severity> | <file>:<line> | <defect and failure scenario> | <observed or inferred> | <proof>`"
-	verifierLine    = "`<id> | real or not real | <severity> | <reason>`"
-	filesReadLine   = "Files read:"
-	reReviewTitle   = "## Re-review"
-	standardsRule   = "does not report a rule that a gate checks"
-	reviewAnswer    = "Answer `closed` or `open`, to say whether its fixup fixes it."
-	explorerFile    = "agents/explorer.md"
-	templateName    = "references/plan-template.md"
-	templateRoot    = "skills/harness/"
-	binaryName      = "harness"
-	helpFlag        = "--help"
-	workerFixLine   = "For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test."
-	workerIntro     = "You implement one task of a plan, one fix or one self-check. The lead gives you the path of the harness binary, the path of `plan.md` and one input."
-	workerCheck     = "For a self-check, the lead gives the self-check brief of the harness skill."
-	workerTask      = "For a task, the lead gives the number of the task."
-	workerRead      = "For a fix, read the file of each finding, its test and the values that `plan.md` sets for them."
-	baselineTrigger = "modifies, replaces or removes existing behaviour"
-	baselineSkip    = "`baseline: not needed: <one-line reason>`"
-	classIntended   = "`intended`"
-	classBug        = "`bug`"
-	classAccidental = "`accidental`"
-	classAmbiguous  = "`ambiguous`"
-	workerPlan      = "Keep each value, name and limit that `plan.md` sets. When your change needs another one, skip that change, name the conflict in the report and end with `ISSUES`. In a self-check, write the conflict as `open` in `self-check.md`, with `plan conflict:` in the evidence."
+	advisorFile      = "agents/advisor.md"
+	workerFile       = "agents/worker.md"
+	agentDocs        = "agents/*.md"
+	reviewerAgent    = "agents/reviewer.md"
+	verifierAgent    = "agents/verifier.md"
+	findingLine      = "`<id> | <severity> | <file>:<line> | <defect and failure scenario> | <observed or inferred> | <proof>`"
+	verifierLine     = "`<id> | real or not real | <severity> | <reason>`"
+	filesReadLine    = "Files read:"
+	reReviewTitle    = "## Re-review"
+	standardsRule    = "does not report a rule that a gate checks"
+	reviewAnswer     = "Answer `closed` or `open`, to say whether its fixup fixes it."
+	explorerFile     = "agents/explorer.md"
+	templateName     = "references/plan-template.md"
+	templateRoot     = "skills/harness/"
+	binaryName       = "harness"
+	helpFlag         = "--help"
+	workerFixLine    = "For a fix, the lead gives finding lines in place of a task. Your scope is the file of each finding and its test."
+	workerIntro      = "You implement one task of a plan, one fix or one self-check. The lead gives you the path of the harness binary, the path of `plan.md` and one input."
+	workerCheck      = "For a self-check, the lead gives the self-check brief of the harness skill."
+	workerTask       = "For a task, the lead gives the number of the task."
+	workerRead       = "For a fix, read the file of each finding, its test and the values that `plan.md` sets for them."
+	baselineTrigger  = "modifies, replaces or removes existing behaviour"
+	baselineSkip     = "`baseline: not needed: <one-line reason>`"
+	classIntended    = "`intended`"
+	classBug         = "`bug`"
+	classAccidental  = "`accidental`"
+	classAmbiguous   = "`ambiguous`"
+	tautologicalLine = "`tautological`: the test computes the expected value the way the code computes it, so the test cannot fail."
+	coupledLine      = "`implementation-coupled`: the test mocks an internal part, or checks the result through a side channel in place of the seam."
+	horizontalLine   = "`horizontal slicing`: all the tests come first and all the code comes after, in place of one behaviour at a time."
+	mockRuleLine     = "Mock only at a system boundary: a network service, the clock, randomness, and sometimes a database or the file system."
+	seamWord         = "seam"
+	workerPlan       = "Keep each value, name and limit that `plan.md` sets. When your change needs another one, skip that change, name the conflict in the report and end with `ISSUES`. In a self-check, write the conflict as `open` in `self-check.md`, with `plan conflict:` in the evidence."
 )
 
 var (
@@ -182,6 +187,18 @@ func TestAgentBriefsPinReviewRound(t *testing.T) {
 	} {
 		raw := repository.Read(t, path)
 		for _, want := range wants {
+			if !strings.Contains(raw, want) {
+				t.Errorf("%s does not hold %q", path, want)
+			}
+		}
+	}
+}
+
+func TestAgentBriefsTestAntiPatterns(t *testing.T) {
+	lines := []string{tautologicalLine, coupledLine, horizontalLine, mockRuleLine, seamWord}
+	for _, path := range []string{workerFile, reviewerAgent} {
+		raw := repository.Read(t, path)
+		for _, want := range lines {
 			if !strings.Contains(raw, want) {
 				t.Errorf("%s does not hold %q", path, want)
 			}
