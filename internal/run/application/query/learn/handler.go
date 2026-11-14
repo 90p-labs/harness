@@ -24,6 +24,7 @@ type Query struct {
 type Learn struct {
 	ID         string
 	Candidates []domain.Candidate
+	Evidence   []domain.RunEvidence
 }
 
 type Handler struct {
@@ -65,5 +66,9 @@ func (h Handler) Handle(ctx context.Context, query Query) (result Learn, err err
 	if err != nil && !errors.Is(err, domain.ErrNoFindingsFile) {
 		return Learn{}, err
 	}
-	return Learn{ID: run.ID, Candidates: domain.ConventionCandidates(found, rows)}, nil
+	return Learn{
+		ID:         run.ID,
+		Candidates: domain.ConventionCandidates(found, rows),
+		Evidence:   domain.ListRunEvidence(run, rows),
+	}, nil
 }
