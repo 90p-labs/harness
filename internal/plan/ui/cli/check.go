@@ -67,6 +67,8 @@ func planHelp() string {
 		fmt.Sprintf("## %s ends with %d level-3 headings in this order: %s.", domain.HeadingSpecs, len(domain.FinalHeadings), strings.Join(domain.FinalHeadings, ", ")),
 		fmt.Sprintf("Each other level-3 heading there needs a %s line with %s. Each criterion is in one of them.", domain.CriteriaKey, domain.FormSpecCriteria),
 		fmt.Sprintf("## %s: an optional line `%s %s` or `%s %s`.", domain.HeadingGoal, domain.TrackPrefix, shareddomain.TrackLight, domain.TrackPrefix, shareddomain.TrackFull),
+		fmt.Sprintf("## %s: a bug plan has the line `%s %s`. A `fix` commit needs it too (rule %s).", domain.HeadingGoal, domain.CausePrefix, domain.CauseBug, domain.RuleReproduction),
+		fmt.Sprintf("## %s goes with that line. Bullets: `- %s: n` and `- %s: `text``, or `- %s: reason`, then `- %s: `TestName`` or `- %s: none: reason`. Then 3 to 5 lines `%s`, with the result confirmed, refuted or untested.", domain.HeadingReproduction, domain.ReproCriterion, domain.ReproSymptom, domain.ReproHumanOnly, domain.ReproRegression, domain.ReproRegression, domain.FormHypothesis),
 		fmt.Sprintf("## %s: the table header is `%s`, numbered from 1. A proof is one command in backticks, with no placeholder.", domain.HeadingCriteria, criteriaHeader),
 		fmt.Sprintf("Task: the heading `### %s`, then one bullet `- Field: value` for each of: %s.", domain.FormTaskHeading, strings.Join(domain.TaskFields, ", ")),
 		fmt.Sprintf("%s is one of: %s. %s lists paths in backticks; a folder ends in /.", domain.FieldSide, strings.Join(domain.TaskSides, ", "), domain.FieldOwned),

@@ -87,6 +87,7 @@ func Check(doc Document, in CheckInput) []Problem {
 	checkReviewRisks(doc, add)
 	checkThreatModel(doc, add)
 	checkPlanSize(doc, add)
+	checkReproduction(doc, add)
 	SortProblems(problems)
 	return problems
 }
@@ -282,7 +283,7 @@ func checkCommitSplit(doc Document, add report) {
 			tests = append(tests, c)
 		case CommitTypeDocs:
 			hasDocs = true
-		case "feat", "fix":
+		case "feat", CommitTypeFix:
 			hasCode = true
 		}
 	}

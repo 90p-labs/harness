@@ -8,6 +8,7 @@ import (
 const (
 	OpenQuestionsNone = "none"
 	CommitTypeDocs    = "docs"
+	CommitTypeFix     = "fix"
 )
 
 const (
@@ -20,6 +21,7 @@ const (
 	HeadingThreatModel   = "Threat model"
 	HeadingSignals       = "Signals"
 	HeadingRegression    = "Regression impact"
+	HeadingReproduction  = "Reproduction"
 	HeadingSpecs         = "Tech specs"
 	HeadingCodeTree      = "Final code tree"
 	HeadingTestTree      = "Final test tree"
@@ -53,6 +55,9 @@ const (
 type Document struct {
 	Lines         []string
 	Track         string
+	Cause         string
+	CauseLine     int
+	Reproduction  Reproduction
 	Headings      []Heading
 	CriteriaTable Table
 	Criteria      []Criterion

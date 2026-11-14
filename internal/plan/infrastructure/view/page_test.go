@@ -378,6 +378,20 @@ func TestPageReviewRisks(t *testing.T) {
 	}
 }
 
+func TestReproductionSurfacePage(t *testing.T) {
+	in := baseInput(t)
+	doc, _ := domain.Parse(strings.Replace(viewPlan, "\n## Tasks\n",
+		"\n## Reproduction\n\n- Criterion: 1\n- Symptom: `want pong, got ping`\n\n1. If the word is wrong, then the test fails. Result: confirmed.\n\n## Tasks\n", 1))
+	in.Doc = doc
+	in.Links = domain.Trace(doc)
+
+	text := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(render(t, in), "")
+
+	if !regexp.MustCompile(`Reproduction\s*\d*\s*Criterion: 1`).MatchString(text) {
+		t.Error("the notes do not hold the Reproduction block")
+	}
+}
+
 func TestPageOpenQuestions(t *testing.T) {
 	in := baseInput(t)
 	in.Doc.OpenQuestions = []string{"Ship the pong first?"}

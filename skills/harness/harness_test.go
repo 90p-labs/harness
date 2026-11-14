@@ -189,6 +189,19 @@ func TestHarnessSkillReviewRound(t *testing.T) {
 	}
 }
 
+func TestReproductionSurfaceTemplate(t *testing.T) {
+	template := repository.Read(t, templateFile)
+	for _, want := range []string{
+		plandomain.CausePrefix + " " + plandomain.CauseBug, "## " + plandomain.HeadingReproduction, "`" + string(plandomain.RuleReproduction) + "`",
+		"- " + plandomain.ReproCriterion + ":", "- " + plandomain.ReproSymptom + ":", "- " + plandomain.ReproRegression + ":",
+		"The `" + plandomain.TrackPrefix + "` and `" + plandomain.CausePrefix + "` lines are not free text.",
+	} {
+		if !strings.Contains(template, want) {
+			t.Errorf("%s does not hold %q", templateFile, want)
+		}
+	}
+}
+
 func TestPlanTemplate(t *testing.T) {
 	template := repository.Read(t, templateFile)
 	sources, err := repository.Glob(t, ruleSourceGlob)
