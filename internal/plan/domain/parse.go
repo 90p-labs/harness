@@ -270,6 +270,7 @@ func (p *parser) taskField(line string, n int) {
 		t.Owned = append(t.Owned, ownedPaths(value)...)
 	case FieldTestFirst:
 		t.TestFirst = value
+		t.Seams = seamNames(value)
 	case FieldModel:
 		t.Model = value
 	case FieldDoD:
@@ -498,4 +499,19 @@ func (p *parser) tree(f *fence) Tree {
 		t.Entries = append(t.Entries, TreeEntry{Path: path, Mark: mark, Line: n, Depth: depth, IsDir: isDir})
 	}
 	return t
+}
+
+const (
+	SeamLabel = "Seam:"
+	FormSeam  = "`Seam: `pkg.Name`.` in the Test first line"
+)
+
+var seamName = regexp.MustCompile(regexp.QuoteMeta(SeamLabel) + " `([^`]+)`")
+
+func seamNames(value string) []string {
+	var names []string
+	for _, m := range seamName.FindAllStringSubmatch(value, -1) {
+		names = append(names, m[1])
+	}
+	return names
 }

@@ -23,4 +23,5 @@ const (
 	RuleThreatModel      RuleID = "threat-model"
 	RulePlanSize         RuleID = "plan-size"
 	RuleCommitSplit      RuleID = "commit-split"
+	RuleSeamMissing      RuleID = "seam-missing"
 )

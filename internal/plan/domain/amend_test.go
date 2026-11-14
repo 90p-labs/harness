@@ -303,3 +303,27 @@ func TestStructureKeptAmend(t *testing.T) {
 		t.Fatal("a criterion edit must fail")
 	}
 }
+
+func TestAmendSeam(t *testing.T) {
+	seamBase := amendEdit("holds `TestA` and it fails.", "holds `TestA` and it fails. Seam: `pkg.A`. Also `pkg.B`.")
+	edit := func(old, replacement string) string { return strings.Replace(seamBase, old, replacement, 1) }
+	cases := []struct {
+		name    string
+		current string
+		want    bool
+	}{
+		{"the same text", seamBase, true},
+		{"the seam prose changed", edit("and it fails.", "and it is red first."), true},
+		{"a changed seam", edit("Seam: `pkg.A`", "Seam: `pkg.C`"), false},
+		{"a label moved to another name of the line", edit("Seam: `pkg.A`. Also `pkg.B`", "Also `pkg.A`. Seam: `pkg.B`"), false},
+		{"a dropped label", edit(" Seam: `pkg.A`. Also `pkg.B`.", " `pkg.A`. Also `pkg.B`."), false},
+		{"an added seam", edit("Also `pkg.B`.", "Seam: `pkg.B`."), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := structureKeptChange(seamBase, tc.current); got != tc.want {
+				t.Errorf("structureKeptChange = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

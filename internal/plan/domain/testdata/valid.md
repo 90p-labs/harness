@@ -24,7 +24,7 @@ Track: full
 
 - Side: backend
 - Owned files: `internal/ping/domain/pong.go`, `internal/ping/domain/pong_test.go`
-- Test first: `pong_test.go`: `TestPong` fails, because `Pong` does not exist.
+- Test first: `pong_test.go`: `TestPong` fails, because `Pong` does not exist. Seam: `domain.Pong`.
 - DoD: criterion 1. The domain has no import outside the standard library.
 - Depends on: none
 
@@ -32,7 +32,7 @@ Track: full
 
 - Side: backend
 - Owned files: `internal/ping/application/query/pingquery/`
-- Test first: `handler_test.go`: `TestPingQuery` fails, because the handler does not exist.
+- Test first: `handler_test.go`: `TestPingQuery` fails, because the handler does not exist. Seam: `pingquery.Handler`.
 - DoD: criteria 2 to 3.
 - Depends on: task 1
 

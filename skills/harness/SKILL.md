@@ -80,6 +80,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
      | Check | Result | Evidence |
      |-------|--------|----------|
      | spec-proof | pass | <criterion or file:line> |
+     | spec-seam | pass | <criterion or file:line> |
      | spec-scope | pass | <criterion or file:line> |
      | spec-text | pass | <criterion or file:line> |
      | standards-rules | pass | <criterion or file:line> |
@@ -90,6 +91,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
      | 1 | `<proof command>` | 0 |
      ```
    - `spec-proof`: each criterion has its code, and its proof fails without the code.
+   - `spec-seam`: each new test goes through the seam of its task, and shows no test anti-pattern of Lens Spec in the reviewer brief.
    - `spec-scope`: each task changed only its owned files, with no missing or partial requirement and no scope creep.
    - `spec-text`: each changed doc sentence agrees with the code and with the other docs.
    - `standards-rules`: the diff follows `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md`, the ADRs in `docs/adr/` and the lint rules.

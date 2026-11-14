@@ -421,3 +421,44 @@ func TestRegressionImpact(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckSeam(t *testing.T) {
+	valid := readValid(t)
+	const (
+		line1 = "- Test first: `pong_test.go`: `TestPong` fails, because `Pong` does not exist. Seam: `domain.Pong`.\n"
+		seam1 = " Seam: `domain.Pong`."
+	)
+	tests := []struct {
+		name  string
+		edits []edit
+		want  []string
+	}{
+		{"seam present", nil, nil},
+		{"test name with no seam", []edit{{seam1, ""}}, []string{"plan.md:27: seam-missing:"}},
+		{"test file with no test name and no seam", []edit{{line1, "- Test first: `pong_test.go` holds the test.\n"}}, []string{"plan.md:27: seam-missing:"}},
+		{"two seams", []edit{{seam1, seam1 + " Seam: `ping.Other`."}}, nil},
+		{"seam equal to the test name", []edit{{"Seam: `domain.Pong`", "Seam: `TestPong`"}}, []string{"plan.md:27: seam-missing:"}},
+		{"seam equal to the second test name", []edit{{"`TestPong` fails", "`TestPong` and `TestOther` fail"}, {"Seam: `domain.Pong`", "Seam: `TestOther`"}}, []string{"plan.md:27: seam-missing:"}},
+		{"seam that is a test file", []edit{{"Seam: `domain.Pong`", "Seam: `pong_test.go`"}}, []string{"plan.md:27: seam-missing:"}},
+		{"a good seam beside a bad one", []edit{{seam1, seam1 + " Seam: `TestPong`."}}, nil},
+		{"task with no test", []edit{{line1, "- Test first: none, the task is docs.\n"}}, nil},
+		{"task with no test and a seam", []edit{{line1, "- Test first: none. Seam: `domain.Pong`.\n"}}, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := byRule(checkText(mutate(t, valid, tc.edits...), domain.CheckInput{Diagrams: &fakeDiagrams{}}), domain.RuleSeamMissing)
+			var texts []string
+			for _, p := range got {
+				texts = append(texts, p.String())
+			}
+			if len(texts) != len(tc.want) {
+				t.Fatalf("seam-missing = %v, want %v", texts, tc.want)
+			}
+			for i, w := range tc.want {
+				if !strings.HasPrefix(texts[i], w) || !strings.Contains(texts[i], domain.FormSeam) {
+					t.Errorf("problem %d = %q, want prefix %q and %q", i, texts[i], w, domain.FormSeam)
+				}
+			}
+		})
+	}
+}

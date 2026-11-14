@@ -91,7 +91,7 @@ func amendParsedKept(want, got Document) bool {
 		g := got.Tasks[i]
 		wantFile, wantName := testOf(want, w)
 		gotFile, gotName := testOf(got, g)
-		if w.Number != g.Number || !slices.Equal(w.DoD, g.DoD) || wantFile != gotFile || wantName != gotName {
+		if w.Number != g.Number || !slices.Equal(w.DoD, g.DoD) || wantFile != gotFile || wantName != gotName || !slices.Equal(w.Seams, g.Seams) {
 			return false
 		}
 	}
