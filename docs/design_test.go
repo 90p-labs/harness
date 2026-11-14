@@ -33,6 +33,8 @@ const (
 	runsDocFile      = "docs/runs.md"
 	multiRunHeading  = "\n## Multi-run plan\n"
 	multiRunDesign   = "\n### Multi-run plan\n"
+	mapHeading       = "\n## Map\n"
+	mapDesign        = "\n### Map\n"
 	markdownFence    = "```markdown\n"
 	beforePayload    = "`run.transition.before` payload `to`"
 )
@@ -219,6 +221,73 @@ func TestMultiRunPlanExample(t *testing.T) {
 	}
 	if !strings.Contains(repository.Read(t, designFile), multiRunDesign) {
 		t.Errorf("%s has no Multi-run plan heading", designFile)
+	}
+}
+
+func TestMapExample(t *testing.T) {
+	_, rest, found := strings.Cut(repository.Read(t, runsDocFile), mapHeading)
+	if !found {
+		t.Fatalf("%s has no Map section", runsDocFile)
+	}
+	head, rest, found := strings.Cut(rest, markdownFence)
+	if !found || strings.Contains(head, nextHeading) {
+		t.Fatalf("%s has no map example", runsDocFile)
+	}
+	example, rest, found := strings.Cut(rest, diagramClose)
+	if !found {
+		t.Fatalf("%s has an unclosed map example", runsDocFile)
+	}
+	section, _, _ := strings.Cut(rest, nextHeading)
+	section = head + section
+	if !plandomain.IsMap(example) {
+		t.Fatal("the example is not a map")
+	}
+	m, problems := plandomain.ParseMap(example)
+	problems = append(problems, plandomain.CheckMap(m)...)
+	if len(problems) != 0 {
+		t.Errorf("the example has problems: %v", problems)
+	}
+	free := m.Frontier()
+	if len(free) == 0 {
+		t.Fatal("the example has no free ticket")
+	}
+	for _, ticket := range free {
+		want := fmt.Sprintf("frontier: %s %s (%s)", ticket.ID, ticket.Slug, ticket.Type)
+		if !strings.Contains(section, want) {
+			t.Errorf("%s does not show the output %q", runsDocFile, want)
+		}
+	}
+	for _, want := range []string{"harness plan check --file", "ADR 0026", "docs/programs/run-program-layers/", "`harness run plan`", "`harness plan view`"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("the Map section of %s does not say %q", runsDocFile, want)
+		}
+	}
+}
+
+func TestMapDesign(t *testing.T) {
+	design := repository.Read(t, designFile)
+	_, rest, found := strings.Cut(design, mapDesign)
+	if !found {
+		t.Fatalf("%s has no Map heading", designFile)
+	}
+	section, _, _ := strings.Cut(rest, "\n## ")
+	wants := []string{"frontier: T<n> slug (type)", "frontier: none", "map: clear", "plan-kind", "`harness plan view`", "`harness run plan`"}
+	types, statuses, fields := plandomain.TicketTypes, plandomain.TicketStatuses, plandomain.MapFields
+	wants = append(wants,
+		"Type is one of "+strings.Join(types[:len(types)-1], ", ")+" and "+types[len(types)-1]+".",
+		"Status is one of "+statuses[0]+" and "+statuses[1]+".",
+		"The fields are "+strings.Join(fields[:3], ", ")+", optional "+fields[3]+", "+fields[4]+", and "+fields[5]+" for a closed ticket.",
+	)
+	for _, rule := range []plandomain.RuleID{plandomain.RuleMapField, plandomain.RuleMapBlocked, plandomain.RuleMapQuestion, plandomain.RuleMapIndex} {
+		wants = append(wants, "The rule `"+string(rule)+"`")
+	}
+	for _, want := range wants {
+		if !strings.Contains(section, want) {
+			t.Errorf("the Map section of %s does not say %q", designFile, want)
+		}
+	}
+	if strings.Index(design, mapDesign) > strings.Index(design, "\n## Gates and lint packs\n") {
+		t.Errorf("the Map section of %s is not under Plan commands", designFile)
 	}
 }
 

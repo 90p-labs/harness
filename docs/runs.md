@@ -140,6 +140,65 @@ The page has three panes: a sidebar with each section and its count, the main li
 
 ![The task board: one wave for each task, with the test first, the model, the DoD and the commit](images/plan-view-tasks.png)
 
+## Map
+
+A map holds the decisions of a large effort before the plan. Write one when the decisions are not taken yet. The map is a markdown file with `## Destination` and one `### T<n> slug` heading for each decision ticket. A ticket has a type, a list of blockers, a status and one question. A closed ticket also has an answer.
+
+```markdown
+# Map: Billing export
+
+## Destination
+
+Customers download their invoices as a file, and support stops sending them by hand.
+
+## Decisions so far
+
+- T1: the export is a CSV file, because the finance team opens it in a spreadsheet.
+
+## Not yet specified
+
+- The retention time of an export file.
+
+## Out of scope
+
+- none
+
+## Tickets
+
+### T1 file-format
+
+- Type: grilling
+- Blocked by: none
+- Status: closed
+- Question: Which file format does the export use?
+- Answer: A CSV file, because the finance team opens it in a spreadsheet.
+
+### T2 data-source
+
+- Type: research
+- Blocked by: none
+- Status: open
+- Question: Which table holds the invoice lines of a customer?
+
+### T3 export-job
+
+- Type: prototype
+- Blocked by: T1 and T2
+- Status: open
+- Question: Does a nightly job keep up with the volume of invoices?
+```
+
+`harness plan check --file <path>` checks the map and lists each problem. For a clean map it prints the free tickets, which are the open tickets with no claim and no open blocker. For the example above it prints this line.
+
+```text
+frontier: T2 data-source (research)
+```
+
+- A ticket ends with an answer. The map plans and does not do, so the work goes into a run.
+- When no ticket is open and nothing is unspecified, the check prints `map: clear`. Then the multi-run plan is final. A plan written before that names the open ticket in each run that waits on it.
+- `harness run plan` and `harness plan view` refuse a map. A map needs no run.
+- [ADR 0026](adr/0026-program-layers-around-a-run.md) holds the design. The folder `docs/programs/run-program-layers/` holds a real [map](programs/run-program-layers/map.md) and its [multi-run plan](programs/run-program-layers/plan.md).
+
 ## Multi-run plan
 
 A coordinator shows a program of runs as one page. The plan has `## Runs` and one `### R<n> slug` heading for each run. Each run has the fields Wave, Depends on, Branch, Owned files and Done when. A numbered scope list follows the bullets, with one step on each line.
