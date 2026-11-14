@@ -44,7 +44,7 @@ A run moves through phases. The transition table is deterministic: a row is `(fr
 
 `Policy.ApprovalNeeded` comes from the config `run.approval`. `Flow.Move` turns it off for one `submit-plan` call when the plan gate reports a waiver. A waiver means every commit of the plan is `docs`, and `## Open questions` holds only `- none`. An `amend` skips the approval only as a kept-structure amend or as a docs-only amend, and only the docs-only amend is a waiver. The run must start in `working` and have no live round. A kept-structure amend needs a recorded approval, and a docs-only amend needs none.
 
-A kept-structure amend keeps the structure of `approved-plan.md`. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names and the `Seam:` names of `Test first`, and the `DoD` numbers. A sketch link anywhere counts as structure. A docs-only amend needs the plan to keep only `docs` commits and no open question.
+A kept-structure amend keeps the structure of `approved-plan.md`. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the `Cause:` line, the test names and the `Seam:` names of `Test first`, and the `DoD` numbers. A sketch link anywhere counts as structure. A docs-only amend needs the plan to keep only `docs` commits and no open question.
 
 The approve step keeps a copy of the plan, `approved-plan.md`, in the run folder. The copy counts only when its sha256 is the hash of the latest `plan_approvals` row of the run. An amend that skips the approval does not replace the copy. The plan domain holds the closed test path list. A path that is not in clean form, or that has a `..` segment, is never a test path. A path is a test path when it has one of these forms:
 
@@ -725,6 +725,12 @@ A single-run plan has 6 tasks at most. More tasks give the problem `plan-size`. 
 - It exits 0 on a clean plan, and 1 when there is a problem or the file is unreadable.
 - Without `--file` and with no active run, it exits 2 and prints the usage.
 - The check records the span `plan.check` with `harness.plan.problems` and `harness.track`.
+
+A bug plan has the line `Cause: bug` under `## Goal` and the section `## Reproduction`. The section holds `Criterion` and `Symptom`, or `Human only`, then `Regression test` and 3 to 5 ranked hypotheses. A plan with a `fix` commit needs both. A bad form, or a second `## Reproduction` heading, gives the problem `reproduction`.
+
+In `planning`, `harness run plan` also reads the evidence of the criterion proof. It gives the problem `reproduction-red` when no record exists for the current files, when the proof passed, or when the output tail lacks the symptom. A `Human only` plan skips the red check.
+
+`harness verify --criterion <n>` runs only that proof and saves the evidence. A plan line `Regression test: none: <reason>` gives the learn candidate `no-seam`. ADR 0025 records this.
 
 `harness plan view [--file path] [--out path] [--open]` writes the plan as one self-contained HTML page, `plan.html` beside the plan by default. It works in every phase, prints the page path relative to the repository top, and writes the page also for a plan with problems.
 

@@ -22,9 +22,10 @@ The lead gives you the prompt of the run, the path of the harness binary and the
 10. List the decisions that the code and the docs cannot make. Give each decision 2 to 4 options and your recommended option with the reason. An `ambiguous` baseline item stays in its table and is not repeated as an open decision.
 11. When the lead gives you the path of the `ddd` skill, read it. Give the context and the layer of each file that the change touches.
 12. List the review risks. For each class of the template that applies, give one risk with the test or the decision that answers it.
-13. For a guard or security change, give a threat model. Name the attacker. List the input forms as a closed list: each form of the input that the changed code reads. For each form, list each way the input selects its target: its position, an option or flag, and the working folder. Each item of the threat model is also a review risk line with its test. Give a fail-closed design for any input outside the list.
+13. For a bug report, name the likely command that shows the bug and the seam that a regression test can reach, each with its source. When no seam exists, say so. The lead then writes `Cause: bug` in the plan.
+14. For a guard or security change, give a threat model. Name the attacker. List the input forms as a closed list: each form of the input that the changed code reads. For each form, list each way the input selects its target: its position, an option or flag, and the working folder. Each item of the threat model is also a review risk line with its test. Give a fail-closed design for any input outside the list.
 
-Report in this order: facts, touched files, evidence baseline or its `not needed` line, review risks, threat model, open decisions. Put the checker conflicts first among the open decisions. Keep the report under 600 words. Do not edit, commit or push. Do not ask the user a question: the lead asks.
+Report in this order: facts, touched files, evidence baseline or its `not needed` line, review risks, bug command and seam, threat model, open decisions. Put the checker conflicts first among the open decisions. Keep the report under 600 words. Do not edit, commit or push. Do not ask the user a question: the lead asks.
 
 ## Evidence baseline
 
