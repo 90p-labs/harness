@@ -105,7 +105,7 @@ After: <what the behaviour is now, in one line>
 - `## How`: the mechanism. Put a visual of step 2 where it explains faster than text. Put one sentence above each visual: its main point.
 - A How with no visual says why in one sentence.
 - `## Evidence`: show the behaviour, do not state it. `Before:` and `After:` each take one line and a proof below it.
-- A change that a user sees takes a screenshot, by a URL that the reviewer can open. A local path does not render.
+- A change that a user sees takes a screenshot, by an http or https URL that the reviewer can open. A local path does not render. The check counts an image only with an http or https URL.
 - Any other change takes a fence with the run command and its output. The red and the green run of the task test fit well.
 - The Before comes from the base: the red run, or the command on the base branch.
 - A docs-only change shows the old and the new text in a `diff` fence, or the run of its doc test. No change is waived.
