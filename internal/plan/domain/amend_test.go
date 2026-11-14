@@ -342,12 +342,146 @@ func TestAmendSeam(t *testing.T) {
 		{"a label moved to another name of the line", edit("Seam: `pkg.A`. Also `pkg.B`", "Also `pkg.A`. Seam: `pkg.B`"), false},
 		{"a dropped label", edit(" Seam: `pkg.A`. Also `pkg.B`.", " `pkg.A`. Also `pkg.B`."), false},
 		{"an added seam", edit("Also `pkg.B`.", "Seam: `pkg.B`."), false},
+		{"a third name appended as a new seam", edit("Also `pkg.B`.", "Also `pkg.B`. Seam: `pkg.C`."), false},
+		{"the whole seam deleted", edit(" Seam: `pkg.A`.", ""), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := structureKeptChange(seamBase, tc.current); got != tc.want {
-				t.Errorf("structureKeptChange = %v, want %v", got, tc.want)
+			if got := StructureKeptAmend(seamBase, sumOf(seamBase), tc.current); got != tc.want {
+				t.Errorf("StructureKeptAmend = %v, want %v", got, tc.want)
 			}
 		})
 	}
+
+	t.Run("a plan of two tasks", func(t *testing.T) {
+		const second = "### 2. Two\n\n- Side: backend\n- Owned files: `c.go`, `b_test.go`\n- Test first: `b_test.go` holds `TestB` and it fails.\n- DoD: criteria 1\n- Depends on: none\n- Model: sonnet\n\n## Decisions"
+		approved := strings.Replace(seamBase, "## Decisions", second, 1)
+		doc, _ := Parse(approved)
+		if len(doc.Tasks) != 2 || len(doc.Tasks[0].Seams) != 1 || len(doc.Tasks[1].Seams) != 0 {
+			t.Fatalf("fixture: want two tasks with 1 and 0 seams, got %+v", doc.Tasks)
+		}
+		added := strings.Replace(approved, "`TestB` and it fails.", "`TestB` and it fails. Seam: `pkg.D`.", 1)
+		changed := strings.Replace(added, "Seam: `pkg.A`", "Seam: `pkg.C`", 1)
+		if added == approved || changed == added {
+			t.Fatal("the fixture did not change")
+		}
+		if !StructureKeptAmend(approved, sumOf(approved), added) {
+			t.Error("a seam added to the task with no seam must be kept")
+		}
+		if StructureKeptAmend(approved, sumOf(approved), changed) {
+			t.Error("a changed seam of the task with a seam must need approval")
+		}
+	})
+}
+
+func TestAmendSeamAdded(t *testing.T) {
+	const line = "and it fails."
+	cases := []struct {
+		name    string
+		current string
+		want    bool
+	}{
+		{"one seam appended", amendEdit(line, line+" Seam: `pkg.A`."), true},
+		{"two seams appended", amendEdit(line, line+" Seam: `pkg.A`. Seam: `pkg.B`."), true},
+		{"a seam appended and the prose changed", amendEdit(line, "and it is red first. Seam: `pkg.A`."), true},
+		{"a seam with spaces", amendEdit(line, line+" Seam: `harness pr policy`."), true},
+		{"a seam appended and the test name changed", amendEdit("`TestA` and it fails.", "`TestB` and it fails. Seam: `pkg.A`."), false},
+		{"a labelled test name before the real one", amendEdit("- Test first: `a_test.go` holds `TestA`", "- Test first: Seam: `TestZ`. `a_test.go` holds `TestA`"), false},
+		{"a labelled test name next to a real seam", amendEdit(line, line+" Seam: `TestB`. Seam: `pkg.A`."), false},
+		{"a labelled test file next to a real seam", amendEdit(line, line+" Seam: `b_test.go`. Seam: `pkg.A`."), false},
+		{"a new name with no label next to an added seam", amendEdit(line, line+" Also `pkg.B`. Seam: `pkg.A`."), false},
+		{"an empty labelled name", amendEdit(line, line+" Seam: ``."), false},
+		{"an odd count hides a test name", amendEdit(line, line+" Seam: `x `TestC`"), false},
+		{"an odd count hides a test file", amendEdit(line, line+" Seam: `x `c_test.go`"), false},
+		{"an odd count with a tight name", amendEdit(line, line+" Seam: `pkg.A`TestZ`"), false},
+		{"a blank labelled name", amendEdit(line, line+" Seam: ` `."), false},
+		{"a dash labelled name", amendEdit(line, line+" Seam: `-`."), false},
+		{"a labelled name with a space at the start", amendEdit(line, line+" Seam: ` pkg.A`."), false},
+		{"a labelled name with a space at the end", amendEdit(line, line+" Seam: `pkg.A `."), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := StructureKeptAmend(amendBase, sumOf(amendBase), tc.current); got != tc.want {
+				t.Errorf("StructureKeptAmend = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("an even count swaps a test name", func(t *testing.T) {
+		const head = "`a_test.go` holds `TestA`"
+		swaps := []struct{ name, approvedLine, currentLine string }{
+			{"with a label", head + " and `TestB` and it fails.", head + " and it fails. Seam: `x`TestC`TestB`"},
+			{"with no label", head + " and `pkg.F` and `TestB` and it fails.", head + " and `pkg.F`TestC`TestB` and it fails."},
+		}
+		for _, sw := range swaps {
+			t.Run(sw.name, func(t *testing.T) {
+				approved := amendEdit(head+" and it fails.", sw.approvedLine)
+				current := amendEdit(head+" and it fails.", sw.currentLine)
+				if approved == amendBase || current == amendBase {
+					t.Fatal("the fixture did not change")
+				}
+				if StructureKeptAmend(approved, sumOf(approved), current) {
+					t.Error("a swapped test name must need approval")
+				}
+			})
+		}
+	})
+
+	t.Run("a gained seam that the skeleton does not see", func(t *testing.T) {
+		if StructureKeptAmend(amendBase, sumOf(amendBase), amendEdit("- Test first: `a_test.go`", "- Test first: Seam: `a_test.go`")) {
+			t.Error("the test file relabelled as a seam must need approval")
+		}
+		approved := amendEdit(line, "and `b Seam: ``` it fails.")
+		for _, name := range []string{"c_test.go", "TestC", "-", " "} {
+			current := strings.Replace(approved, "`b Seam: ```", "`b Seam: `"+name+"``", 1)
+			if current == approved {
+				t.Fatal("the fixture did not change")
+			}
+			if StructureKeptAmend(approved, sumOf(approved), current) {
+				t.Errorf("the gained seam %q must need approval", name)
+			}
+		}
+	})
+
+	t.Run("an unpaired backtick on both lines", func(t *testing.T) {
+		approved := amendEdit(line, line+" Seam: `")
+		current := strings.Replace(approved, "Seam: `", "Seam: `pkg.B``", 1)
+		if approved == amendBase || current == approved {
+			t.Fatal("the fixture did not change")
+		}
+		if StructureKeptAmend(approved, sumOf(approved), current) {
+			t.Error("a seam gained on a line with an unpaired backtick must need approval")
+		}
+	})
+
+	t.Run("a seam on a line with no file", func(t *testing.T) {
+		approved := amendEdit("`a_test.go` holds ", "")
+		if approved == amendBase {
+			t.Fatal("the fixture did not change")
+		}
+		if StructureKeptAmend(approved, sumOf(approved), strings.Replace(approved, line, line+" Seam: `pkg.A`.", 1)) {
+			t.Error("a seam with a dot that becomes the test file must need approval")
+		}
+		if !StructureKeptAmend(approved, sumOf(approved), strings.Replace(approved, line, line+" Seam: `harness pr policy`.", 1)) {
+			t.Error("a seam that is no file must be kept")
+		}
+	})
+
+	t.Run("an existing name relabelled as a seam", func(t *testing.T) {
+		approved := amendEdit(line, "and it fails, because `pkg.A` does not exist.")
+		relabelled := strings.Replace(approved, "because `pkg.A` does not exist.", "Seam: `pkg.A`.", 1)
+		appended := strings.Replace(approved, "does not exist.", "does not exist. Seam: `pkg.A`.", 1)
+		if relabelled == approved || appended == approved {
+			t.Fatal("the fixture did not change")
+		}
+		if StructureKeptAmend(approved, sumOf(approved), relabelled) {
+			t.Error("a name relabelled as a seam must need approval")
+		}
+		if StructureKeptAmend(approved, sumOf(approved), strings.Replace(relabelled, "Seam: `pkg.A`.", "Seam: `pkg.A` and a stray ` mark.", 1)) {
+			t.Error("a name relabelled on a line with an unpaired backtick must need approval")
+		}
+		if !StructureKeptAmend(approved, sumOf(approved), appended) {
+			t.Error("a seam appended with the name kept in the prose must be kept")
+		}
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	shared "github.com/90p-labs/harness/internal/shared/domain"
 )
@@ -88,10 +89,7 @@ func amendParsedKept(want, got Document) bool {
 		return false
 	}
 	for i, w := range want.Tasks {
-		g := got.Tasks[i]
-		wantFile, wantName := testOf(want, w)
-		gotFile, gotName := testOf(got, g)
-		if w.Number != g.Number || !slices.Equal(w.DoD, g.DoD) || wantFile != gotFile || wantName != gotName || !slices.Equal(w.Seams, g.Seams) {
+		if !amendTaskKept(want, got, w, got.Tasks[i]) {
 			return false
 		}
 	}
@@ -101,6 +99,24 @@ func amendParsedKept(want, got Document) bool {
 		}
 	}
 	return true
+}
+
+func amendTaskKept(want, got Document, w, g Task) bool {
+	if w.Number != g.Number || !slices.Equal(w.DoD, g.DoD) {
+		return false
+	}
+	wantFile, wantName := testOf(want, w)
+	gotFile, gotName := testOf(got, g)
+	if wantFile != gotFile || wantName != gotName {
+		return false
+	}
+	if !slices.Equal(testName.FindAllString(w.TestFirst, -1), testName.FindAllString(g.TestFirst, -1)) {
+		return false
+	}
+	if len(w.Seams) > 0 || len(g.Seams) == 0 {
+		return slices.Equal(w.Seams, g.Seams)
+	}
+	return strings.Count(g.TestFirst, amendBacktickMark)%2 == 0 && !slices.ContainsFunc(g.Seams, amendUncleanSeam)
 }
 
 func amendSkeleton(text string) (string, bool) {
@@ -168,10 +184,23 @@ func amendFreeText(section, line string) (string, bool) {
 
 func amendTestFirstNames(line string) string {
 	var names []string
-	for _, match := range amendBacktick.FindAllStringSubmatch(line, -1) {
-		names = append(names, amendBacktickMark+match[1]+amendBacktickMark)
+	for _, idx := range amendBacktick.FindAllStringSubmatchIndex(line, -1) {
+		name := line[idx[2]:idx[3]]
+		if amendIsSeamName(line[:idx[0]], name) {
+			continue
+		}
+		names = append(names, amendBacktickMark+name+amendBacktickMark)
 	}
 	return amendTestFirstPrefix + " " + strings.Join(names, amendListJoin)
+}
+
+func amendIsSeamName(before, name string) bool {
+	return strings.HasSuffix(before, SeamLabel+" ") && !amendUncleanSeam(name)
+}
+
+func amendUncleanSeam(name string) bool {
+	return name != strings.TrimSpace(name) || strings.IndexFunc(name, unicode.IsLetter) < 0 ||
+		testName.MatchString(amendBacktickMark+name+amendBacktickMark) || looksLikeTestFile(name)
 }
 
 func amendDoDNumbers(line string) string {
