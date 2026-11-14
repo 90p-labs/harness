@@ -31,7 +31,7 @@ var (
 	ProgramFields = []string{FieldWave, FieldDependsOn, FieldBranch, FieldOwned, FieldDoneWhen}
 
 	runHeading = regexp.MustCompile(`^(R\d+[a-z]?) ([a-z0-9]+(?:-[a-z0-9]+)*)$`)
-	runList    = regexp.MustCompile(`,\s*and\s+|,\s*|\s+and\s+`)
+	idList     = regexp.MustCompile(`,\s*and\s+|,\s*|\s+and\s+`)
 	branchForm = regexp.MustCompile(`^[a-z]+/[a-z0-9][a-z0-9._-]*$`)
 )
 
@@ -60,19 +60,37 @@ type ProgramRun struct {
 }
 
 func IsProgram(text string) bool {
-	inFence := false
-	for _, raw := range strings.Split(text, "\n") {
+	return hasHeading(text, HeadingRuns)
+}
+
+func hasHeading(text, heading string) bool {
+	found := false
+	scanOutsideFences(strings.Split(text, "\n"), func(_ int, line string) bool {
+		found = line == "## "+heading
+		return found
+	})
+	return found
+}
+
+// scanOutsideFences calls visit with the number and the trimmed text of each
+// line outside a code fence, and stops when visit returns true. It returns the
+// line number of a fence that never closes, or 0.
+func scanOutsideFences(lines []string, visit func(n int, line string) bool) int {
+	opened := 0
+	for i, raw := range lines {
 		line := strings.TrimRight(raw, trailingSpace)
 		switch {
-		case inFence:
-			inFence = !shared.IsFenceClose(line)
+		case opened != 0:
+			if shared.IsFenceClose(line) {
+				opened = 0
+			}
 		case shared.IsFenceOpen(line):
-			inFence = true
-		case line == "## "+HeadingRuns:
-			return true
+			opened = i + 1
+		case visit(i+1, line):
+			return 0
 		}
 	}
-	return false
+	return opened
 }
 
 type programParser struct {
@@ -84,23 +102,21 @@ type programParser struct {
 
 func ParseProgram(text string) (Program, []Problem) {
 	p := &programParser{prog: Program{Lines: strings.Split(text, "\n")}, run: -1}
-	inFence := false
-	for i, raw := range p.prog.Lines {
-		line := strings.TrimRight(raw, trailingSpace)
+	open := scanOutsideFences(p.prog.Lines, func(n int, line string) bool {
 		switch {
-		case inFence:
-			inFence = !shared.IsFenceClose(line)
-		case shared.IsFenceOpen(line):
-			inFence = true
 		case strings.HasPrefix(line, "### "):
-			p.heading(3, strings.TrimPrefix(line, "### "), i+1)
+			p.heading(3, strings.TrimPrefix(line, "### "), n)
 		case strings.HasPrefix(line, "## "):
-			p.heading(2, strings.TrimPrefix(line, "## "), i+1)
+			p.heading(2, strings.TrimPrefix(line, "## "), n)
 		case strings.HasPrefix(line, "# ") && p.prog.Title == "":
 			p.prog.Title = strings.TrimPrefix(line, "# ")
 		default:
-			p.content(line, i+1)
+			p.content(line, n)
 		}
+		return false
+	})
+	if open != 0 {
+		p.problems = append(p.problems, Problem{Line: open, Rule: RuleRunField, Message: "code fence is never closed"})
 	}
 	return p.prog, p.problems
 }
@@ -197,7 +213,7 @@ func runIDs(value string) []string {
 	if value == dependsNone || value == "" {
 		return nil
 	}
-	return runList.Split(value, -1)
+	return idList.Split(value, -1)
 }
 
 func CheckProgram(p Program) []Problem {

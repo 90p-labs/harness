@@ -142,6 +142,52 @@ func TestHarnessSkillGrill(t *testing.T) {
 	}
 }
 
+const (
+	mapFile          = "skills/harness/references/map.md"
+	mapRefText       = "references/map.md"
+	mapCheckCommand  = "harness plan check --file"
+	wayfinderSource  = "https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md"
+	toTicketsSource  = "https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md"
+	mapFrontierLabel = "frontier:"
+	mapClearLine     = "map: clear"
+)
+
+// backtickedList writes items as `a`, `b` or `c`, the list form of the map reference.
+func backtickedList(items []string) string {
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = "`" + item + "`"
+	}
+	if len(quoted) < 2 {
+		return strings.Join(quoted, "")
+	}
+	return strings.Join(quoted[:len(quoted)-1], ", ") + " or " + quoted[len(quoted)-1]
+}
+
+func TestHarnessSkillMap(t *testing.T) {
+	skill, mapRef := repository.Read(t, skillFile), repository.Read(t, mapFile)
+
+	if !strings.Contains(skill, mapRefText) {
+		t.Errorf("%s does not name %q", skillFile, mapRefText)
+	}
+	wants := []string{mapCheckCommand, wayfinderSource, toTicketsSource, mitLicense, mapFrontierLabel, mapClearLine}
+	for _, ticketType := range plandomain.TicketTypes {
+		wants = append(wants, "`"+ticketType+"`")
+	}
+	for _, field := range plandomain.MapFields {
+		wants = append(wants, "| `"+field+"` |")
+	}
+	wants = append(wants, "`"+plandomain.FieldType+"` | "+backtickedList(plandomain.TicketTypes), "`"+plandomain.FieldStatus+"` | "+backtickedList(plandomain.TicketStatuses))
+	for _, want := range wants {
+		if !strings.Contains(mapRef, want) {
+			t.Errorf("%s does not name %q", mapFile, want)
+		}
+	}
+	if strings.Contains(mapRef, repository.EmDash) || strings.ContainsFunc(mapRef, repository.IsEmoji) {
+		t.Errorf("%s has an em dash or an emoji", mapFile)
+	}
+}
+
 func TestHarnessSkillOpensPlanOnce(t *testing.T) {
 	for path, steps := range map[string][]string{skillFile: {skillRewriteStep, changePlanStep}, grillFile: {grillRewriteStep}} {
 		text := repository.Read(t, path)

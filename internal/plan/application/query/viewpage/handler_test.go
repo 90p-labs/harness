@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -19,6 +20,7 @@ import (
 
 const (
 	validPlan  = "../../../domain/testdata/valid.md"
+	mapFixture = "../../../domain/testdata/map.md"
 	runID      = "run-9"
 	pageBody   = "<html>page</html>"
 	regionBody = "<section>region</section>"
@@ -141,6 +143,32 @@ func TestPageUsesRunWorktree(t *testing.T) {
 	}
 	if problems != len(f.renderer.page.Problems) {
 		t.Errorf("problems = %d, want %d", problems, len(f.renderer.page.Problems))
+	}
+}
+
+func TestViewRefusesMap(t *testing.T) {
+	f := newFixture(t)
+	text, err := os.ReadFile(mapFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(f.root, "map.md")
+	if err := os.WriteFile(file, text, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, region := range []string{"", "criteria"} {
+		page, _, err := f.handler.Handle(t.Context(), viewpage.Query{Path: file, Region: region})
+
+		if !errors.Is(err, domain.ErrMapNoPage) {
+			t.Fatalf("region %q: err = %v, want ErrMapNoPage", region, err)
+		}
+		if page != nil || f.renderer.page.Doc.Lines != nil {
+			t.Errorf("region %q: page = %q, want no render", region, page)
+		}
+	}
+	if !strings.Contains(domain.ErrMapNoPage.Error(), "harness plan check --file") {
+		t.Errorf("text = %q, want the check command", domain.ErrMapNoPage)
 	}
 }
 

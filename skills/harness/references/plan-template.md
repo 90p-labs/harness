@@ -134,10 +134,14 @@ Each line gives the rule id, what it checks, and the fix.
 - `seam-missing`: a task names a test and no `Seam:` name apart from the test or a test file. Add a seam in backticks.
 - `threat-model`: a tree path in a `guard` or `security` folder needs the 3 bullets. Add `## Threat model`.
 - `plan-size`: a single-run plan has more than 6 tasks. Split the change into a multi-run plan.
-- `run-field`: a run heading or a run field is wrong. Fix the field.
+- `run-field`: a run heading or a run field is wrong, or a code fence never closes. Fix the field.
 - `run-depends`: a run depends on a run that is not in an earlier wave. Fix the dependency.
 - `run-overlap`: two runs of one wave own a common path. Move the path to one run.
 - `plan-kind`: `harness run plan` takes only a single-run plan. Submit one run at a time.
+- `map-field`: a map ticket heading, id or field is wrong, repeated or out of order. A closed ticket has no answer or has a claim, an open ticket has an answer, or a claim is empty or named `none`. A ticket line is not a flat `- Field: value` bullet. A heading of level 3 to 6 that starts with `T<n>` stands outside `## Tickets`. A line stands under `## Tickets` before the first ticket. A code fence stands under a list section or `## Tickets`, or never closes. A level-2 heading is not in the map format, or a list section is not `- none` or bullets. The title line is not `# Map: title` or the destination has no text. Fix the field.
+- `map-blocked`: a `Blocked by` line names a missing ticket, the ticket itself or a cycle. A closed ticket is blocked by an open one. Fix the line.
+- `map-question`: a ticket `Question` does not end with a question mark or holds more than one. Ask one question.
+- `map-index`: a closed ticket has no line or two lines under `## Decisions so far`, or a line there names no closed ticket or has no ticket id and answer. Fix the list.
 - `tree-diff`: a tree mark does not match the state of the file in the diff. Fix the mark or the file.
 - `file-untracked`: a changed file is in neither final tree. Add it to the tree.
 - `commit-missing`: a planned commit is not in the branch log. Make the commit.

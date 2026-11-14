@@ -750,13 +750,39 @@ An agent writes each diagram through `harness diagram`. It reads plain mermaid o
 
 A plan with a `## Runs` line outside a code fence is a multi-run plan. `IsProgram` makes this switch. The check handler calls `ParseProgram` and `CheckProgram` for it, and the view handler renders the program from the check report. The single-run path stays the same.
 
-- The rule `run-field` refuses a missing or wrong run field.
+- The rule `run-field` refuses a missing or wrong run field and a code fence that never closes.
 - The rule `run-depends` refuses a dependency that names no run of an earlier wave.
 - The rule `run-overlap` refuses two runs of one wave that own a common path.
 - The rule `plan-kind` makes `harness run plan` refuse a multi-run plan.
 - For a multi-run plan, the view handler reads no git branch and no proof, so the page shows only the plan file. The page shows the wave lanes, the dependency flowchart, the measurement, the decisions and the problems.
 - Decision: the page shows no live state of the runs. A match of a run branch to the shared state database needs a query over all worktrees, which does not exist yet.
 - Decision: `plan view` still needs a git repository as the working folder. The plan file can be anywhere.
+
+### Map
+
+A plan with a `## Destination` line outside a code fence is a map, unless it also has `## Runs`. The check handler tests `IsProgram` first, then `IsMap`, and it calls `ParseMap` and `CheckMap` for a map. ADR 0026 records the design.
+
+The format is a title and these `##` headings, in this order: `Destination`, optional `Notes`, `Decisions so far`, `Not yet specified`, `Out of scope` and `Tickets`. Each ticket is a `### T<n> slug` heading under `## Tickets`, with `- Field: value` bullets.
+
+- The fields are Type, Blocked by, Status, optional Claimed by, Question, and Answer for a closed ticket.
+- Type is one of research, prototype, grilling and work. Status is one of open and closed.
+- Blocked by is `none`, or ticket ids as `T1`, `T1 and T3` or `T1, T2 and T3`.
+- The three list headings hold bullets, or the one line `- none`.
+- The rule `map-field` refuses a missing, unknown or wrong ticket field and a repeated ticket id.
+- The rule `map-field` also refuses a closed ticket with no answer and an open ticket with an answer. It also refuses a claim on a closed ticket, a claim named `none`, any line before the first ticket and a bad list. It also refuses a line in a ticket that is not a flat `- Field: value` bullet. It also refuses a code fence that never closes.
+- The rule `map-field` also refuses a heading of level 3 to 6 that starts with `T<n>` outside `## Tickets`. This holds for any slug and for up to 3 leading spaces. It covers the sections before `## Tickets` and the lines before the first level-2 heading.
+- It also refuses a code fence under `## Decisions so far`, `## Not yet specified`, `## Out of scope` and `## Tickets`, since a fence could hide an item. Fences under `## Destination` and `## Notes` are allowed.
+- The rule `map-field` also refuses a level-2 heading that the format does not name, and ticket fields that are out of the order above.
+- The rule `map-field` also refuses a title line that is not `# Map: title` and a `## Destination` with no text.
+- The rule `map-blocked` refuses a ticket that is blocked by itself, by an unknown ticket, or in a cycle. It also refuses a closed ticket that an open ticket blocks.
+- The rule `map-question` refuses a `Question` line that does not end with a question mark, or that holds more than one.
+- The rule `map-index` needs one line `- T1: answer` under `## Decisions so far` for each closed ticket, and no line for another ticket. It refuses a line with no ticket id and answer, and a closed ticket that has two lines.
+- The map reuses the rules `heading-missing`, `sentence-length` and `em-dash`.
+- A clean map prints one line `frontier: T<n> slug (type)` for each free ticket, in file order. A free ticket is open, has no claim and has no open blocker.
+- When work remains and no ticket is free, it prints `frontier: none`. When no ticket is open and nothing is unspecified, it prints `map: clear`.
+- A clean map prints no advisor line and no wave line.
+- `harness run plan` refuses a map with the rule `plan-kind`. Without it, a clean map would pass as a plan with no task.
+- `docs/runs.md` tells what `harness plan view` does with a map.
 
 ## Gates and lint packs
 

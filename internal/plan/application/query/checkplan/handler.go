@@ -63,6 +63,12 @@ func (h Handler) Handle(ctx context.Context, q Query) (report domain.Report, err
 		domain.SortProblems(problems)
 		return domain.Report{Problems: problems, Program: &program}, nil
 	}
+	if domain.IsMap(string(text)) {
+		planMap, problems := domain.ParseMap(string(text))
+		problems = append(problems, domain.CheckMap(planMap)...)
+		domain.SortProblems(problems)
+		return domain.Report{Problems: problems, Map: &planMap}, nil
+	}
 	archived, err := archivedPlans(q.Path)
 	if err != nil {
 		return domain.Report{}, err
