@@ -54,7 +54,7 @@
 <div class="table-wrap"><table class="measure"><thead><tr>{{range .Header}}<th scope="col">{{.}}</th>{{end}}</tr></thead><tbody>
 {{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>
 {{end}}</tbody></table></div></section>{{end}}
-{{if .Decisions}}<section id="decisions" data-group="{{.GroupName}}" aria-labelledby="decisions-h"><h2 id="decisions-h">Decisions</h2><div class="notes"><div><ul>{{range .Decisions}}<li>{{.}}</li>{{end}}</ul></div></div></section>{{end}}
+{{if .Decisions}}<section id="decisions" data-group="{{.GroupName}}" aria-labelledby="decisions-h"><h2 id="decisions-h">Decisions</h2><div class="notes"><div><ul>{{range .Decisions}}<li><span>{{.}}</span></li>{{end}}</ul></div></div></section>{{end}}
 
 <section id="problems" class="problems" data-group="{{.GroupQA}}" aria-labelledby="problems-h"><h2 id="problems-h">Problems <span class="n">{{.Counts.Problems}}</span></h2>
 {{if .Problems}}<ul>
