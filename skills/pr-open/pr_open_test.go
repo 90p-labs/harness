@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/90p-labs/harness/internal/guard/domain"
 	"github.com/90p-labs/harness/internal/testsupport/repository"
 )
 
@@ -19,7 +20,7 @@ const (
 )
 
 var (
-	prBodySections = []string{"## Why", "## What", "## How"}
+	prBodySections = domain.BodySections()
 	prOpenSteps    = []string{"harness run status", "harness diagram", "harness verify --commits", prBodyStep, prCheckStep, "gh pr create --draft", "gh pr edit", "--body-file"}
 )
 
@@ -243,5 +244,96 @@ func TestPRPolicyDocs(t *testing.T) {
 func TestPROpenShipStep(t *testing.T) {
 	if skill := repository.Read(t, skillFile); !strings.Contains(skill, "`pr-open`") {
 		t.Errorf("%s does not name the `pr-open` skill", skillFile)
+	}
+}
+
+func TestPROpenTemplate(t *testing.T) {
+	skill := repository.Read(t, prOpenSkill)
+	_, step, found := strings.Cut(skill, "\n## 3. Write the body\n")
+	if !found {
+		t.Fatalf("%s has no step 3", prOpenSkill)
+	}
+	_, fence, found := strings.Cut(step, "\n```\n")
+	if !found {
+		t.Fatalf("%s has no plain fence under step 3", prOpenSkill)
+	}
+	template, _, found := strings.Cut(fence, "\n```")
+	if !found {
+		t.Fatalf("%s has an unclosed template fence", prOpenSkill)
+	}
+	want := strings.TrimSuffix(domain.BodySkeleton([]string{"<one bullet for each branch commit, printed by the command>"}, nil), "\n")
+	if template != want {
+		t.Errorf("%s: the body template differs from domain.BodySkeleton\ngot:\n%s\nwant:\n%s", prOpenSkill, template, want)
+	}
+}
+
+const (
+	prCreditPR     = "https://github.com/mattpocock/skills/blob/main/skills/engineering/pr/SKILL.md"
+	prCreditShowMe = "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
+)
+
+// skillPart returns the skill text from the line that starts with from, up to the line that starts with to.
+// An empty to runs to the end of that bullet list, which is the next blank line.
+func skillPart(t *testing.T, skill, from, to string) string {
+	t.Helper()
+	_, part, found := strings.Cut(skill, "\n"+from)
+	if !found {
+		t.Fatalf("%s has no line that starts with %q", prOpenSkill, from)
+	}
+	if to == "" {
+		part, _, _ = strings.Cut(part, "\n\n")
+		return part
+	}
+	part, _, found = strings.Cut(part, "\n"+to)
+	if !found {
+		t.Fatalf("%s has no line that starts with %q after %q", prOpenSkill, to, from)
+	}
+	return part
+}
+
+func requireNamed(t *testing.T, where, text string, names []string) {
+	t.Helper()
+	for _, name := range names {
+		if !strings.Contains(text, "`"+name+"`") {
+			t.Errorf("%s does not name %q in backticks", where, name)
+		}
+	}
+}
+
+func TestPROpenEvidence(t *testing.T) {
+	skill := repository.Read(t, prOpenSkill)
+	const evidenceBullet, dangerBullet = "- `## Evidence`:", "- `## Merge danger`:"
+	labels := domain.BodyLabels()
+	requireNamed(t, prOpenSkill+" under "+evidenceBullet, skillPart(t, skill, evidenceBullet, dangerBullet), labels[:2])
+	danger := slices.Concat(labels[2:], domain.DoorValues(), domain.BlastRadiusValues())
+	requireNamed(t, prOpenSkill+" under "+dangerBullet, skillPart(t, skill, dangerBullet, ""), danger)
+	for _, url := range []string{prCreditPR, prCreditShowMe} {
+		if !strings.Contains(skill, url) {
+			t.Errorf("%s does not link %s", prOpenSkill, url)
+		}
+	}
+	if !strings.Contains(skill, "MIT license") {
+		t.Errorf("%s does not name the MIT license", prOpenSkill)
+	}
+}
+
+func TestPROpenShapeDocs(t *testing.T) {
+	for _, path := range []string{designFile, "docs/configuration.md"} {
+		row := ""
+		for line := range strings.SplitSeq(repository.Read(t, path), "\n") {
+			if strings.HasPrefix(line, "| `pr-body-shape`") {
+				row = line
+			}
+		}
+		if row == "" {
+			t.Errorf("%s has no table row for pr-body-shape", path)
+		}
+		requireNamed(t, path+" in the pr-body-shape row", row, slices.Concat(domain.BodySections(), domain.BodyLabels()))
+	}
+	context := repository.Read(t, "CONTEXT.md")
+	for _, term := range []string{"PR evidence", "Merge danger", "Door", "Blast radius"} {
+		if !strings.Contains(context, "**"+term+"**") {
+			t.Errorf("CONTEXT.md does not define **%s**", term)
+		}
 	}
 }

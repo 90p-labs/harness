@@ -102,7 +102,7 @@ Each `run` command prints the phase and a `next:` line. Do the `next:` step. Whe
    - Then the lead sets `Head` to the new `HEAD` and runs `harness run review`. The command refuses a run folder with no `self-check.md` or no `Head: <sha>` line.
    - After `harness run rework`, read `references/reviewing.md` and do its Fix and Re-review steps.
 5. `reviewing`: on entering `reviewing`, and after `harness run rework`, read `references/reviewing.md` and follow it.
-6. `shipping`: run `harness run learn` and follow `references/learning.md`, then start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body Why, What and How. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run wait --pr <url>`, then `harness run report`, then `harness run done --pr <url>`.
+6. `shipping`: run `harness run learn` and follow `references/learning.md`, then start the `pr-open` skill. It pushes the branch, runs `harness pr policy` and opens a draft or a ready pull request by that policy, with the body of that skill. With `merge: user`, the user merges. With `draft: optional` and `merge: agent`, the agent merges after the checks pass. In every other case, the user merges. Then run `harness run wait --pr <url>`, then `harness run report`, then `harness run done --pr <url>`.
    - The turn may stop while the run waits on the merge. After a `resume` into `shipping`, run the wait again.
 
 A plan with only `docs` commits and no open question skips the approval: `harness run plan` moves it to `working`.

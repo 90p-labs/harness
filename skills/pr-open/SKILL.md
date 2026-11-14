@@ -1,12 +1,14 @@
 ---
 name: pr-open
-description: "Opens the pull request of a branch, as a draft or ready by the pull request policy, or edits its body. The body starts with a bottom line, then answers Why, What and How, in this order. How holds the plan diagrams and the visuals of the done tasks. Use in the ship step of the harness loop, or when the user types /90p:pr-open (Codex: $90p:pr-open)."
+description: "Opens the pull request of a branch, as a draft or ready by the pull request policy, or edits its body. The body starts with a bottom line, then answers Why, What, How, Evidence and Merge danger, in this order. How holds the plan diagrams and the visuals of the done tasks. Evidence shows the behaviour before and after. Merge danger states the door and the blast radius. Use in the ship step of the harness loop, or when the user types /90p:pr-open (Codex: $90p:pr-open)."
 argument-hint: "[base branch]"
 ---
 
 # Open a pull request
 
-A reviewer reads the body before the diff. The body starts with a bottom line. Then it answers three questions, in this order: Why, What and How. The guard rule `pr-body-shape` denies another shape.
+A reviewer reads the body before the diff. The body starts with a bottom line. Then it answers three questions, in this order: Why, What and How. Two parts follow: the evidence that the change works, and the danger of the merge. The guard rule `pr-body-shape` denies another shape.
+
+This skill adapts the pull request skill of Matt Pocock (MIT license): <https://github.com/mattpocock/skills/blob/main/skills/engineering/pr/SKILL.md>. The Evidence and Merge danger parts come from that skill. The text here is new. That skill credits the show-me skill of Dex Horthy: <https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md>.
 
 Arguments: `$ARGUMENTS`
 
@@ -62,9 +64,9 @@ Start: run harness version ("Binary"), then step 1
 
 ## 3. Write the body
 
-Run `harness pr body --base <base>` with the base of step 1. It prints the skeleton with the bottom line and Why placeholders. What has one bullet for each branch commit, and How has the `mermaid` fences of the plan. Write its output in a file `pr-body.md` in the scratchpad, or in the temp dir on a host with none. Keep its absolute path, `<body>` below. Do not write it in the repository.
+Run `harness pr body --base <base>` with the base of step 1. It prints the skeleton with placeholders for the bottom line, Why, Evidence and Merge danger. What has one bullet for each branch commit, and How has the `mermaid` fences of the plan. Write its output in a file `pr-body.md` in the scratchpad, or in the temp dir on a host with none. Keep its absolute path, `<body>` below. Do not write it in the repository.
 
-Replace the two placeholders. Keep the fences as the command printed them. Edit a What bullet only when the diff needs a clearer name. Add the visuals of step 2 that the plan lacks.
+Replace each placeholder. Keep the fences as the command printed them. Edit a What bullet only when the diff needs a clearer name. Add the visuals of step 2 that the plan lacks.
 
 ```
 <bottom line: what the PR changes and what the reviewer must check>
@@ -80,6 +82,21 @@ Replace the two placeholders. Keep the fences as the command printed them. Edit 
 ## How
 
 The change adds no diagram.
+
+## Evidence
+
+Before: <what the behaviour was, in one line>
+
+<proof: a screenshot, or a fence with the run command and its output>
+
+After: <what the behaviour is now, in one line>
+
+<proof: a screenshot, or a fence with the run command and its output>
+
+## Merge danger
+
+- Door: <one-way or two-way>. <how to reverse the merge, or why it cannot be reversed>
+- Blast radius: <small, medium or large>. <what breaks and for whom if the change is wrong>
 ```
 
 - Write the body BLUF (bottom line up front). The bottom line is one or two sentences in one line. Each section starts with its main point.
@@ -87,6 +104,17 @@ The change adds no diagram.
 - `## What`: the command prints one bullet for each commit, in the order of the commits. Edit a bullet only when the diff needs a clearer name.
 - `## How`: the mechanism. Put a visual of step 2 where it explains faster than text. Put one sentence above each visual: its main point.
 - A How with no visual says why in one sentence.
+- `## Evidence`: show the behaviour, do not state it. `Before:` and `After:` each take one line and a proof below it.
+- A change that a user sees takes a screenshot, by a URL that the reviewer can open. A local path does not render.
+- Any other change takes a fence with the run command and its output. The red and the green run of the task test fit well.
+- The Before comes from the base: the red run, or the command on the base branch.
+- A docs-only change shows the old and the new text in a `diff` fence, or the run of its doc test. No change is waived.
+- Drop a fence line from a pasted output, because the check reads it as the end of the fence.
+- Replace an em dash or an emoji of a pasted output, because the guard reads a fence too.
+- `## Merge danger`: two lines, `Door:` and `Blast radius:`, each with a value and a reason.
+- `Door:` is `two-way` when a revert of the merge restores the old behaviour. It is `one-way` when a revert does not undo the effect, such as a data migration or a published contract.
+- `Blast radius:` is `small`, `medium` or `large`. The reason says what breaks and for whom if the change is wrong.
+- `small` is one command, page or job. `medium` is one service or one group of users. `large` is every user, shared data or money.
 - A line outside a fence has 40 words at most. A table row is one line.
 - Use no em dash and no emoji.
 
