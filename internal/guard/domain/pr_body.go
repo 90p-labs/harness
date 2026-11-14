@@ -33,7 +33,8 @@ const (
 	commentClose           = "-->"
 	tickMark               = "`"
 
-	nextStepProof       = "put a screenshot, or a fence with the run command and its output, below the line"
+	nextStepProof       = "put a screenshot by its http or https URL, or a fence with the run command and its output, below the line"
+	nextStepUpload      = "upload the image and link its http or https URL, or put a fence with the command and its output"
 	nextStepReplace     = "replace it with your text"
 	nextStepDoorReason  = "say after the value how to reverse the merge, or why it cannot be reversed"
 	nextStepBlastReason = "say after the value what breaks and for whom if the change is wrong"
@@ -57,8 +58,9 @@ var (
 	boldMarks      = strings.NewReplacer("**", "", "__", "")
 	sectionHeading = regexp.MustCompile(`^##(\s|$)`)
 	imageProof     = regexp.MustCompile(`!\[[^\]]*\]\(\s*([^\s)][^)]*)\)`)
-	emptyTarget    = regexp.MustCompile(`^<\s*>`)
-	imgTagProof    = regexp.MustCompile(`(?i)<img\s(?:[^>]*\s)?src\s*=\s*(?:"[^"]*[^"\s][^"]*"|'[^']*[^'\s][^']*'|[^\s"'>]+)`)
+	// imgTagOpen matches an img tag name in any case, then one whitespace character or a slash that starts the attributes.
+	// The match keeps the byte offsets of the original text, which a lower case copy would not.
+	imgTagOpen = regexp.MustCompile(`(?i)<img[\s/]`)
 )
 
 // BodySections returns a copy of the section lines of the body, in order.
@@ -226,8 +228,11 @@ func proofProblems(section []bodyLine, own, other int, label string) []string {
 	if other > own {
 		end = other
 	}
-	if hasProof(section[own:end]) {
+	switch hasProof(section[own:end]) {
+	case proofShown:
 		return nil
+	case proofLocalImage:
+		return []string{problem(fmt.Sprintf("the %s line shows an image with no http or https URL", label), nextStepUpload)}
 	}
 	return []string{problem(fmt.Sprintf("the %s line shows no proof", label), nextStepProof)}
 }
@@ -323,35 +328,161 @@ func closingRun(text string, n int) int {
 	return -1
 }
 
-func hasImage(text string) bool { return hasMarkdownImage(text) || imgTagProof.MatchString(text) }
+// proofState is what the window of a label shows: nothing, only an image with no web URL, or proof.
+type proofState int
 
-// hasMarkdownImage is true for an image with a target. The target <> is empty, also with spaces inside.
-func hasMarkdownImage(text string) bool {
-	return slices.ContainsFunc(imageProof.FindAllStringSubmatch(text, -1), func(m []string) bool {
-		return !emptyTarget.MatchString(m[1])
-	})
+const (
+	proofNone proofState = iota
+	proofLocalImage
+	proofShown
+)
+
+// imageTargets returns the target of each image of the line, without blank ones.
+// It reads the line after dropSpans, so an image in a code span is no image.
+func imageTargets(text string) []string {
+	text = dropSpans(text)
+	var targets []string
+	for _, m := range imageProof.FindAllStringSubmatch(text, -1) {
+		targets = append(targets, m[1])
+	}
+	for rest := text; ; {
+		src, after, found := nextTagSrc(rest)
+		if !found {
+			break
+		}
+		targets = append(targets, src)
+		rest = after
+	}
+	var clean []string
+	for _, target := range targets {
+		if target = cleanTarget(target); target != "" {
+			clean = append(clean, target)
+		}
+	}
+	return clean
 }
 
-// hasProof is true for a fence with content, or for an image in the text that renders.
-// The scan dropped each comment already. An image in an inline code span does not count.
-func hasProof(lines []bodyLine) bool {
-	inFence, content := false, false
+// cleanTarget trims the target, cuts its title at the first space outside angle brackets, then drops the angle brackets.
+func cleanTarget(target string) string {
+	target = strings.TrimSpace(target)
+	inAngle := false
+cut:
+	for i, r := range target {
+		switch {
+		case r == '<':
+			inAngle = true
+		case r == '>':
+			inAngle = false
+		case !inAngle && unicode.IsSpace(r):
+			target = target[:i]
+			break cut
+		}
+	}
+	if inner, ok := strings.CutPrefix(target, "<"); ok {
+		// An open angle bracket with no closing one is no link in Markdown, so the target keeps it and is no web target.
+		if inner, ok = strings.CutSuffix(inner, ">"); !ok {
+			return target
+		}
+		target = inner
+	}
+	return strings.TrimSpace(target)
+}
+
+// nextTagSrc finds the next img tag in the text and returns the value of its first src attribute.
+// A src text inside another attribute value is no attribute. The rest starts after the tag.
+func nextTagSrc(text string) (src, rest string, found bool) {
+	loc := imgTagOpen.FindStringIndex(text)
+	if loc == nil {
+		return "", "", false
+	}
+	src, rest = tagSrc(text[loc[1]-1:])
+	return src, rest, true
+}
+
+// tagSrc reads the attributes of a tag up to its closing angle bracket outside quotes.
+func tagSrc(text string) (src, rest string) {
+	seen := false
+	for {
+		text = strings.TrimLeft(text, " \t\r\n/")
+		if text == "" || text[0] == '>' {
+			return src, strings.TrimPrefix(text, ">")
+		}
+		end := strings.IndexAny(text, " \t\r\n=/>")
+		if end < 0 {
+			return src, ""
+		}
+		name := text[:end]
+		text = strings.TrimLeft(text[end:], " \t\r\n")
+		if text == "" || text[0] != '=' {
+			continue
+		}
+		var value string
+		value, text = attrValue(strings.TrimLeft(text[1:], " \t\r\n"))
+		if !seen && strings.EqualFold(name, "src") {
+			src, seen = value, true
+		}
+	}
+}
+
+// attrValue reads a quoted or unquoted attribute value and returns it with the text after it.
+func attrValue(text string) (value, rest string) {
+	if text != "" && (text[0] == '"' || text[0] == '\'') {
+		var closed bool
+		value, rest, closed = strings.Cut(text[1:], text[:1])
+		if !closed {
+			return value, ""
+		}
+		return value, rest
+	}
+	end := strings.IndexAny(text, " \t\r\n>")
+	if end < 0 {
+		return text, ""
+	}
+	return text[:end], text[end:]
+}
+
+// isWebTarget is true for an http:// or https:// target in any case, with text after the scheme.
+func isWebTarget(target string) bool {
+	lower := strings.ToLower(target)
+	for _, scheme := range []string{"http://", "https://"} {
+		if len(lower) > len(scheme) && strings.HasPrefix(lower, scheme) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasProof reads the window of a label. A fence with content or an image with a web URL is proof.
+// The scan dropped each comment already. It reads every image before it decides.
+func hasProof(lines []bodyLine) proofState {
+	inFence, content, local := false, false, false
 	for _, l := range lines {
 		switch {
 		case l.fence && inFence:
 			if content {
-				return true
+				return proofShown
 			}
 			inFence = false
 		case l.fence:
 			inFence, content = true, false
 		case l.in:
 			content = content || l.text != ""
-		case hasImage(dropSpans(l.text)):
-			return true
+		default:
+			for _, target := range imageTargets(l.text) {
+				if isWebTarget(target) {
+					return proofShown
+				}
+				local = true
+			}
 		}
 	}
-	return inFence && content
+	switch {
+	case inFence && content:
+		return proofShown
+	case local:
+		return proofLocalImage
+	}
+	return proofNone
 }
 
 // valueLine describes a merge danger line: its label, the values it accepts and the next step for a missing reason.

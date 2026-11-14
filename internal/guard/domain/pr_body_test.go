@@ -9,7 +9,8 @@ import (
 
 const (
 	nextEvidence = "write a Before: line and an After: line under ## Evidence, in this order"
-	nextProof    = "put a screenshot, or a fence with the run command and its output, below the line"
+	nextProof    = "put a screenshot by its http or https URL, or a fence with the run command and its output, below the line"
+	nextUpload   = "upload the image and link its http or https URL, or put a fence with the command and its output"
 	nextDanger   = "write a Door: line and a Blast radius: line under ## Merge danger"
 	nextReplace  = "replace it with your text"
 
@@ -175,14 +176,14 @@ func TestBodyEvidence(t *testing.T) {
 		{"image with a blank target", "Before: x\n\n![shot]( )\n\nAfter: y\n\n" + image + "\n", []string{beforeNoProof}},
 		{"image with an empty angle target", "Before: x\n\n![shot](<>)\n\nAfter: y\n\n" + image + "\n", []string{beforeNoProof}},
 		{"image with a blank angle target", "Before: x\n\n![shot](< >)\n\nAfter: y\n\n" + image + "\n", []string{beforeNoProof}},
-		{"image with an angle target", "Before: x\n\n![shot](<a.png>)\n\nAfter: y\n\n" + image + "\n", nil},
+		{"image with an angle target", "Before: x\n\n![shot](<a.png>)\n\nAfter: y\n\n" + image + "\n", []string{"the Before: line shows an image with no http or https URL. " + nextUpload}},
 		{"underscore labels", "__Before:__ x\n\n" + proofFence + "\n\n__After:__ y\n\n" + proofFence + "\n", nil},
 		{"underscore labels after a marker", "- __Before:__ x\n\n" + proofFence + "\n\n* __After:__ y\n\n" + proofFence + "\n", nil},
 		{"img tag with no src", "Before: x\n\n<img alt=\"a\">\n\nAfter: y\n\n" + tag + "\n", []string{beforeNoProof}},
 		{"img tag with an empty src", "Before: x\n\n" + proofFence + "\n\nAfter: y\n\n<img src=\"\">\n", []string{afterNoProof}},
 		{"img tag with a blank double-quoted src", "Before: x\n\n<img src=\" \">\n\nAfter: y\n\n" + tag + "\n", []string{beforeNoProof}},
 		{"img tag with a blank single-quoted src", "Before: x\n\n<img src=' '>\n\nAfter: y\n\n" + tag + "\n", []string{beforeNoProof}},
-		{"img tag with a space inside the src", "Before: x\n\n<img src=\"my shot.png\">\n\nAfter: y\n\n" + tag + "\n", nil},
+		{"img tag with a space inside the src", "Before: x\n\n<img src=\"my shot.png\">\n\nAfter: y\n\n" + tag + "\n", []string{"the Before: line shows an image with no http or https URL. " + nextUpload}},
 		{"image inside a fence is a fence with content", "Before: x\n\n```\n" + image + "\n```\n\nAfter: y\n\n" + proofFence + "\n", nil},
 		{"image in inline code", "Before: x `" + image + "`\n\nAfter: y\n\n" + image + "\n", []string{beforeNoProof}},
 		{"img tag in inline code", "Before: x\n\n`" + tag + "`\n\nAfter: y\n\n" + tag + "\n", []string{beforeNoProof}},
@@ -234,6 +235,70 @@ func TestBodyEvidence(t *testing.T) {
 	})
 	misplaced := goodHead + "## Merge danger\n\n" + goodDanger + "\n## Evidence\n\n" + goodEvidenc
 	checkProblems(t, "sections out of order", misplaced, []string{"## Merge danger is before ## Evidence" + shape})
+}
+
+func TestBodyImageURL(t *testing.T) {
+	beforeUpload := "the Before: line shows an image with no http or https URL. " + nextUpload
+	afterUpload := "the After: line shows an image with no http or https URL. " + nextUpload
+	beforeNoProof := "the Before: line shows no proof. " + nextProof
+	web := "![ok](https://example.com/a.png)"
+
+	// before puts the target text under Before: and a web image under After:.
+	before := func(under string) string { return "Before: x\n\n" + under + "\n\nAfter: y\n\n" + web + "\n" }
+
+	cases := []struct {
+		name     string
+		evidence string
+		want     []string
+	}{
+		{"http", before("![a](http://e.com/a.png)"), nil},
+		{"https", before("![a](https://e.com/a.png)"), nil},
+		{"web scheme in upper case", before("![a](HTTPS://e.com/a.png)"), nil},
+		{"web scheme in mixed case", before("![a](Http://e.com/a.png)"), nil},
+		{"angle web target", before("![a](<https://e.com/a.png>)"), nil},
+		{"web target with a title", before(`![a](https://e.com/a.png "t")`), nil},
+		{"angle web target with a title", before(`![a](<https://e.com/a.png> "t")`), nil},
+		{"web target with a bare space", before("![a](https://e.com/my shot.png)"), nil},
+		{"img tag with a web src", before(`<img src="https://e.com/a.png">`), nil},
+		{"img tag with an unquoted web src", before("<img src=HTTPS://e.com/a.png>"), nil},
+		{"img tag with a slash before the src", before(`<img/src="https://e.com/a.png">`), nil},
+		{"img tag after a letter with a longer lower case", before(`Ⱥ<img src="https://e.com/a.png">`), nil},
+		{"img tag after the Kelvin sign", before("K <img src=\"https://e.com/a.png\">"), nil},
+		{"imgx is no tag", before(`<imgx src="/tmp/a.png">`), []string{beforeNoProof}},
+		{"img tag with a local src and a slash", before(`<img/src="/tmp/a.png">`), []string{beforeUpload}},
+		{"local img tag after many longer lower case letters", before(`ȺȺȺȺȺȺ<img src="/tmp/a.png">`), []string{beforeUpload}},
+		{"local img tag after a dotted capital I", before(`İ <img src="/tmp/a.png">`), []string{beforeUpload}},
+		{"absolute path", before("![a](/tmp/b.png)"), []string{beforeUpload}},
+		{"bare file name", before("![a](shot.png)"), []string{beforeUpload}},
+		{"relative path", before("![a](./a.png)"), []string{beforeUpload}},
+		{"angle local target", before("![a](<a.png>)"), []string{beforeUpload}},
+		{"angle local target with a space", before("![a](<my shot.png>)"), []string{beforeUpload}},
+		{"local target with a title", before(`![a](/tmp/b.png "https://e.com/a.png")`), []string{beforeUpload}},
+		{"scheme-relative target", before("![a](//host/a.png)"), []string{beforeUpload}},
+		{"file target", before("![a](file:///tmp/a.png)"), []string{beforeUpload}},
+		{"data target", before("![a](data:image/png;base64,AAAA)"), []string{beforeUpload}},
+		{"bare scheme", before("![a](https://)"), []string{beforeUpload}},
+		{"bare scheme in angle brackets", before("![a](<https://>)"), []string{beforeUpload}},
+		{"web target with an unclosed angle bracket", before("![a](<https://e.com/a.png)"), []string{beforeUpload}},
+		{"web target with an unclosed angle bracket and a title", before(`![a](<https://e.com/a.png "t")`), []string{beforeUpload}},
+		{"img tag with a local src", before(`<img src="/tmp/a.png">`), []string{beforeUpload}},
+		{"img tag with a local unquoted src", before("<img src=a.png>"), []string{beforeUpload}},
+		{"src text in another attribute", before(`<img src="/tmp/a.png" alt="old src=https://e.com/a.png">`), []string{beforeUpload}},
+		{"src text in an attribute before the src", before(`<img alt="src=https://e.com/a.png" src="/tmp/a.png">`), []string{beforeUpload}},
+		{"local image above a fence", "Before: x\n\n![a](/tmp/b.png)\n\n" + proofFence + "\n\nAfter: y\n\n" + web + "\n", nil},
+		{"local image then web image", before("![a](/tmp/b.png)\n\n" + web), nil},
+		{"web image then local image", before(web + "\n\n![a](/tmp/b.png)"), nil},
+		{"local image under After", "Before: x\n\n" + web + "\n\nAfter: y\n\n![a](/tmp/a.png)\n", []string{afterUpload}},
+		{"local image under both labels", "Before: x\n\n![a](/tmp/a.png)\n\nAfter: y\n\n![a](/tmp/b.png)\n", []string{beforeUpload, afterUpload}},
+		{"local image in a code span", before("x `![a](/tmp/b.png)`"), []string{beforeNoProof}},
+		{"local image in a comment", before("<!-- ![a](/tmp/b.png) -->"), []string{beforeNoProof}},
+		{"reference image", before("![a][ref]"), []string{beforeNoProof}},
+		{"blank target", before("![a]( )"), []string{beforeNoProof}},
+		{"local image on the label line", "Before: x ![a](/tmp/b.png)\n\nAfter: y\n\n" + web + "\n", []string{beforeUpload}},
+	}
+	for _, tc := range cases {
+		checkProblems(t, tc.name, withEvidence(tc.evidence), tc.want)
+	}
 }
 
 func TestBodyMergeDanger(t *testing.T) {
