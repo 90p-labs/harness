@@ -18,6 +18,7 @@ Start: run harness version ("Binary")
 ├── harness init prints a lint-setup line → the `lint-setup` skill, one language at a time
 ├── the change touches a bounded context of a DDD project
 │   └── load the `ddd` skill, and give its path to the explorer and the reviewer
+├── a large effort with open decisions → chart a map first, `references/map.md`; a map needs no run
 ├── the phase shipping → the `pr-open` skill
 └── a deny of the guard → "Guard"
 ```
