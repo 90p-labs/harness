@@ -56,6 +56,46 @@ func TestReviewRoundDocs(t *testing.T) {
 	}
 }
 
+const (
+	adrProgramLayers = "docs/adr/0026-program-layers-around-a-run.md"
+	wordsDecision    = "1. words."
+)
+
+// programLayerTerms are the terms that ADR 0026 adds to CONTEXT.md.
+var programLayerTerms = []string{
+	"Map", "Decision ticket", "Map frontier",
+	"Program", "Coordinator", "Slice", "Run frontier", "Integration branch", "Merger", "Program review",
+	"Expand, migrate, contract",
+	"Routine", "Trigger", "Firing",
+}
+
+func TestProgramLayerTerms(t *testing.T) {
+	adr := strings.ToLower(repository.Read(t, adrProgramLayers))
+	words := ""
+	for _, line := range strings.Split(adr, "\n") {
+		if strings.HasPrefix(line, wordsDecision) {
+			words = line
+		}
+	}
+	if words == "" {
+		t.Fatalf("%s has no decision that starts with %q", adrProgramLayers, wordsDecision)
+	}
+	glossary := repository.Read(t, contextFile)
+	for _, term := range programLayerTerms {
+		if !strings.Contains(glossary, "\n- **"+term+"**: ") {
+			t.Errorf("%s does not define the term %q as a bullet with a colon", contextFile, term)
+		}
+		// A term with a comma is a list of steps, and the ADR names it in its own decision.
+		haystack := words
+		if strings.Contains(term, ",") {
+			haystack = adr
+		}
+		if !strings.Contains(haystack, strings.ToLower(term)) {
+			t.Errorf("%s does not name the term %q in its words decision", adrProgramLayers, term)
+		}
+	}
+}
+
 // adrFiles returns the ADR files in the folder, found by glob.
 func adrFiles(t *testing.T) []string {
 	t.Helper()

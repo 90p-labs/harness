@@ -14,7 +14,7 @@ These terms have one meaning in the code, the docs and the plans.
 - **Live round**: the count of regressions after a release. Each live round replans the run.
 - **Open question**: a decision of the plan that the code and the docs cannot make. It sits under `## Open questions` until the user answers it.
 - **Grill**: the rounds of questions that turn each open question into a decision of the user.
-- **Frontier**: the open questions whose parent decisions are made. One round asks the whole frontier.
+- **Frontier**: the open questions whose parent decisions are made. One round asks the whole frontier. It differs from the map frontier, which holds the tickets of a map and not the questions of one plan. The run frontier holds the runs of a program that are ready to start.
 - **Approval record**: a row that holds the run id and the SHA-256 of `plan.md` when the user picks `Approve` on the `Plan` question. `run approve` needs it, unless `--by` names a model.
 - **Role**: a job of a subagent, such as `explorer`, `worker`, `reviewer` or `advisor`. `.harness.yaml` gives each role the models that it may use on each host.
 - **Review lens**: the question of one reviewer. `Spec` checks the diff against `plan.md`. `Standards` checks it against the repository rules.
@@ -43,6 +43,25 @@ These terms have one meaning in the code, the docs and the plans.
 - **Merge danger**: the last section of the pull request body. It has a `Door:` line and a `Blast radius:` line, each with a value and a reason.
 - **Door**: the first line of the merge danger. Its value is `two-way` when a revert of the merge restores the old behaviour, and `one-way` when it does not.
 - **Blast radius**: the second line of the merge danger. Its value is `small`, `medium` or `large`. The reason says what breaks and for whom if the change is wrong.
+
+## Program terms
+
+ADR 0026 chose these terms, and the code holds only the map terms until the later runs land.
+
+- **Map**: a markdown file for a large effort, written before the multi-run plan. It holds a destination, the decisions so far, what is not yet specified and a list of decision tickets. It needs no run.
+- **Decision ticket**: one question of a map. Its type is `research`, `prototype`, `grilling` or `work`. It ends with an answer and never with a change of the product.
+- **Map frontier**: the tickets of a map that are open, have every blocker closed and have no claim. `harness plan check --file` prints it.
+- **Program**: the execution of one multi-run plan. A coordinator starts its runs. In the code, `Program` is the parsed multi-run plan.
+- **Coordinator**: the session that drives a program. It starts runs and writes no code.
+- **Slice**: the work of one run of a multi-run plan. It is small enough for one fresh context, with 6 tasks at most.
+- **Run frontier**: the runs of a program whose dependencies are done and that no worktree started.
+- **Integration branch**: the one branch of a program onto which the merger merges each done run branch.
+- **Merger**: the step that merges each done run branch onto the integration branch in wave order. It resolves conflicts and does not change the scope of a run.
+- **Program review**: one review panel over the diff of the integration branch against the default branch.
+- **Expand, migrate, contract**: the three steps of a wide refactor, with one run for each step. Expand adds the new form, migrate moves the users, and contract removes the old form.
+- **Routine**: a named entry of the config that starts a run with no person. Where the loop asks a person, the run ends `blocked`.
+- **Trigger**: what fires a routine. It is a ticket, a pull request event or a clock.
+- **Firing**: one start of a routine. It starts one run at most.
 
 ## Plugin terms
 
