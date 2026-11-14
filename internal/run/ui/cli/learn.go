@@ -17,14 +17,17 @@ const (
 	learnCandidateFormat = "candidate: %s %s %s: %s"
 	learnNoLocation      = "candidate: %s %s: %s"
 	learnNoCandidates    = "learn: no convention candidates"
-	learnNextCandidates  = "next: add the user corrections, then ask the Conventions question (references/learning.md)"
+	learnNothing         = "learn: no convention candidates and no evidence"
+	learnEvidenceFormat  = "evidence: %s: %s"
+	learnEvidenceNoText  = "evidence: %s"
+	learnNextEvidence    = "next: add the user corrections and the lessons that cite a line above, then ask the Conventions question; with nothing to ask, start pr-open (references/learning.md)"
 	learnNextNone        = "next: with no user correction, start pr-open"
 )
 
 func learnCommand(connect Connect) *cobra.Command {
 	return &cobra.Command{
 		Use:   commandLearn + " [<run id>]",
-		Short: "List the convention candidates of a run",
+		Short: "List the convention candidates and the run evidence of a run",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withHandlers(cmd, connect, func(ctx context.Context, h Handlers) error {
@@ -44,13 +47,26 @@ func learnCommand(connect Connect) *cobra.Command {
 
 func learnLines(l learn.Learn) []string {
 	lines := []string{fmt.Sprintf(learnRunFormat, l.ID)}
+	if len(l.Candidates) == 0 && len(l.Evidence) == 0 {
+		return append(lines, learnNothing, learnNextNone)
+	}
 	if len(l.Candidates) == 0 {
-		return append(lines, learnNoCandidates, learnNextNone)
+		lines = append(lines, learnNoCandidates)
 	}
 	for _, c := range l.Candidates {
 		lines = append(lines, candidateLine(c))
 	}
-	return append(lines, learnNextCandidates)
+	for _, e := range l.Evidence {
+		lines = append(lines, evidenceLine(e))
+	}
+	return append(lines, learnNextEvidence)
+}
+
+func evidenceLine(e domain.RunEvidence) string {
+	if e.Text == "" {
+		return fmt.Sprintf(learnEvidenceNoText, e.ID)
+	}
+	return fmt.Sprintf(learnEvidenceFormat, e.ID, e.Text)
 }
 
 func candidateLine(c domain.Candidate) string {
