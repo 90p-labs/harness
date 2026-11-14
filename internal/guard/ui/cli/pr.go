@@ -20,13 +20,10 @@ const (
 	missingFlagMsg = "--%s is required"
 	bodyOK         = "ok"
 
-	commandBody           = "body"
-	commandPolicy         = "policy"
-	bottomLinePlaceholder = "<bottom line: what the PR changes and what the reviewer must check>"
-	whyPlaceholder        = "<why: the problem and the reason for the change>"
-	noDiagramLine         = "The change adds no diagram."
-	fenceMermaidOpen      = "```mermaid"
-	fenceClose            = "```"
+	commandBody      = "body"
+	commandPolicy    = "policy"
+	fenceMermaidOpen = "```mermaid"
+	fenceClose       = "```"
 )
 
 // BodySource reads what the pull request body needs: the plan of the active run and the branch commit subjects.
@@ -80,7 +77,7 @@ func NewPRCommand(source BodySource, policy PolicySource) *cobra.Command {
 	check.Flags().String(flagBodyFile, "", "the pull request body file")
 	body := &cobra.Command{
 		Use:   commandBody,
-		Short: "Print a pull request body skeleton: placeholders for the bottom line and Why, What from the commits, How from the plan diagrams",
+		Short: "Print a pull request body skeleton: placeholders for the bottom line, Why, Evidence and Merge danger, What from the commits, How from the plan diagrams",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			plan, err := source.Plan(cmd.Context())
@@ -119,23 +116,7 @@ func NewPRCommand(source BodySource, policy PolicySource) *cobra.Command {
 }
 
 func skeleton(plan string, commits []string) string {
-	var b strings.Builder
-	b.WriteString(bottomLinePlaceholder + "\n\n## Why\n\n" + whyPlaceholder + "\n\n## What\n\n")
-	for _, subject := range commits {
-		b.WriteString("- " + subject + "\n")
-	}
-	b.WriteString("\n## How\n\n")
-	fences := mermaidFences(plan)
-	if len(fences) == 0 {
-		b.WriteString(noDiagramLine + "\n")
-	}
-	for i, fence := range fences {
-		if i > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString(fence)
-	}
-	return b.String()
+	return domain.BodySkeleton(commits, mermaidFences(plan))
 }
 
 // mermaidFences returns each mermaid fence of the text, with its fence lines and a closing newline.

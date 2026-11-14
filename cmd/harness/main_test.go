@@ -132,7 +132,7 @@ func TestPRCheck(t *testing.T) {
 		}
 	}
 
-	write("Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.\n")
+	write("Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.\n\n## Evidence\n\nBefore: x\n\n```\nok\n```\n\nAfter: y\n\n```\nok\n```\n\n## Merge danger\n\n- Door: two-way. Revert.\n- Blast radius: small. One job.\n")
 	if code, stdout, _ := execute(t, "pr", "check", "--body-file", body); code != exitOK || stdout != "ok\n" {
 		t.Fatalf("good body: code = %d, stdout = %q", code, stdout)
 	}
@@ -144,6 +144,25 @@ func TestPRCheck(t *testing.T) {
 
 	if code, _, stderr := execute(t, "pr", "check"); code != exitUsage || !strings.Contains(stderr, "--body-file is required") {
 		t.Fatalf("no flag: code = %d, stderr = %q", code, stderr)
+	}
+}
+
+func TestPRCheckOldShape(t *testing.T) {
+	body := filepath.Join(t.TempDir(), "body.md")
+	old := "Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.\n"
+	if err := os.WriteFile(body, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, _ := execute(t, "pr", "check", "--body-file", body)
+
+	if code != exitRuntime {
+		t.Fatalf("code = %d, want %d, stdout = %q", code, exitRuntime, stdout)
+	}
+	for _, want := range []string{"the body has no ## Evidence line", "the body has no ## Merge danger line"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout = %q, want it to hold %q", stdout, want)
+		}
 	}
 }
 
