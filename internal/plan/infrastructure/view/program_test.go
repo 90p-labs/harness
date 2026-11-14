@@ -157,6 +157,16 @@ func TestProgramPage(t *testing.T) {
 		}
 	})
 
+	t.Run("a decision with inline code stays one flex item", func(t *testing.T) {
+		coded := prog
+		coded.Decisions = []string{"So no later run owns `docs/programs/`."}
+		got := render(t, domain.ViewInput{Program: &coded})
+		want := "<li><span>So no later run owns <code>docs/programs/</code>.</span></li>"
+		if !strings.Contains(got, want) {
+			t.Errorf("the decision is not wrapped in one span, want %s", want)
+		}
+	})
+
 	t.Run("a problem shows its rule and line", func(t *testing.T) {
 		in.Problems = []domain.Problem{{Line: 12, Rule: domain.RuleRunField, Message: "run R1 has no Branch: line"}}
 		row := problemRow.FindString(render(t, in))
