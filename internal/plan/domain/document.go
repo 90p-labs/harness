@@ -133,6 +133,7 @@ type Task struct {
 	Side       string
 	Owned      []string
 	TestFirst  string
+	Seams      []string
 	DoD        []int
 	DependsOn  []int
 	Model      string

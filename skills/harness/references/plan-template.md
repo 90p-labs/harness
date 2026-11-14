@@ -29,7 +29,7 @@ Track: full
 
 - Side: backend
 - Owned files: `internal/thing/domain/thing.go`, `internal/thing/domain/thing_test.go`
-- Test first: `thing_test.go`: `TestThing` fails, because `Thing` does not exist.
+- Test first: `thing_test.go`: `TestThing` fails, because `Thing` does not exist. Seam: `thing.Thing`.
 - DoD: criterion 1.
 - Depends on: none
 
@@ -117,6 +117,7 @@ Each line gives the rule id, what it checks, and the fix.
 - `sentence-length`: a sentence has more than 25 words. Split the sentence.
 - `em-dash`: the text holds an em dash. Use a comma or a full stop.
 - `risk-unanchored`: a risk has no `Test:` with a backticked name or no `Decision:` text, or the test is in no proof. Anchor the risk.
+- `seam-missing`: a task names a test and no `Seam:` name apart from the test or a test file. Add a seam in backticks.
 - `threat-model`: a tree path in a `guard` or `security` folder needs the 3 bullets. Add `## Threat model`.
 - `plan-size`: a single-run plan has more than 6 tasks. Split the change into a multi-run plan.
 - `run-field`: a run heading or a run field is wrong. Fix the field.

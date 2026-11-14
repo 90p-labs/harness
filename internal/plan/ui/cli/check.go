@@ -72,7 +72,7 @@ func planHelp() string {
 		fmt.Sprintf("%s is one of: %s. %s lists paths in backticks; a folder ends in /.", domain.FieldSide, strings.Join(domain.TaskSides, ", "), domain.FieldOwned),
 		fmt.Sprintf("%s starts with %s. %s is %s.", domain.FieldDoD, domain.FormDoD, domain.FieldDependsOn, domain.FormDependsOn),
 		fmt.Sprintf("%s is optional and names the model of the worker agent for the task, such as haiku or sonnet.", domain.FieldModel),
-		"Each criterion is in a DoD line. Each task is in a commit. Each tree file is in the Owned files of a task.",
+		fmt.Sprintf("Each criterion is in a DoD line. Each task is in a commit. Each tree file is in the Owned files of a task. A task that names a test needs a seam, as %s (rule %s).", domain.FormSeam, domain.RuleSeamMissing),
 		fmt.Sprintf("Trees: a `%s` fence under %s and %s. The first line is the root and ends in /. Indent %d characters for each level.", domain.FenceTree, domain.HeadingCodeTree, domain.HeadingTestTree, domain.TreeLevelWidth),
 		fmt.Sprintf("Each file ends with a tree mark: %s. A folder takes no mark.", domain.TreeMarks),
 		"The diagram marks are another set: run `harness diagram --help`.",

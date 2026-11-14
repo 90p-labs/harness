@@ -56,6 +56,9 @@ func TestParsePlan(t *testing.T) {
 	if got := second.DependsOn; len(got) != 1 || got[0] != 1 {
 		t.Errorf("task 2 depends = %v", got)
 	}
+	if !slices.Equal(first.Seams, []string{"domain.Pong"}) || !slices.Equal(second.Seams, []string{"pingquery.Handler"}) {
+		t.Errorf("seams = %v %v", first.Seams, second.Seams)
+	}
 	if got := first.FieldLines[domain.FieldDoD]; got != 28 {
 		t.Errorf("task 1 DoD line = %d", got)
 	}

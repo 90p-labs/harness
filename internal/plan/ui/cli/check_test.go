@@ -80,6 +80,19 @@ func TestPlanHelp(t *testing.T) {
 	}
 }
 
+func TestPlanHelpSeam(t *testing.T) {
+	out, err := execute(t, connect(nil, new(bool)), "--help")
+
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	for _, w := range []string{domain.FormSeam, string(domain.RuleSeamMissing)} {
+		if !strings.Contains(out, w) {
+			t.Errorf("help does not hold %q", w)
+		}
+	}
+}
+
 func TestPlanHelpProgram(t *testing.T) {
 	out, err := execute(t, connect(nil, new(bool)), "--help")
 

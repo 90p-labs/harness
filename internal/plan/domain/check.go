@@ -73,6 +73,7 @@ func Check(doc Document, in CheckInput) []Problem {
 	checkHeadings(doc, add)
 	checkCriteria(doc, add)
 	checkTasks(doc, add)
+	checkSeams(doc, add)
 	checkTrees(doc, add)
 	checkCommits(doc, add)
 	checkPRs(doc, add)
@@ -426,6 +427,23 @@ func checkDiagrams(doc Document, in CheckInput, add report) {
 		}
 		if err := in.Diagrams.Parse(d.Kind, d.Body); err != nil {
 			add(d.Line, RuleDiagram, "%s", err)
+		}
+	}
+}
+
+func checkSeams(doc Document, add report) {
+	for _, t := range doc.Tasks {
+		file, name := testOf(doc, t)
+		if name == "" && !(file != "" && looksLikeTestFile(file)) {
+			continue
+		}
+		line := t.FieldLines[FieldTestFirst]
+		var names []string
+		for _, m := range testName.FindAllStringSubmatch(t.TestFirst, -1) {
+			names = append(names, m[1])
+		}
+		if !slices.ContainsFunc(t.Seams, func(s string) bool { return !slices.Contains(names, s) && !looksLikeTestFile(s) }) {
+			add(line, RuleSeamMissing, "task %d names a test and no seam apart from the test: write %s", t.Number, FormSeam)
 		}
 	}
 }
