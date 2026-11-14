@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"context"
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -97,6 +99,53 @@ func checkReproductionCause(doc Document, add report) {
 	case !bug && fix >= 0:
 		add(doc.Commits[fix].Line, RuleReproduction, "a plan with a fix commit needs the line `%s %s` and ## %s", CausePrefix, CauseBug, HeadingReproduction)
 	}
+}
+
+// ReproductionRecord is the state and output tail of one criterion proof for the current files.
+type ReproductionRecord struct {
+	Passed bool
+	Tail   string
+}
+
+// ReproductionReader gives the record of a criterion proof. The bool is false when no record exists for the current files.
+type ReproductionReader interface {
+	Reproduction(ctx context.Context, criterion int) (ReproductionRecord, bool, error)
+}
+
+// VerifyReproduction gives the problems of the rule reproduction-red for a bug plan with a criterion.
+// It skips a plan with no bug cause, a plan with Human only and a nil reader.
+func VerifyReproduction(ctx context.Context, doc Document, reader ReproductionReader) ([]Problem, error) {
+	r := doc.Reproduction
+	if reader == nil || doc.Cause != CauseBug || r.Line == 0 || r.HumanOnly.Present() || !r.Criterion.Present() {
+		return nil, nil
+	}
+	number, err := strconv.Atoi(r.Criterion.Value)
+	if err != nil {
+		return nil, nil
+	}
+	symptom := ""
+	if m := symptomText.FindStringSubmatch(r.Symptom.Value); m != nil {
+		symptom = m[1]
+	}
+	problem := func(format string, args ...any) []Problem {
+		return []Problem{{Line: r.Criterion.Line, Rule: RuleReproductionRed, Message: fmt.Sprintf(format, args...)}}
+	}
+	if symptom == "" {
+		return problem("criterion %d has no %s text in backticks, so no failure can match it", number, ReproSymptom), nil
+	}
+	record, found, err := reader.Reproduction(ctx, number)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case !found:
+		return problem("criterion %d has no record for the current files: run `harness verify --criterion %d` and read its output, because a setup failure or a gate veto saves no record", number, number), nil
+	case record.Passed:
+		return problem("the proof of criterion %d passed, so it does not reproduce the bug", number), nil
+	case !strings.Contains(record.Tail, symptom):
+		return problem("the proof of criterion %d failed, and its output does not hold the %s text %q: fix the proof or the symptom", number, ReproSymptom, symptom), nil
+	}
+	return nil, nil
 }
 
 func checkReproductionProof(doc Document, add report) {

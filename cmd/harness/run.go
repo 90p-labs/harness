@@ -206,7 +206,7 @@ func openRun(ctx context.Context, env environment) (cli.Handlers, *dbal.DB, erro
 	if err != nil {
 		return cli.Handlers{}, nil, err
 	}
-	gate := planGate{submit: planmodule.NewModule(env.bus, env.key.Worktree, env.proofs, env.defaultBranch).Submit, worktree: env.key.Worktree}
+	gate := planGate{submit: planmodule.NewModule(env.bus, env.key.Worktree, env.proofs, env.defaultBranch).Submit.WithReproduction(env.proofs), worktree: env.key.Worktree}
 	return runmodule.NewModule(db, env.bus, gate, env.cfg.Run, env.key, time.Now), db, nil
 }
 

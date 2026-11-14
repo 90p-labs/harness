@@ -118,6 +118,7 @@ Each line gives the rule id, what it checks, and the fix.
 - `commit-format`: a commit line is not a conventional commit with its tasks. Use `type: subject` and `(task n)`.
 - `commit-split`: a plan has a `test:` commit and a `docs:` commit, and no `feat:` or `fix:` commit. Drop the test commit and prove the docs with a proof command: a docs-only change is one `docs:` commit.
 - `reproduction`: the `Cause:` line or `## Reproduction` is wrong, or a `fix` commit has no `Cause: bug`. Give one criterion and a symptom, or `Human only`, then 3 to 5 ranked hypotheses.
+- `reproduction-red`: `harness run plan` in `planning` found no failed proof of the `Criterion` for the current files, or the output lacks the `Symptom`. Run `harness verify --criterion n` and read its output.
 - `pr-sequence`: the PR list does not mark exactly one `(this run)`. Mark one PR.
 - `spec-criteria`: a tech spec has no valid `Criteria` line. List the criteria that it covers.
 - `trace-unlinked`: a criterion has no tech spec, or a task owns no tree file. Link it.

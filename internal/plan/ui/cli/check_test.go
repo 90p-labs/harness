@@ -102,7 +102,7 @@ func TestReproductionSurfaceHelp(t *testing.T) {
 		t.Fatalf("help: %v", err)
 	}
 	for _, w := range []string{
-		domain.CausePrefix + " " + domain.CauseBug, "## " + domain.HeadingReproduction, string(domain.RuleReproduction),
+		domain.CausePrefix + " " + domain.CauseBug, "## " + domain.HeadingReproduction, string(domain.RuleReproduction), string(domain.RuleReproductionRed),
 		domain.ReproCriterion, domain.ReproSymptom, domain.ReproHumanOnly, domain.ReproRegression, domain.FormHypothesis,
 	} {
 		if !strings.Contains(out, w) {

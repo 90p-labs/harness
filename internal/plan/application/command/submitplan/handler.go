@@ -36,13 +36,20 @@ type payload struct {
 type Check func(ctx context.Context, path string, liveRound int) (domain.Report, error)
 
 type Handler struct {
-	check Check
-	bus   shareddomain.Dispatcher
-	cwd   string
+	check        Check
+	bus          shareddomain.Dispatcher
+	cwd          string
+	reproduction domain.ReproductionReader
 }
 
 func NewHandler(check Check, bus shareddomain.Dispatcher, cwd string) Handler {
 	return Handler{check: check, bus: bus, cwd: cwd}
+}
+
+// WithReproduction sets the reader of the red check. Without it the check does not run.
+func (h Handler) WithReproduction(reader domain.ReproductionReader) Handler {
+	h.reproduction = reader
+	return h
 }
 
 func (h Handler) Handle(ctx context.Context, c Command) (Result, error) {
@@ -54,9 +61,16 @@ func (h Handler) Handle(ctx context.Context, c Command) (Result, error) {
 		kind := domain.Problem{Line: 1, Rule: domain.RulePlanKind, Message: programRefusal}
 		return Result{}, fmt.Errorf("%w:\n%s", domain.ErrPlanHasProblems, kind)
 	}
-	if len(report.Problems) > 0 {
-		lines := make([]string, len(report.Problems))
-		for i, p := range report.Problems {
+	problems := report.Problems
+	if len(problems) == 0 && c.Phase == shareddomain.PhasePlanning {
+		problems, err = domain.VerifyReproduction(ctx, report.Doc, h.reproduction)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+	if len(problems) > 0 {
+		lines := make([]string, len(problems))
+		for i, p := range problems {
 			lines[i] = p.String()
 		}
 		return Result{}, fmt.Errorf("%w:\n%s", domain.ErrPlanHasProblems, strings.Join(lines, "\n"))

@@ -61,6 +61,81 @@ func command(path string) submitplan.Command {
 	return submitplan.Command{RunID: testRunID, Phase: testPhase, Path: path}
 }
 
+const bugPath = "bug.md"
+
+type fakeReproduction struct {
+	record domain.ReproductionRecord
+	found  bool
+	calls  int
+}
+
+func (f *fakeReproduction) Reproduction(context.Context, int) (domain.ReproductionRecord, bool, error) {
+	f.calls++
+	return f.record, f.found, nil
+}
+
+func bugCheck(_ context.Context, _ string, _ int) (domain.Report, error) {
+	doc := domain.Document{
+		Cause:         domain.CauseBug,
+		OpenQuestions: []string{domain.OpenQuestionsNone},
+		Reproduction: domain.Reproduction{
+			Line:      20,
+			Criterion: domain.ReproLine{Value: "1", Line: 21},
+			Symptom:   domain.ReproLine{Value: "`want pong, got ping`", Line: 22},
+		},
+	}
+	return domain.Report{Track: shareddomain.TrackFull, Doc: doc}, nil
+}
+
+func TestReproductionRedSubmit(t *testing.T) {
+	allow := shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}
+	red := domain.ReproductionRecord{Tail: "want pong, got ping"}
+	tests := []struct {
+		name    string
+		phase   string
+		reader  *fakeReproduction
+		refused bool
+		calls   int
+	}{
+		{"planning with no record is refused", "planning", &fakeReproduction{}, true, 1},
+		{"planning with a passed proof is refused", "planning", &fakeReproduction{record: domain.ReproductionRecord{Passed: true}, found: true}, true, 1},
+		{"planning with a red proof is accepted", "planning", &fakeReproduction{record: red, found: true}, false, 1},
+		{"another phase runs no red check", "awaiting_approval", &fakeReproduction{}, false, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bus := &fakeBus{result: allow}
+			handler := submitplan.NewHandler(bugCheck, bus, testCwd).WithReproduction(tc.reader)
+
+			_, err := handler.Handle(t.Context(), submitplan.Command{RunID: testRunID, Phase: tc.phase, Path: bugPath})
+
+			if tc.refused {
+				if !errors.Is(err, domain.ErrPlanHasProblems) || !strings.Contains(err.Error(), string(domain.RuleReproductionRed)) {
+					t.Fatalf("err = %v, want ErrPlanHasProblems with %s", err, domain.RuleReproductionRed)
+				}
+				if len(bus.envelopes) != 0 {
+					t.Errorf("dispatches = %d, want 0", len(bus.envelopes))
+				}
+			} else if err != nil {
+				t.Fatalf("Handle: %v", err)
+			}
+			if tc.reader.calls != tc.calls {
+				t.Errorf("reader calls = %d, want %d", tc.reader.calls, tc.calls)
+			}
+		})
+	}
+	t.Run("a static problem skips the red check", func(t *testing.T) {
+		reader := &fakeReproduction{}
+		handler := newHandler(&fakeBus{}).WithReproduction(reader)
+
+		_, err := handler.Handle(t.Context(), command(brokenPlan))
+
+		if !errors.Is(err, domain.ErrPlanHasProblems) || reader.calls != 0 {
+			t.Fatalf("err = %v, calls = %d, want the static problem and no call", err, reader.calls)
+		}
+	})
+}
+
 func TestSubmitPlanCollect(t *testing.T) {
 	t.Run("allow returns the track and sends the envelope", func(t *testing.T) {
 		bus := &fakeBus{result: shareddomain.DispatchResult{Verdict: shareddomain.Verdict{Kind: shareddomain.VerdictAllow}}}

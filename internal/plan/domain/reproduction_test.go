@@ -1,6 +1,9 @@
 package domain_test
 
 import (
+	"context"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -142,4 +145,92 @@ func TestReproductionRuleProblems(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fakeReproduction struct {
+	record domain.ReproductionRecord
+	found  bool
+	err    error
+	asked  []int
+}
+
+func (f *fakeReproduction) Reproduction(_ context.Context, criterion int) (domain.ReproductionRecord, bool, error) {
+	f.asked = append(f.asked, criterion)
+	return f.record, f.found, f.err
+}
+
+func TestReproductionRedProblems(t *testing.T) {
+	humanOnly := edit{"- Criterion: 1\n- Symptom: `want pong, got ping`\n", "- Human only: the bug needs a phone\n"}
+	failed := domain.ReproductionRecord{Tail: "got: ping\nwant pong, got ping\nFAIL"}
+	tests := []struct {
+		name   string
+		text   string
+		reader *fakeReproduction
+		want   string
+		asked  []int
+	}{
+		{"red for the symptom", bugPlan(t), &fakeReproduction{record: failed, found: true}, "", []int{1}},
+		{"no record", bugPlan(t), &fakeReproduction{}, "harness verify --criterion 1", []int{1}},
+		{"proof passed", bugPlan(t), &fakeReproduction{record: domain.ReproductionRecord{Passed: true, Tail: "want pong, got ping"}, found: true}, "does not reproduce the bug", []int{1}},
+		{"tail without the symptom", bugPlan(t), &fakeReproduction{record: domain.ReproductionRecord{Tail: "build failed: undefined: Pong"}, found: true}, "want pong, got ping", []int{1}},
+		{"human only", bugPlan(t, humanOnly), &fakeReproduction{}, "", nil},
+		{"plan with no cause", readValid(t), &fakeReproduction{}, "", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, _ := domain.Parse(tc.text)
+
+			problems, err := domain.VerifyReproduction(t.Context(), doc, tc.reader)
+
+			if err != nil {
+				t.Fatalf("VerifyReproduction: %v", err)
+			}
+			if !slices.Equal(tc.reader.asked, tc.asked) {
+				t.Errorf("asked = %v, want %v", tc.reader.asked, tc.asked)
+			}
+			if tc.want == "" {
+				if len(problems) != 0 {
+					t.Fatalf("problems = %v, want none", problems)
+				}
+				return
+			}
+			if len(problems) != 1 || problems[0].Rule != domain.RuleReproductionRed || !strings.Contains(problems[0].Message, tc.want) {
+				t.Fatalf("problems = %v, want one %s holding %q", problems, domain.RuleReproductionRed, tc.want)
+			}
+			if tc.name == "no record" && !strings.Contains(problems[0].Message, "read its output") {
+				t.Errorf("message = %q, want the advice to read the output", problems[0].Message)
+			}
+		})
+	}
+	t.Run("empty symptom", func(t *testing.T) {
+		doc, _ := domain.Parse(bugPlan(t, edit{"- Symptom: `want pong, got ping`\n", ""}))
+
+		problems, err := domain.VerifyReproduction(t.Context(), doc, &fakeReproduction{record: failed, found: true})
+
+		if err != nil {
+			t.Fatalf("VerifyReproduction: %v", err)
+		}
+		if len(problems) != 1 || problems[0].Rule != domain.RuleReproductionRed || !strings.Contains(problems[0].Message, domain.ReproSymptom) {
+			t.Fatalf("problems = %v, want one %s about the %s", problems, domain.RuleReproductionRed, domain.ReproSymptom)
+		}
+	})
+	t.Run("reader error", func(t *testing.T) {
+		doc, _ := domain.Parse(bugPlan(t))
+		boom := errors.New("boom")
+
+		_, err := domain.VerifyReproduction(t.Context(), doc, &fakeReproduction{err: boom})
+
+		if !errors.Is(err, boom) {
+			t.Fatalf("err = %v, want boom", err)
+		}
+	})
+	t.Run("no reader", func(t *testing.T) {
+		doc, _ := domain.Parse(bugPlan(t))
+
+		problems, err := domain.VerifyReproduction(t.Context(), doc, nil)
+
+		if err != nil || len(problems) != 0 {
+			t.Fatalf("problems = %v, err = %v, want none", problems, err)
+		}
+	})
 }
