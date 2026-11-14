@@ -28,7 +28,26 @@ func NewHandler(hasher domain.BatchHasher, evidence domain.EvidenceRepository, t
 	return Handler{hasher: hasher, evidence: evidence, tracer: tracer}
 }
 
-func (h Handler) Handle(ctx context.Context, q Query) (statuses map[string]domain.Result, err error) {
+// Record is the result of a gate for the current files and the tail of its output.
+type Record struct {
+	Result domain.Result
+	Tail   string
+}
+
+func (h Handler) Handle(ctx context.Context, q Query) (map[string]domain.Result, error) {
+	records, err := h.Records(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	statuses := make(map[string]domain.Result, len(records))
+	for id, record := range records {
+		statuses[id] = record.Result
+	}
+	return statuses, nil
+}
+
+// Records gives the result and the tail of each gate that has a record for the current files.
+func (h Handler) Records(ctx context.Context, q Query) (records map[string]Record, err error) {
 	ctx, span := h.tracer.Start(ctx, spanEvidenceStatus)
 	defer span.End()
 	defer func() {
@@ -45,15 +64,16 @@ func (h Handler) Handle(ctx context.Context, q Query) (statuses map[string]domai
 	if len(hashes) != len(q.Gates) {
 		return nil, fmt.Errorf("hasher returned %d hashes for %d gates", len(hashes), len(q.Gates))
 	}
-	statuses = make(map[string]domain.Result, len(q.Gates))
+	records = make(map[string]Record, len(q.Gates))
 	for i, gate := range q.Gates {
-		record, ok, err := h.evidence.Find(ctx, q.Repo, gate.ID, hashes[i])
-		if err != nil {
+		var kept domain.Evidence
+		var ok bool
+		if kept, ok, err = h.evidence.Find(ctx, q.Repo, gate.ID, hashes[i]); err != nil {
 			return nil, err
 		}
 		if ok {
-			statuses[gate.ID] = record.Result
+			records[gate.ID] = Record{Result: kept.Result, Tail: kept.Tail}
 		}
 	}
-	return statuses, nil
+	return records, nil
 }

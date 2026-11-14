@@ -413,6 +413,8 @@ The checks of `harness verify`. A gate passes on exit code 0. `harness verify --
 | `baseline` | path | empty | none | A findings report. The gate fails only on a finding that is not in this file. The `lint` gate uses `.harness-lint/baseline.json` |
 | `needs` | list of gate ids | empty | none | The gate starts only when each need is `PASS` or `CACHED`. Else it is `SKIPPED`. A need on itself or on an unknown id is an error |
 
+`harness verify --criterion <n>` runs the setup steps and only the proof of plan criterion `n`, with no configured gate. It saves the evidence like `harness verify`. A number with no criterion is an error. The flag cannot go with `--commits`.
+
 `harness gates init` detects the gates of the toolchain and writes this key. It refuses to change a `gates` key that holds a gate.
 
 ```yaml

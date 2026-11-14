@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,7 +38,10 @@ import (
 
 const proofQuote = "`"
 
-var errPlanProblems = errors.New("the plan has problems, run harness plan check")
+var (
+	errPlanProblems = errors.New("the plan has problems, run harness plan check")
+	errNoCriterion  = errors.New("the plan has no criterion with a proof")
+)
 
 func newVerifyCommand(flags *pflag.FlagSet) *cobra.Command {
 	return gatecli.NewVerifyCommand(func(ctx context.Context) (gatecli.Handlers, func() error, error) {
@@ -77,6 +81,19 @@ func connectGates(ctx context.Context, flags *pflag.FlagSet) (gatecli.Handlers, 
 		Verify: func(ctx context.Context) (verify.Result, error) {
 			return verifier.Handle(ctx, verify.Command{
 				Repo: env.key.Repo, Dir: env.key.Worktree, Setup: setup, Gates: gates, Parallel: env.cfg.Verify.Parallel,
+			})
+		},
+		VerifyCriterion: func(ctx context.Context, number int) (verify.Result, error) {
+			criteria, err := activeCriteria(ctx, flags)
+			if err != nil {
+				return verify.Result{}, err
+			}
+			i := slices.IndexFunc(criteria, func(c criterionGate) bool { return c.number == number })
+			if i < 0 {
+				return verify.Result{}, fmt.Errorf("%w: %d", errNoCriterion, number)
+			}
+			return verifier.HandleConfigured(ctx, verify.Command{
+				Repo: env.key.Repo, Dir: env.key.Worktree, Setup: setup, Gates: []gatedomain.Gate{criteria[i].gate}, Parallel: 1,
 			})
 		},
 		VerifyCommits: func(ctx context.Context, base string) (verifycommits.Result, error) {
