@@ -330,7 +330,7 @@ func ruleByID(t *testing.T, id string) Rule {
 func TestPRBodyShape(t *testing.T) {
 	const marked = "```mermaid\nstateDiagram-v2\n    A --> B: go (new)\n```"
 	const unmarked = "```mermaid\nstateDiagram-v2\n    A --> B\n```"
-	sections := "Bottom line: the guard checks X.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."
+	sections := "Bottom line: the guard checks X.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort." + shapeTail
 	long := strings.TrimSpace(strings.Repeat("word ", 41))
 	create := bash("gh pr create --draft --title t --body-file body.md")
 	withBody := func(body string) ToolCall {
@@ -357,12 +357,12 @@ func TestPRBodyShape(t *testing.T) {
 		{name: "plan diagram copied as it is", call: withBody(sections + "\n```mermaid\nflowchart TD\n" +
 			"    classDef new stroke:#00b34e,stroke-width:3px,color:#00b34e\n" +
 			"    a[plan] --> b[skill]\n    class b new\n```")},
-		{name: "heading in a code fence", call: withBody("Bottom line: x.\n\n## Why\nBecause.\n```\n## How\n```\n## What\n- one\n\n## How\nShort.")},
+		{name: "heading in a code fence", call: withBody("Bottom line: x.\n\n## Why\nBecause.\n```\n## How\n```\n## What\n- one\n\n## How\nShort." + shapeTail)},
 		{name: "heading only in a code fence", call: withBody("Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n```\n## How\n```"), deny: true, want: "the body has no ## How line"},
 		{name: "no bottom line", call: withBody("## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."), deny: true, want: "no bottom line"},
 		{name: "bottom line only in a fence", call: withBody("```\nBottom line: x.\n```\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."), deny: true, want: "no bottom line"},
 		{name: "heading only above Why", call: withBody("# Title\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."), deny: true, want: "no bottom line"},
-		{name: "issue reference as bottom line", call: withBody("#42 is fixed.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.")},
+		{name: "issue reference as bottom line", call: withBody("#42 is fixed.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort." + shapeTail)},
 		{name: "41 word line", call: withBody(sections + "\n\n" + long), deny: true, want: "40 words"},
 		{name: "long line in a code fence", call: withBody(sections + "\n```\n" + long + "\n```")},
 		{name: "40 word line", call: withBody(sections + "\n\n" + strings.TrimSpace(strings.Repeat("word ", 40)))},
@@ -388,6 +388,48 @@ func TestPRBodyShape(t *testing.T) {
 			}
 			if denied && !strings.Contains(reason, c.want) {
 				t.Fatalf("reason %q does not name %q", reason, c.want)
+			}
+		})
+	}
+}
+
+func TestPRBodyShapeOldBody(t *testing.T) {
+	const image = "![shot](https://example.com/a.png)"
+	const old = "Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort."
+	const current = old + "\n\n## Evidence\n\nBefore: it failed.\n\n" + image + "\n\nAfter: it passes.\n\n" + image +
+		"\n\n## Merge danger\n\n- Door: two-way. Revert the merge.\n- Blast radius: small. One command breaks."
+	withFile := func(command string) func(string) ToolCall {
+		return func(body string) ToolCall {
+			call := bash(command)
+			call.Texts = [][]string{{body}}
+			return call
+		}
+	}
+	forms := []struct {
+		name string
+		call func(body string) ToolCall
+	}{
+		{"--body", func(b string) ToolCall { return bash("gh pr edit 3 --body '" + b + "'") }},
+		{"-b", func(b string) ToolCall { return bash("gh pr create --draft -b '" + b + "'") }},
+		{"--body-file", withFile("gh pr create --draft --body-file body.md")},
+		{"-F", withFile("gh pr edit 3 -F body.md")},
+		{"heredoc on stdin", func(b string) ToolCall { return bash("gh pr create --draft -F - <<EOF\n" + b + "\nEOF") }},
+		{"command substitution", func(b string) ToolCall {
+			return bash("gh pr create --draft --body \"$(cat <<'EOF'\n" + b + "\nEOF\n)\"")
+		}},
+	}
+	rule := ruleByID(t, RulePRBodyShape)
+	for _, form := range forms {
+		t.Run(form.name, func(t *testing.T) {
+			reason, denied := rule.Denies(form.call(old), RuleContext{})
+			if !denied || !strings.Contains(reason, "the body has no ## Evidence line") || !strings.Contains(reason, "the body has no ## Merge danger line") {
+				t.Fatalf("old body: reason = %q, denied = %v", reason, denied)
+			}
+			if !strings.Contains(reason, "write the body with the lines ## Why, ## What, ## How, ## Evidence and ## Merge danger, in this order") {
+				t.Fatalf("reason %q has no next step with the five sections", reason)
+			}
+			if reason, denied := rule.Denies(form.call(current), RuleContext{}); denied {
+				t.Fatalf("new body is denied: %q", reason)
 			}
 		})
 	}

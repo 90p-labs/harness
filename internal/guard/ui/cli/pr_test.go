@@ -14,7 +14,7 @@ import (
 )
 
 func TestPRCheck(t *testing.T) {
-	const good = "Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.\n"
+	const good = "Bottom line: x.\n\n## Why\nBecause.\n\n## What\n- one\n\n## How\nShort.\n\n## Evidence\n\nBefore: x\n\n```\nok\n```\n\nAfter: y\n\n```\nok\n```\n\n## Merge danger\n\n- Door: two-way. Revert.\n- Blast radius: small. One job.\n"
 	bad := "Bottom line: x.\n\n## Why\n" + strings.TrimSpace(strings.Repeat("word ", 41)) + "\n\n## What\n- one\n"
 
 	run := func(args ...string) (string, error) {
@@ -47,7 +47,7 @@ func TestPRCheck(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 		lines := strings.Split(strings.TrimSpace(out), "\n")
-		if len(lines) != 2 || !strings.Contains(lines[0], "the body has no ## How line") || !strings.Contains(lines[1], "line 4 has 41 words") {
+		if len(lines) != 4 || !strings.Contains(lines[0], "the body has no ## How line") || !strings.Contains(lines[3], "line 4 has 41 words") {
 			t.Fatalf("out = %q", out)
 		}
 	})
@@ -145,47 +145,46 @@ func TestPRBodyBaseFlag(t *testing.T) {
 	}
 }
 
-func TestPRBodyPrintsSkeleton(t *testing.T) {
+func TestPRBodySkeletonFromDomain(t *testing.T) {
 	plan := "# Plan\n\n## Tech specs\n\n### Flow\n\n```mermaid\nsequenceDiagram\n  a->>b: call\n```\n\nText.\n\n```go\nnot a diagram\n```\n"
-	src := fakeSource{plan: plan, commits: []string{"feat(pr): print the PR body skeleton", "docs(skill): fill the body"}}
-	var out bytes.Buffer
-	cmd := NewPRCommand(src, fakePolicy{})
-	cmd.SetArgs([]string{commandBody})
-	cmd.SetOut(&out)
-	cmd.SetErr(io.Discard)
-	if err := cmd.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	body := out.String()
-
-	last := -1
-	for _, want := range []string{bottomLinePlaceholder, "## Why", whyPlaceholder, "## What", "- feat(pr): print the PR body skeleton", "- docs(skill): fill the body", "## How", "```mermaid\nsequenceDiagram\n  a->>b: call\n```"} {
-		at := strings.Index(body, want)
-		if at < 0 || at < last {
-			t.Fatalf("%q is missing or out of order in:\n%s", want, body)
-		}
-		last = at
-	}
-	if strings.Contains(body, "not a diagram") {
-		t.Errorf("the body holds a fence that is not mermaid:\n%s", body)
-	}
-	filled := strings.NewReplacer(bottomLinePlaceholder, "The command prints the body.", whyPlaceholder, "The lead wrote it by hand.").Replace(body)
-	if problems := domain.BodyProblems(filled); len(problems) != 0 {
-		t.Errorf("problems = %v in:\n%s", problems, filled)
-	}
-
-	t.Run("no diagram", func(t *testing.T) {
+	commits := []string{"feat(pr): print the PR body skeleton", "docs(skill): fill the body"}
+	literalFences := []string{"```mermaid\nsequenceDiagram\n  a->>b: call\n```\n"}
+	run := func(src fakeSource) string {
 		var out bytes.Buffer
-		cmd := NewPRCommand(fakeSource{commits: []string{"fix: x"}}, fakePolicy{})
+		cmd := NewPRCommand(src, fakePolicy{})
 		cmd.SetArgs([]string{commandBody})
 		cmd.SetOut(&out)
 		cmd.SetErr(io.Discard)
 		if err := cmd.Execute(); err != nil {
 			t.Fatal(err)
 		}
-		filled := strings.NewReplacer(bottomLinePlaceholder, "Bottom.", whyPlaceholder, "Because.").Replace(out.String())
-		if problems := domain.BodyProblems(filled); len(problems) != 0 {
-			t.Errorf("problems = %v in:\n%s", problems, filled)
+		return out.String()
+	}
+
+	t.Run("commits and plan diagrams", func(t *testing.T) {
+		body := run(fakeSource{plan: plan, commits: commits})
+		if want := domain.BodySkeleton(commits, literalFences); body != want {
+			t.Fatalf("body = %q, want %q", body, want)
+		}
+		if strings.Contains(body, "not a diagram") {
+			t.Errorf("the body holds a fence that is not mermaid:\n%s", body)
+		}
+	})
+	t.Run("no diagram", func(t *testing.T) {
+		body := run(fakeSource{commits: []string{"fix: x"}})
+		if want := domain.BodySkeleton([]string{"fix: x"}, nil); body != want {
+			t.Fatalf("body = %q, want %q", body, want)
+		}
+	})
+	t.Run("short text names the new placeholders", func(t *testing.T) {
+		body, _, err := NewPRCommand(fakeSource{}, fakePolicy{}).Find([]string{commandBody})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"Evidence", "Merge danger"} {
+			if !strings.Contains(body.Short, want) {
+				t.Errorf("Short = %q, want it to name %s", body.Short, want)
+			}
 		}
 	})
 }

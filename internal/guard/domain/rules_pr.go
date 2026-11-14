@@ -28,7 +28,6 @@ const (
 	nextStepDraft      = "open the pull request with --draft"
 	nextStepDiagram    = "draw it with `harness diagram`"
 	nextStepBody       = "write the file in a separate call and pass a literal absolute path, or pass the text inline"
-	nextStepShape      = "write the body with the lines ## Why, ## What and ## How, in this order"
 	reasonBodyFileRead = "cannot read the body file: "
 	nextStepBottomLine = "start the body with the bottom line: one or two sentences above %s"
 	nextStepWords      = "split the line into lines of 40 words or fewer"
@@ -38,7 +37,6 @@ const (
 var (
 	mergePath       = regexp.MustCompile(`pulls/\d+/merge`)
 	markdownHeading = regexp.MustCompile(`^#{1,6}(\s|$)`)
-	bodySections    = []string{"## Why", "## What", "## How"}
 	bodyFlags       = []string{"--body", "-b"}
 	bodyFileFlags   = []string{"--body-file", "-F"}
 	prBodyCommands  = []string{subCreate, subEdit}
@@ -160,9 +158,20 @@ func checkBody(body string) (string, bool) {
 	return "", false
 }
 
+// BodyProblems returns every problem of a pull request body, each with its next step.
+// The order is: sections, evidence, merge danger, then the line checks in line order.
 func BodyProblems(body string) []string {
 	lines := strings.Split(body, "\n")
-	problems := sectionProblems(lines)
+	scanned := scanBody(lines)
+	problems := sectionProblems(scanned)
+	problems = append(problems, evidenceProblems(scanned)...)
+	problems = append(problems, mergeDangerProblems(scanned)...)
+	return append(problems, lineProblems(scanned, lines)...)
+}
+
+// lineProblems checks each raw line, with the fence marks of the scan.
+func lineProblems(scanned []bodyLine, lines []string) []string {
+	var problems []string
 	var diagram []string
 	inFence, inMermaid := false, false
 	for i, line := range lines {
@@ -172,11 +181,11 @@ func BodyProblems(body string) []string {
 			problems = append(problems, problem(fmt.Sprintf("line %d has an em dash", i+1), nextStepEmDash))
 		}
 		switch {
-		case strings.HasPrefix(trimmed, fenceMarker) && !inFence:
+		case scanned[i].fence && !inFence:
 			inFence = true
 			inMermaid = strings.TrimPrefix(trimmed, fenceMarker) == fenceMermaid
 			diagram = nil
-		case strings.HasPrefix(trimmed, fenceMarker):
+		case scanned[i].fence:
 			inFence = false
 			if inMermaid {
 				for _, mark := range shareddomain.CheckMarks(strings.Join(diagram, "\n")) {
@@ -184,11 +193,14 @@ func BodyProblems(body string) []string {
 				}
 			}
 			inMermaid = false
-		case inFence:
+		case scanned[i].in:
 			diagram = append(diagram, line)
-		case len(words) > maxBodyWords:
-			reason := fmt.Sprintf("line %d has %d words, more than %d words: %q", i+1, len(words), maxBodyWords, strings.Join(words[:wordsQuoted], " "))
-			problems = append(problems, problem(reason, nextStepWords))
+		default:
+			problems = append(problems, placeholderProblem(i, trimmed)...)
+			if len(words) > maxBodyWords {
+				reason := fmt.Sprintf("line %d has %d words, more than %d words: %q", i+1, len(words), maxBodyWords, strings.Join(words[:wordsQuoted], " "))
+				problems = append(problems, problem(reason, nextStepWords))
+			}
 		}
 	}
 	return problems
@@ -198,15 +210,11 @@ func problem(reason, nextStep string) string {
 	return reason + reasonJoin + nextStep
 }
 
-func sectionProblems(lines []string) []string {
+func sectionProblems(lines []bodyLine) []string {
 	var outside []string
-	inFence := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, fenceMarker) {
-			inFence = !inFence
-		} else if !inFence {
-			outside = append(outside, trimmed)
+	for _, l := range lines {
+		if l.outside() {
+			outside = append(outside, l.text)
 		}
 	}
 	var problems []string

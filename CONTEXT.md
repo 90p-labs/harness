@@ -34,6 +34,13 @@ These terms have one meaning in the code, the docs and the plans.
 - **Lesson**: a change of the agent environment that cites run evidence and has a home. A lesson with no evidence is dropped.
 - **Threat model**: the section that names the attacker, the input forms and the fail-closed rule. A tree path with a `guard` or `security` folder needs it.
 
+## Pull request terms
+
+- **PR evidence**: the `## Evidence` section of the pull request body. It has a `Before:` line and an `After:` line, each with a proof below it: a screenshot, or a fence with a run command and its output. It differs from the evidence baseline, which is the explorer table of existing behaviour in a plan. It also differs from the evidence record of a gate, which is a stored result of a gate run.
+- **Merge danger**: the last section of the pull request body. It has a `Door:` line and a `Blast radius:` line, each with a value and a reason.
+- **Door**: the first line of the merge danger. Its value is `two-way` when a revert of the merge restores the old behaviour, and `one-way` when it does not.
+- **Blast radius**: the second line of the merge danger. Its value is `small`, `medium` or `large`. The reason says what breaks and for whom if the change is wrong.
+
 ## Plugin terms
 
 - **Plugin**: a piece that subscribes to bus events and returns a verdict. A built-in plugin runs in process. An exec plugin runs as a child process.
