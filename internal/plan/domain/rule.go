@@ -26,4 +26,8 @@ const (
 	RuleSeamMissing      RuleID = "seam-missing"
 	RuleReproduction     RuleID = "reproduction"
 	RuleReproductionRed  RuleID = "reproduction-red"
+	RuleMapField         RuleID = "map-field"
+	RuleMapBlocked       RuleID = "map-blocked"
+	RuleMapQuestion      RuleID = "map-question"
+	RuleMapIndex         RuleID = "map-index"
 )
