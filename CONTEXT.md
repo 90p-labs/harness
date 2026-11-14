@@ -37,7 +37,7 @@ These terms have one meaning in the code, the docs and the plans.
 
 ## Pull request terms
 
-- **PR evidence**: the `## Evidence` section of the pull request body. It has a `Before:` line and an `After:` line, each with a proof below it: a screenshot, or a fence with a run command and its output. It differs from the evidence baseline, which is the explorer table of existing behaviour in a plan. It also differs from the evidence record of a gate, which is a stored result of a gate run.
+- **PR evidence**: the `## Evidence` section of the pull request body. It has a `Before:` line and an `After:` line, each with a proof below it. A proof is a screenshot linked by an http or https URL, or a fence with a run command and its output. It differs from the evidence baseline, which is the explorer table of existing behaviour in a plan. It also differs from the evidence record of a gate, which is a stored result of a gate run.
 - **Merge danger**: the last section of the pull request body. It has a `Door:` line and a `Blast radius:` line, each with a value and a reason.
 - **Door**: the first line of the merge danger. Its value is `two-way` when a revert of the merge restores the old behaviour, and `one-way` when it does not.
 - **Blast radius**: the second line of the merge danger. Its value is `small`, `medium` or `large`. The reason says what breaks and for whom if the change is wrong.

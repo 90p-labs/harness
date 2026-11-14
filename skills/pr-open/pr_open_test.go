@@ -317,6 +317,8 @@ func TestPROpenEvidence(t *testing.T) {
 	}
 }
 
+const urlRule = "http or https URL"
+
 func TestPROpenShapeDocs(t *testing.T) {
 	for _, path := range []string{designFile, "docs/configuration.md"} {
 		row := ""
@@ -329,11 +331,36 @@ func TestPROpenShapeDocs(t *testing.T) {
 			t.Errorf("%s has no table row for pr-body-shape", path)
 		}
 		requireNamed(t, path+" in the pr-body-shape row", row, slices.Concat(domain.BodySections(), domain.BodyLabels()))
+		if !strings.Contains(row, urlRule) {
+			t.Errorf("%s: the pr-body-shape row does not say %q", path, urlRule)
+		}
+	}
+	skill := repository.Read(t, prOpenSkill)
+	shot := ""
+	for line := range strings.SplitSeq(skillPart(t, skill, "- `## Evidence`:", "- `## Merge danger`:"), "\n") {
+		if strings.Contains(line, "takes a screenshot") {
+			shot = line
+		}
+	}
+	if shot == "" {
+		t.Errorf("%s has no screenshot bullet under the evidence section", prOpenSkill)
+	}
+	if !strings.Contains(shot, urlRule) {
+		t.Errorf("%s: the screenshot bullet does not say %q, got %q", prOpenSkill, urlRule, shot)
 	}
 	context := repository.Read(t, "CONTEXT.md")
 	for _, term := range []string{"PR evidence", "Merge danger", "Door", "Blast radius"} {
 		if !strings.Contains(context, "**"+term+"**") {
 			t.Errorf("CONTEXT.md does not define **%s**", term)
 		}
+	}
+	entry := ""
+	for line := range strings.SplitSeq(context, "\n") {
+		if strings.HasPrefix(line, "- **PR evidence**") {
+			entry = line
+		}
+	}
+	if !strings.Contains(entry, urlRule) {
+		t.Errorf("CONTEXT.md: the **PR evidence** entry does not say %q, got %q", urlRule, entry)
 	}
 }
