@@ -76,6 +76,42 @@ func newHandler(reader fakeFindings, log fakeLog) (learn.Handler, *tracetest.Spa
 	return learn.NewHandler(fakeRepository{run: run}, log, reader, tracer), recorder
 }
 
+func TestLearnHandlerEvidence(t *testing.T) {
+	t.Run("lists the evidence of the run next to its candidates", func(t *testing.T) {
+		reader := fakeFindings{findings: []shareddomain.ReviewFinding{
+			{ID: "S1", Verdict: shareddomain.FindingReal, Lens: "standards", Location: "a.go:3", Text: "name the constant"},
+		}}
+		log := fakeLog{rows: []domain.Transitioned{
+			{Event: domain.EventRequestRework, Class: domain.ReworkImplementation, Reason: "F1 major a.go:3"},
+			{Event: domain.EventBlock, Reason: "wait for the token"},
+			{Event: domain.EventAmend},
+			{Event: domain.EventResume},
+		}}
+		handler, _ := newHandler(reader, log)
+
+		got, err := handler.Handle(context.Background(), learn.Query{Key: key})
+
+		want := []domain.RunEvidence{
+			{ID: "rework-1", Text: "implementation: F1 major a.go:3"},
+			{ID: "block-1", Text: "wait for the token"},
+			{ID: "amends", Text: "1"},
+		}
+		if err != nil || !reflect.DeepEqual(got.Evidence, want) || len(got.Candidates) != 1 {
+			t.Fatalf("got %+v, %v, want evidence %+v", got, err, want)
+		}
+	})
+
+	t.Run("a run with no evidence gives none", func(t *testing.T) {
+		handler, _ := newHandler(fakeFindings{}, fakeLog{})
+
+		got, err := handler.Handle(context.Background(), learn.Query{Key: key})
+
+		if err != nil || got.Evidence != nil {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	})
+}
+
 func TestLearnHandler(t *testing.T) {
 	t.Run("lists the candidates of the run", func(t *testing.T) {
 		reader := fakeFindings{findings: []shareddomain.ReviewFinding{
@@ -93,7 +129,7 @@ func TestLearnHandler(t *testing.T) {
 		want := learn.Learn{ID: runID, Candidates: []domain.Candidate{
 			{Source: domain.SourceStandards, ID: "S1", Location: "a.go:3", Text: "name the constant"},
 			{Source: domain.SourceGateCheckable, ID: "G1", Location: "b.go:9", Text: "run the linter"},
-		}}
+		}, Evidence: []domain.RunEvidence{{ID: "rework-1", Text: "gate-checkable: fix G1"}}}
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("got %+v, %v, want %+v", got, err, want)
 		}

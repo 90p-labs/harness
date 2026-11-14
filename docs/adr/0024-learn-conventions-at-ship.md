@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-13. It adds the `harness run learn` command and the `run.learn` span. It adds no phase and no event, so the state machine and the plugin events do not change.
+Accepted, 2026-11-13. It adds the `harness run learn` command and the `run.learn` span. It adds no phase and no event, so the state machine and the plugin events do not change. The amendment below adds the run evidence and the lessons.
 
 ## Context
 
@@ -35,3 +35,34 @@ Accepted, 2026-11-13. It adds the `harness run learn` command and the `run.learn
 - A `findings.md` with no `Lens` column gives no Standards candidate. The reviewing reference shows the column, so new runs fill it.
 - A light run with no `findings.md` prints no candidate and does not fail the step.
 - A lint rule waits for its own run and review. The conventions commit does not change the lint pack.
+
+## Amendment 2026-11-14
+
+The step asked which rule the code broke. It did not ask what slowed the agent down. The amendment adds that question.
+
+- The step extends `harness run learn`. Both lists come from one read of the run record and share one question.
+- A second command would add a second step and a second question. No decision above is replaced, so no new ADR is needed.
+- The command also prints one `evidence:` line for each item of the run evidence. It reads the transition log and the run row.
+- The IDs are `rework-<n>` for each review rework, `block-<n>` for each block, `amends` and `stop-blocks`.
+- A rework line holds its class and its reason. A block line holds its reason. `amends` and `stop-blocks` hold a count.
+- The command does not read gate failures, because the gate cache has no run id. It does not read regressions, which have their own plan section.
+- The binary does not parse `handoff.md`. The lead reads it, and may cite one of its lines.
+- A lesson is a change of the agent environment that cites run evidence and has a home.
+- Navigation: what was hard to find, and the pointer that finds it.
+- Automated checks: a check that no gate runs, or a mechanical mistake.
+- Tool economy: a command or a tool call that was repeated or wasted.
+- No-ops: an instruction that changed nothing.
+- Information access: something the agent needed and could not reach.
+- Evidence rule: a lesson cites an `evidence:` line, a `candidate:` line, a row of `findings.md` or a line of `handoff.md`. A lesson with no evidence is dropped.
+- The memory of the lead is not evidence.
+- A count line alone supports no lesson, because most runs have one. The lesson also cites a line with text.
+- Mechanical rule: a mechanical mistake gets a deterministic check, never a sentence of guidance.
+- A repeated rework class supports a lesson. It is still not the source of a convention.
+- A check, a gate, a script or a setting goes to a follow-up `harness run start` prompt.
+- A pointer or a removed instruction goes into the `docs:` commit of this run.
+- A Navigation pointer goes into `CONTEXT.md`, or into the line of its ADR in `docs/adr/index.md`, because the index holds one line for each ADR.
+- The no-duplicate search of decision 7 covers a lesson too.
+- A lesson about the harness plugin has no home in the repository. The lead prints it in one line of its last message.
+- The `Conventions` question keeps its header and options. It lists the lessons after the conventions, so one round covers both.
+- The step takes the idea from the retro skill of Matt Pocock (MIT license), at commit `5863806`. The text here is new.
+- The step leaves out two source categories. Coding standards is covered by decisions 3 and 6, and global agent files are covered by No-ops.

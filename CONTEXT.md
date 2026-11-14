@@ -29,6 +29,8 @@ These terms have one meaning in the code, the docs and the plans.
 - **Kept-structure amend**: an `amend` that skips the approval. It starts in `working` with no live round, and the plan keeps its structure against the approved plan. It may change the tree fences, the test paths of an `Owned files` line, and the prose of Goal, Decisions, `Test first` and `DoD`. Free text keeps the `Track:` line, the test names of `Test first` and the `DoD` numbers. A sketch link anywhere counts as structure.
 - **Review risk**: a line of `## Review risks` that names a risk. It points to a test name or to a decision.
 - **Evidence baseline**: the table of existing behaviour that the explorer builds when a change modifies, replaces or removes behaviour that is not fully pinned. Each item has one class: `intended`, `bug`, `accidental` or `ambiguous`. Otherwise the explorer writes the line `baseline: not needed`. It differs from the lint baseline of `harness lint baseline`.
+- **Run evidence**: the stored signs of what slowed a run. They are each review rework, each move to the phase `blocked`, the count of amends and the count of stops that the guard denied. `harness run learn` prints each one as an `evidence:` line. A count of 0 prints no line.
+- **Lesson**: a change of the agent environment that cites run evidence and has a home. A lesson with no evidence is dropped.
 - **Threat model**: the section that names the attacker, the input forms and the fail-closed rule. A tree path with a `guard` or `security` folder needs it.
 
 ## Plugin terms

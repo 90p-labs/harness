@@ -111,7 +111,7 @@ A hook cannot see model time or a server tool call. A gap between hook spans sit
 
 `harness run report [<run id>]` prints the rework rounds, the amends, the stop blocks and the rework classes. It also prints the minutes in each phase and the trace ID. Use the trace ID to find the trace in Jaeger.
 
-`harness run learn [<run id>]` prints the convention candidates of the run, one `candidate:` line for each, then a `next:` line. A candidate is a real Standards finding, or a real finding that a `gate-checkable` rework names. The command is read-only.
+`harness run learn [<run id>]` prints the convention candidates of the run, one `candidate:` line for each. A candidate is a real Standards finding, or a real finding that a `gate-checkable` rework names. Then it prints one `evidence:` line for each rework and each block, in log order, with the IDs `rework-<n>` and `block-<n>`. The `amends` and `stop-blocks` lines come last, and each one appears only when its count is above 0. A `next:` line ends the output. The command is read-only.
 
 To count the denies, the reworks, the amends, the stop blocks and the tool outcomes, read the trace from Jaeger. Use the jq program `docs/audit-trace.jq`:
 
