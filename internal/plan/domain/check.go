@@ -20,6 +20,7 @@ type Report struct {
 	Track    shareddomain.Track
 	Doc      Document
 	Program  *Program
+	Map      *Map
 }
 
 const (

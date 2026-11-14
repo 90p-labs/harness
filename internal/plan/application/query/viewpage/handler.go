@@ -82,6 +82,9 @@ func (h Handler) Handle(ctx context.Context, q Query) (out []byte, problems int,
 	if err != nil {
 		return nil, 0, err
 	}
+	if report.Map != nil {
+		return nil, len(report.Problems), domain.ErrMapNoPage
+	}
 	var in domain.ViewInput
 	if report.Program != nil {
 		in = domain.ViewInput{Program: report.Program, Problems: report.Problems}

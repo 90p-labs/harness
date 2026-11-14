@@ -234,6 +234,23 @@ func TestSubmitPlanCollect(t *testing.T) {
 	})
 }
 
+func TestSubmitRefusesMap(t *testing.T) {
+	bus := &fakeBus{}
+	check := func(context.Context, string, int) (domain.Report, error) {
+		return domain.Report{Map: &domain.Map{}}, nil
+	}
+
+	_, err := submitplan.NewHandler(check, bus, testCwd).Handle(t.Context(), command(validPlan))
+
+	want := "plan.md:1: " + string(domain.RulePlanKind) + ": harness run plan takes a single-run plan, not a map"
+	if !errors.Is(err, domain.ErrPlanHasProblems) || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want ErrPlanHasProblems with %q", err, want)
+	}
+	if len(bus.envelopes) != 0 {
+		t.Errorf("dispatches = %d, want 0", len(bus.envelopes))
+	}
+}
+
 func TestProgramKind(t *testing.T) {
 	bus := &fakeBus{}
 	check := func(context.Context, string, int) (domain.Report, error) {

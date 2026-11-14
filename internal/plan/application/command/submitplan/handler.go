@@ -11,7 +11,10 @@ import (
 	shareddomain "github.com/90p-labs/harness/internal/shared/domain"
 )
 
-const programRefusal = "harness run plan takes a single-run plan, not a program"
+const (
+	programRefusal = "harness run plan takes a single-run plan, not a program"
+	mapRefusal     = "harness run plan takes a single-run plan, not a map"
+)
 
 var ErrPlanRejected = errors.New("plan rejected")
 
@@ -59,6 +62,10 @@ func (h Handler) Handle(ctx context.Context, c Command) (Result, error) {
 	}
 	if report.Program != nil {
 		kind := domain.Problem{Line: 1, Rule: domain.RulePlanKind, Message: programRefusal}
+		return Result{}, fmt.Errorf("%w:\n%s", domain.ErrPlanHasProblems, kind)
+	}
+	if report.Map != nil {
+		kind := domain.Problem{Line: 1, Rule: domain.RulePlanKind, Message: mapRefusal}
 		return Result{}, fmt.Errorf("%w:\n%s", domain.ErrPlanHasProblems, kind)
 	}
 	problems := report.Problems

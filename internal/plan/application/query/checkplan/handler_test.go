@@ -1,6 +1,7 @@
 package checkplan_test
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -206,6 +207,75 @@ func TestCheckPlanReport(t *testing.T) {
 
 		if !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("err = %v, want not exist", err)
+		}
+	})
+}
+
+func TestMapKind(t *testing.T) {
+	mapText, err := os.ReadFile("../../../domain/testdata/map.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, _ := newHandler(t)
+
+	t.Run("a map has tickets, no document and no problem", func(t *testing.T) {
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), mapText)})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if len(report.Problems) != 0 || report.Map == nil || len(report.Map.Tickets) != 7 || report.Program != nil {
+			t.Fatalf("report = %+v, want no problem and 7 tickets", report)
+		}
+		if report.Track != "" || len(report.Doc.Lines) != 0 {
+			t.Errorf("track = %q, doc = %+v, want both empty", report.Track, report.Doc)
+		}
+	})
+
+	t.Run("a broken map gives its rule", func(t *testing.T) {
+		broken := bytes.Replace(mapText, []byte("## Notes\n"), []byte("## Notes\n\nA broken — line.\n"), 1)
+
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), broken)})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if len(report.Problems) != 1 || report.Problems[0].Rule != domain.RuleEmDash || report.Map == nil {
+			t.Fatalf("problems = %v, want one %s", report.Problems, domain.RuleEmDash)
+		}
+	})
+
+	t.Run("a check problem comes with the parse problems, sorted", func(t *testing.T) {
+		broken := strings.Replace(string(mapText), "- Blocked by: T1 and T2", "- Blocked by: T9", 1)
+
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), []byte(broken))})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if len(report.Problems) == 0 || report.Problems[0].Rule != domain.RuleMapBlocked {
+			t.Fatalf("problems = %v, want a %s problem", report.Problems, domain.RuleMapBlocked)
+		}
+	})
+}
+
+func TestProgramBeforeMap(t *testing.T) {
+	program, err := os.ReadFile("../../../domain/testdata/program.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, _ := newHandler(t)
+
+	t.Run("a file with both headings stays a multi-run plan", func(t *testing.T) {
+		both := slices.Concat(program, []byte("\n## Destination\n\nA place.\n"))
+
+		report, err := handler.Handle(t.Context(), checkplan.Query{Path: writePlan(t, t.TempDir(), both)})
+
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if report.Program == nil || report.Map != nil {
+			t.Fatalf("program = %v, map = %v, want a program and no map", report.Program, report.Map)
 		}
 	})
 }

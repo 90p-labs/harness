@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,7 +24,37 @@ const (
 	flagFile   = "--file"
 	subCommand = "check"
 
-	maxHelpLines = 48
+	maxHelpLines = 50
+
+	mapPlan  = "../../domain/testdata/map.md"
+	clearMap = `# Map: Tiny
+
+## Destination
+
+A tiny goal.
+
+## Decisions so far
+
+- T1: the answer.
+
+## Not yet specified
+
+- none
+
+## Out of scope
+
+- none
+
+## Tickets
+
+### T1 only-question
+
+- Type: grilling
+- Blocked by: none
+- Status: closed
+- Question: Is it tiny?
+- Answer: Yes.
+`
 )
 
 var errDefault = errors.New("no default plan")
@@ -122,6 +153,57 @@ func TestPlanHelpProgram(t *testing.T) {
 		if !strings.Contains(out, w) {
 			t.Errorf("help does not hold %q", w)
 		}
+	}
+}
+
+func TestPlanHelpMap(t *testing.T) {
+	out, err := execute(t, connect(nil, new(bool)), "--help")
+
+	if err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	want := slices.Concat([]string{
+		domain.HeadingDestination, domain.HeadingDecisionsSoFar, domain.HeadingUnspecified, domain.HeadingOutOfScope, domain.HeadingTickets,
+		domain.FormTicketHeading, domain.FormTicketBlocked, string(domain.RuleMapField), string(domain.RuleMapBlocked), string(domain.RuleMapQuestion), string(domain.RuleMapIndex),
+	}, domain.MapFields, domain.TicketTypes, domain.TicketStatuses)
+	for _, w := range want {
+		if !strings.Contains(out, w) {
+			t.Errorf("help does not hold %q", w)
+		}
+	}
+	if strings.Contains(out, "plan view") {
+		t.Error("help names plan view, which another run of the program owns")
+	}
+}
+
+func TestCheckPrintsMapFrontier(t *testing.T) {
+	raw, err := os.ReadFile(mapPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed := strings.NewReplacer(
+		"- Status: open\n- Question: Does the existing", "- Status: open\n- Claimed by: bo\n- Question: Does the existing",
+		"- Status: open\n- Question: Who files", "- Status: open\n- Claimed by: bo\n- Question: Who files",
+	).Replace(string(raw))
+	write := func(text string) string {
+		file := filepath.Join(t.TempDir(), "map.md")
+		if err := os.WriteFile(file, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return file
+	}
+	for name, tc := range map[string]struct{ text, want string }{
+		"free tickets in file order":    {string(raw), "frontier: T3 job-queue (prototype)\nfrontier: T7 bucket-access (work)\n"},
+		"open tickets and none free":    {claimed, "frontier: none\n"},
+		"no open ticket and none unset": {clearMap, "map: clear\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, write(tc.text))
+
+			if err != nil || out != tc.want {
+				t.Fatalf("err = %v, out = %q, want %q", err, out, tc.want)
+			}
+		})
 	}
 }
 
@@ -288,6 +370,28 @@ func TestPlanCheckCommand(t *testing.T) {
 			t.Fatalf("err = %v, want ErrNoPlanFile", err)
 		}
 	})
+}
+
+func TestCheckReportsAnUnclosedFenceInAMultiRunPlan(t *testing.T) {
+	const heading = "### R4 spec-quality\n"
+	raw, err := os.ReadFile("../../domain/testdata/program.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fenced := strings.Replace(string(raw), heading, "```\n"+heading, 1)
+	file := filepath.Join(t.TempDir(), "plan.md")
+	if err := os.WriteFile(file, []byte(fenced), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := execute(t, connect(nil, new(bool)), subCommand, flagFile, file)
+
+	if !errors.Is(err, domain.ErrPlanHasProblems) {
+		t.Fatalf("err = %v, want ErrPlanHasProblems", err)
+	}
+	if want := "plan.md:44: run-field: code fence is never closed"; !strings.Contains(out, want) {
+		t.Errorf("out = %q, want the line %q", out, want)
+	}
 }
 
 func TestCheckNamesTheModelOfATask(t *testing.T) {

@@ -8,6 +8,9 @@ var ErrUnknownRegion = errors.New("unknown region")
 // ErrNoRegions marks a page that has no regions, such as a program page.
 var ErrNoRegions = errors.New("page has no regions")
 
+// ErrMapNoPage marks a map, which has no plan page in this version.
+var ErrMapNoPage = errors.New("a map has no page: run harness plan check --file to read its frontier")
+
 // ViewServed switches the page to the served mode. Version goes in each
 // region as data-v, and Base is the route prefix of the region fragments.
 // Home is the link of the Runs crumb; an empty Home keeps the crumb a plain label.

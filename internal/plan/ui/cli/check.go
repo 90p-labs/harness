@@ -25,6 +25,11 @@ const (
 	advisorPath   = " (light track, risky path)"
 	advisorOff    = "advisor: off (light track)"
 
+	frontierLabel = "frontier:"
+	frontierForm  = frontierLabel + " %s %s (%s)"
+	frontierNone  = frontierLabel + " none"
+	mapClearLine  = "map: clear"
+
 	waveLineForm  = "wave %d: %s"
 	waveTaskForm  = "task %d"
 	waveModelForm = "task %d (%s)"
@@ -90,6 +95,8 @@ func planHelp() string {
 		fmt.Sprintf("The syntax parse covers only %s and %s. The mark check covers every marked kind: it needs one mark.", domain.DiagramState, domain.DiagramClass),
 		fmt.Sprintf("A plan with ## %s is a multi-run plan. Headings: %s, %s, optional %s and %s. Run: `### %s`, then a bullet for each of: %s, then %s.", domain.HeadingRuns, domain.HeadingGoal, domain.HeadingRuns, domain.HeadingMeasurement, domain.HeadingDecisions, domain.FormRunHeading, strings.Join(domain.ProgramFields, ", "), domain.FormScope),
 		fmt.Sprintf("In a run, %s is %s, %s is %s and %s is %s. Each dependency names a run of an earlier wave (rule %s). Runs of one wave own no common path (rule %s). A missing or malformed field is rule %s. `harness run plan` takes only a single-run plan.", domain.FieldWave, domain.FormWave, domain.FieldBranch, domain.FormBranch, domain.FieldDependsOn, domain.FormRunDepends, domain.RuleRunDepends, domain.RuleRunOverlap, domain.RuleRunField),
+		fmt.Sprintf("A plan with ## %s is a map. Headings: %s, optional %s, %s, %s, %s, %s. Ticket: `### %s`, then `%s` for each of: %s. Type is one of: %s. Status is one of: %s. Blocked by is %s.", domain.HeadingDestination, domain.HeadingDestination, domain.HeadingNotes, domain.HeadingDecisionsSoFar, domain.HeadingUnspecified, domain.HeadingOutOfScope, domain.HeadingTickets, domain.FormTicketHeading, domain.FormTicketField, strings.Join(domain.MapFields, ", "), strings.Join(domain.TicketTypes, ", "), strings.Join(domain.TicketStatuses, ", "), domain.FormTicketBlocked),
+		fmt.Sprintf("Map rules: %s, %s, %s and %s. `harness plan check` prints each free ticket as a `%s` line. `harness run plan` refuses a map.", domain.RuleMapField, domain.RuleMapBlocked, domain.RuleMapQuestion, domain.RuleMapIndex, frontierLabel),
 		fmt.Sprintf("A sentence has %d words at most. Use no em dash.", domain.MaxSentenceWords),
 	}, "\n")
 }
@@ -122,7 +129,12 @@ func checkCommand(connect Connect) *cobra.Command {
 			if len(report.Problems) > 0 {
 				return domain.ErrPlanHasProblems
 			}
-			if report.Program == nil {
+			switch {
+			case report.Map != nil:
+				for _, line := range frontierLines(*report.Map) {
+					fmt.Fprintln(cmd.OutOrStdout(), line)
+				}
+			case report.Program == nil:
 				fmt.Fprintln(cmd.OutOrStdout(), advisorLine(report, handlers.AdvisorModels))
 				for _, line := range waveLines(report.Doc.Tasks) {
 					fmt.Fprintln(cmd.OutOrStdout(), line)
@@ -133,6 +145,23 @@ func checkCommand(connect Connect) *cobra.Command {
 	}
 	cmd.Flags().String(flagFile, "", "the plan file, default the plan of the active run")
 	return cmd
+}
+
+// frontierLines gives the lead the free tickets of a clean map as text.
+func frontierLines(m domain.Map) []string {
+	free := m.Frontier()
+	switch {
+	case len(free) > 0:
+		lines := make([]string, len(free))
+		for i, t := range free {
+			lines[i] = fmt.Sprintf(frontierForm, t.ID, t.Slug, t.Type)
+		}
+		return lines
+	case m.Clear():
+		return []string{mapClearLine}
+	default:
+		return []string{frontierNone}
+	}
 }
 
 func advisorLine(report domain.Report, models []string) string {
