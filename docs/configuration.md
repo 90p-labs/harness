@@ -113,6 +113,8 @@ A hook cannot see model time or a server tool call. A gap between hook spans sit
 
 `harness run learn [<run id>]` prints the convention candidates of the run, one `candidate:` line for each. A candidate is a real Standards finding, or a real finding that a `gate-checkable` rework names. Then it prints one `evidence:` line for each rework and each block, in log order, with the IDs `rework-<n>` and `block-<n>`. The `amends` and `stop-blocks` lines come last, and each one appears only when its count is above 0. A `next:` line ends the output. The command is read-only.
 
+A bug plan with the line `Regression test: none: <reason>` adds a first candidate with the source `no-seam`.
+
 To count the denies, the reworks, the amends, the stop blocks and the tool outcomes, read the trace from Jaeger. Use the jq program `docs/audit-trace.jq`:
 
 ```sh
